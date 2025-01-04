@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import type { Config } from "tailwindcss";
 
 export default {
@@ -7,6 +8,17 @@ export default {
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+=======
+import type { Config } from "tailwindcss";
+
+export default {
+    darkMode: ["class"],
+    content: [
+    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+>>>>>>> 86eb7e08d09f165ecd86e12000feb2db4361df00
   theme: {
   	extend: {
   		colors: {
@@ -57,6 +69,12 @@ export default {
   			sm: 'calc(var(--radius) - 4px)'
   		}
   	}
+<<<<<<< HEAD
   },
   plugins: [require("tailwindcss-animate")],
 } satisfies Config;
+=======
+  },
+  plugins: [require("tailwindcss-animate")],
+} satisfies Config;
+>>>>>>> 86eb7e08d09f165ecd86e12000feb2db4361df00
