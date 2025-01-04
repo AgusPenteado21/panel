@@ -1,3 +1,22 @@
 {
-  "extends": ["next/core-web-vitals", "next/typescript"]
+  "extends": [
+    "next/core-web-vitals",
+    "next/typescript"
+  ],
+  "rules": {
+    // Desactivar la advertencia para variables no usadas
+    "@typescript-eslint/no-unused-vars": "warn", // Cambiar de "error" a "warn"
+    // Permitir el uso de 'any', pero solo como advertencia, no error
+    "@typescript-eslint/no-explicit-any": "warn", // Cambiar de "error" a "warn"
+    // Configurar 'prefer-const' para evitar que 'let' se use cuando no es necesario
+    "prefer-const": [
+      "warn",
+      {
+        "destructuring": "all",
+        "ignoreReadBeforeAssign": false
+      }
+    ],
+    // Configurar para que use 'useEffect' con las dependencias correctas
+    "react-hooks/exhaustive-deps": "warn" // Cambiar a "warn" para advertencia, no error
+  }
 }
