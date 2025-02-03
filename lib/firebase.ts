@@ -1,7 +1,11 @@
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeApp, getApp, type FirebaseApp } from "firebase/app"
+import { getAuth, type Auth } from "firebase/auth"
+import { getFirestore, type Firestore } from "firebase/firestore"
+import { getAnalytics, type Analytics } from "firebase/analytics"
+
+if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
+    console.error("Firebase API key is not set. Please check your environment variables.")
+}
 
 const firebaseConfig = {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -10,14 +14,32 @@ const firebaseConfig = {
     storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
     messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-    measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
-};
+    measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+}
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
-const auth = getAuth(app);
-const db = getFirestore(app);
+let app: FirebaseApp
+let auth: Auth
+let db: Firestore
+let analytics: Analytics | null = null
 
-export { app, analytics, auth, db };
+try {
+    app = getApp()
+} catch {
+    app = initializeApp(firebaseConfig)
+}
+
+auth = getAuth(app)
+db = getFirestore(app)
+
+if (typeof window !== "undefined" && process.env.NODE_ENV !== "development") {
+    analytics = getAnalytics(app)
+}
+
+export { app, auth, db, analytics }
+export type FirebaseInstance = {
+    app: FirebaseApp
+    auth: Auth
+    db: Firestore
+    analytics: Analytics | null
+}
 

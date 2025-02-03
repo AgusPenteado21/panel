@@ -14,14 +14,14 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { PlusCircle, Download, Pencil, Trash2, ChevronLeft, ChevronRight, Loader2, Key, Lock } from 'lucide-react'
+import { PlusCircle, Download, Pencil, Trash2, ChevronLeft, ChevronRight, Loader2, Key, Lock } from "lucide-react"
 import Navbar from "@/app/components/Navbar"
 import { db } from "@/lib/firebase"
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where } from "firebase/firestore"
-import { hash } from 'bcryptjs'
+import { hash } from "bcryptjs"
 import { useToast } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
-import * as XLSX from 'xlsx'
+import * as XLSX from "xlsx"
 
 interface Pasador {
     id: string
@@ -58,19 +58,19 @@ export default function PasadoresClient() {
     const fetchPasadores = async () => {
         const pasadoresCollection = collection(db, "pasadores")
         const pasadoresSnapshot = await getDocs(pasadoresCollection)
-        const pasadoresList = pasadoresSnapshot.docs.map((doc, index) => ({
-            id: doc.id,
-            displayId: index + 1,
-            ...doc.data()
-        } as Pasador))
+        const pasadoresList = pasadoresSnapshot.docs.map(
+            (doc, index) =>
+                ({
+                    id: doc.id,
+                    displayId: index + 1,
+                    ...doc.data(),
+                }) as Pasador,
+        )
         setPasadores(pasadoresList)
     }
 
     const totalPages = Math.ceil(pasadores.length / ITEMS_PER_PAGE)
-    const paginatedPasadores = pasadores.slice(
-        (currentPage - 1) * ITEMS_PER_PAGE,
-        currentPage * ITEMS_PER_PAGE
-    )
+    const paginatedPasadores = pasadores.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
 
     const handleNewPasador = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault()
@@ -109,13 +109,13 @@ export default function PasadoresClient() {
         const newPasador = {
             nombre,
             nombreFantasia: formData.get("nombreFantasia") as string,
-            comision: parseFloat(formData.get("comision") as string),
+            comision: Number.parseFloat(formData.get("comision") as string),
             deje: false,
             dejeComision: 0,
             observaciones: formData.get("observaciones") as string,
             username,
             password: hashedPassword,
-            bloqueado: false
+            bloqueado: false,
         }
 
         try {
@@ -234,7 +234,7 @@ export default function PasadoresClient() {
             await fetchPasadores()
             toast({
                 title: "Éxito",
-                description: `Pasador ${currentBlockedStatus ? 'desbloqueado' : 'bloqueado'} correctamente.`,
+                description: `Pasador ${currentBlockedStatus ? "desbloqueado" : "bloqueado"} correctamente.`,
             })
         } catch (error) {
             console.error("Error al cambiar el estado de bloqueo:", error)
@@ -249,26 +249,23 @@ export default function PasadoresClient() {
     }
 
     const togglePasadorSelection = (pasadorId: string) => {
-        setSelectedPasadores(prev =>
-            prev.includes(pasadorId)
-                ? prev.filter(id => id !== pasadorId)
-                : [...prev, pasadorId]
+        setSelectedPasadores((prev) =>
+            prev.includes(pasadorId) ? prev.filter((id) => id !== pasadorId) : [...prev, pasadorId],
         )
     }
 
     const handleExportToExcel = () => {
         const workbook = XLSX.utils.book_new()
-        const worksheetData = pasadores.map(p => ({
-            'Nº': p.displayId,
-            'Nombre': p.nombre,
-            'Nombre Fantasía': p.nombreFantasia,
-            'Comisión': `${p.comision.toFixed(2)}%`,
-            'Deje': p.deje ? "Sí" : "No",
-            'DejeComisión': `$${p.dejeComision.toFixed(2)}`,
-            'Nombre de Usuario': p.username,
-            'Observaciones': p.observaciones,
-            'Estado': p.bloqueado ? "Bloqueado" : "Activo"
-
+        const worksheetData = pasadores.map((p) => ({
+            Nº: p.displayId,
+            Nombre: p.nombre,
+            "Nombre Fantasía": p.nombreFantasia,
+            Comisión: `${p.comision.toFixed(2)}%`,
+            Deje: p.deje ? "Sí" : "No",
+            DejeComisión: `$${p.dejeComision.toFixed(2)}`,
+            "Nombre de Usuario": p.username,
+            Observaciones: p.observaciones,
+            Estado: p.bloqueado ? "Bloqueado" : "Activo",
         }))
         const worksheet = XLSX.utils.json_to_sheet(worksheetData)
 
@@ -298,9 +295,7 @@ export default function PasadoresClient() {
                             <DialogContent>
                                 <DialogHeader>
                                     <DialogTitle>Nuevo Pasador</DialogTitle>
-                                    <DialogDescription>
-                                        Complete los datos del nuevo pasador
-                                    </DialogDescription>
+                                    <DialogDescription>Complete los datos del nuevo pasador</DialogDescription>
                                 </DialogHeader>
                                 <form className="grid gap-4 py-4" onSubmit={handleNewPasador}>
                                     <div className="grid gap-2">
@@ -313,13 +308,7 @@ export default function PasadoresClient() {
                                     </div>
                                     <div className="grid gap-2">
                                         <Label htmlFor="comision">Comisión (%)</Label>
-                                        <Input
-                                            id="comision"
-                                            name="comision"
-                                            type="number"
-                                            step="0.01"
-                                            defaultValue="20.00"
-                                        />
+                                        <Input id="comision" name="comision" type="number" step="0.01" defaultValue="20.00" />
                                     </div>
                                     <div className="grid gap-2">
                                         <Label htmlFor="observaciones">Observaciones</Label>
@@ -340,7 +329,7 @@ export default function PasadoresClient() {
                                                 Guardando...
                                             </>
                                         ) : (
-                                            'Guardar'
+                                            "Guardar"
                                         )}
                                     </Button>
                                 </form>
@@ -348,17 +337,16 @@ export default function PasadoresClient() {
                         </Dialog>
                         <Button
                             variant="outline"
-                            onClick={() => selectedPasadores.length === 1 && handleOpenEditDialog(pasadores.find(p => p.id === selectedPasadores[0])!)}
+                            onClick={() =>
+                                selectedPasadores.length === 1 &&
+                                handleOpenEditDialog(pasadores.find((p) => p.id === selectedPasadores[0])!)
+                            }
                             disabled={selectedPasadores.length !== 1}
                         >
                             <Pencil className="h-4 w-4 mr-2" />
                             Modificar
                         </Button>
-                        <Button
-                            variant="outline"
-                            disabled={selectedPasadores.length === 0}
-                            onClick={handleDeletePasadores}
-                        >
+                        <Button variant="outline" disabled={selectedPasadores.length === 0} onClick={handleDeletePasadores}>
                             <Trash2 className="h-4 w-4 mr-2" />
                             Eliminar
                         </Button>
@@ -366,7 +354,7 @@ export default function PasadoresClient() {
                             variant="outline"
                             onClick={() => {
                                 if (selectedPasadores.length === 1) {
-                                    setEditingPasador(pasadores.find(p => p.id === selectedPasadores[0])!)
+                                    setEditingPasador(pasadores.find((p) => p.id === selectedPasadores[0])!)
                                     setIsChangePasswordDialogOpen(true)
                                 }
                             }}
@@ -380,7 +368,7 @@ export default function PasadoresClient() {
                             variant="outline"
                             onClick={() => {
                                 if (selectedPasadores.length === 1) {
-                                    const pasador = pasadores.find(p => p.id === selectedPasadores[0])!
+                                    const pasador = pasadores.find((p) => p.id === selectedPasadores[0])!
                                     handleToggleBlock(pasador.id, pasador.bloqueado)
                                 }
                             }}
@@ -414,26 +402,19 @@ export default function PasadoresClient() {
                         </TableHeader>
                         <TableBody>
                             {paginatedPasadores.map((pasador) => (
-                                <TableRow
-                                    key={pasador.id}
-                                    className={selectedPasadores.includes(pasador.id) ? "bg-muted" : ""}
-                                >
+                                <TableRow key={pasador.id} className={selectedPasadores.includes(pasador.id) ? "bg-muted" : ""}>
                                     <TableCell>
                                         <Checkbox
                                             checked={selectedPasadores.includes(pasador.id)}
                                             onCheckedChange={() => togglePasadorSelection(pasador.id)}
                                         />
                                     </TableCell>
-                                    <TableCell>{pasador.displayId}</TableCell>
+                                    <TableCell>{pasador.displayId.toString().padStart(4, "0")}</TableCell>
                                     <TableCell>{pasador.nombre}</TableCell>
                                     <TableCell>{pasador.nombreFantasia}</TableCell>
                                     <TableCell className="text-right pr-8">{pasador.comision.toFixed(2)}%</TableCell>
-                                    <TableCell className="text-center px-8">
-                                        {pasador.deje ? "Sí" : "No"}
-                                    </TableCell>
-                                    <TableCell className="text-right px-8">
-                                        ${pasador.dejeComision.toFixed(2)}
-                                    </TableCell>
+                                    <TableCell className="text-center px-8">{pasador.deje ? "Sí" : "No"}</TableCell>
+                                    <TableCell className="text-right px-8">${pasador.dejeComision.toFixed(2)}</TableCell>
                                     <TableCell>{pasador.username}</TableCell>
                                     <TableCell className="pl-8">{pasador.observaciones}</TableCell>
                                     <TableCell className="text-center">
@@ -482,9 +463,7 @@ export default function PasadoresClient() {
                     <DialogContent>
                         <DialogHeader>
                             <DialogTitle>Modificar Pasador</DialogTitle>
-                            <DialogDescription>
-                                Modifique la comisión del pasador
-                            </DialogDescription>
+                            <DialogDescription>Modifique la comisión del pasador</DialogDescription>
                         </DialogHeader>
                         <form className="grid gap-4 py-4" onSubmit={handleUpdatePasador}>
                             <div className="grid gap-2">
@@ -495,7 +474,7 @@ export default function PasadoresClient() {
                                     type="number"
                                     step="0.01"
                                     value={editingComision}
-                                    onChange={(e) => setEditingComision(parseFloat(e.target.value))}
+                                    onChange={(e) => setEditingComision(Number.parseFloat(e.target.value))}
                                 />
                             </div>
                             <Button type="submit" disabled={isLoading}>
@@ -505,7 +484,7 @@ export default function PasadoresClient() {
                                         Guardando...
                                     </>
                                 ) : (
-                                    'Guardar'
+                                    "Guardar"
                                 )}
                             </Button>
                         </form>
@@ -515,19 +494,12 @@ export default function PasadoresClient() {
                     <DialogContent>
                         <DialogHeader>
                             <DialogTitle>Cambiar Contraseña</DialogTitle>
-                            <DialogDescription>
-                                Ingrese la nueva contraseña para el pasador
-                            </DialogDescription>
+                            <DialogDescription>Ingrese la nueva contraseña para el pasador</DialogDescription>
                         </DialogHeader>
                         <form className="grid gap-4 py-4" onSubmit={handleChangePassword}>
                             <div className="grid gap-2">
                                 <Label htmlFor="newPassword">Nueva Contraseña</Label>
-                                <Input
-                                    id="newPassword"
-                                    name="newPassword"
-                                    type="password"
-                                    required
-                                />
+                                <Input id="newPassword" name="newPassword" type="password" required />
                             </div>
                             <Button type="submit" disabled={isLoading}>
                                 {isLoading ? (
@@ -536,7 +508,7 @@ export default function PasadoresClient() {
                                         Cambiando...
                                     </>
                                 ) : (
-                                    'Cambiar Contraseña'
+                                    "Cambiar Contraseña"
                                 )}
                             </Button>
                         </form>

@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import Navbar from "@/app/components/Navbar";
 import Login from "@/app/components/Login";
 import Register from "@/app/components/Register";
+import './globals.css';
 import { Button } from "@/components/ui/button";
 
 export default function Home() {

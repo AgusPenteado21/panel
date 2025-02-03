@@ -2,14 +2,14 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ChevronDown, ChevronRight, User, LogOut, Loader2 } from 'lucide-react'
-import { useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext'
+import { ChevronDown, ChevronRight, User, LogOut, Loader2 } from "lucide-react"
+import { useState } from "react"
+import { useAuth } from "@/contexts/AuthContext"
 
 type MenuItem = {
-    titulo: string;
-    href?: string;
-    submenu?: (MenuItem | string)[];
+    titulo: string
+    href?: string
+    submenu?: (MenuItem | string)[]
 }
 
 const elementosMenu: MenuItem[] = [
@@ -24,17 +24,13 @@ const elementosMenu: MenuItem[] = [
                     "cobro a pasador",
                     "reclamos a pasador",
                     "ajustes pasador",
-                    "listado de pagos y cobros a pasadores"
-                ]
+                    "listado de pagos y cobros a pasadores",
+                ],
             },
             "pagos y cobros de borras",
             {
                 titulo: "deje pasadores",
-                submenu: [
-                    "listado de arrastre de pasadores",
-                    "procesar deje",
-                    "procesar deje apuestas"
-                ]
+                submenu: ["listado de arrastre de pasadores", "procesar deje", "procesar deje apuestas"],
             },
             {
                 titulo: "distribuidores",
@@ -42,8 +38,8 @@ const elementosMenu: MenuItem[] = [
                     "pago a distribuidores",
                     "cobro a distribuidores",
                     "listado de pagos realizados por distribuidores a pasadores",
-                    "listado de cobros realizados por distribuidores a pasadores"
-                ]
+                    "listado de cobros realizados por distribuidores a pasadores",
+                ],
             },
             {
                 titulo: "crédito acordado",
@@ -51,34 +47,20 @@ const elementosMenu: MenuItem[] = [
                     "listado de créditos acordados activos",
                     "listado de créditos acordados según cliente",
                     "alta de crédito acordado",
-                    "alta de crédito acordado en cuotas"
-                ]
-            }
-        ]
+                    "alta de crédito acordado en cuotas",
+                ],
+            },
+        ],
     },
     {
         titulo: "administrar",
-        submenu: [
-            "pasadores",
-            "terminales",
-            "listas de precio",
-            "pasadores por correo",
-            "usuarios"
-        ]
+        submenu: ["pasadores", "terminales", "listas de precio", "pasadores por correo", "usuarios"],
     },
     {
         titulo: "jugadas",
         submenu: [
-            "cargar redoblonas de un pasador",
-            "cargar exactas de un pasador",
-            {
-                titulo: "cargar borras",
-                submenu: [
-                    "cargar triplonas de un pasador",
-                    "cargar quintinas de un pasador",
-                    "cargar borratinas de un pasador"
-                ]
-            },
+            "cargar jugadas de un pasador",
+            "cargar borratinas de un pasador",
             "panel de control",
             {
                 titulo: "listado de jugadas",
@@ -95,23 +77,23 @@ const elementosMenu: MenuItem[] = [
                     "listado de aciertos",
                     "listado de jugadas cargadas fuera de horario",
                     "jugadas duplicadas",
-                    "listado de tickets anulados"
-                ]
+                    "listado de tickets anulados",
+                ],
             },
             {
                 titulo: "listado de anuladas",
                 submenu: [
                     {
                         titulo: "listado jugadas anuladas agrupadas",
-                        href: "/jugadas/listado-de-anuladas/listado-jugadas-anuladas-agrupadas"
+                        href: "/jugadas/listado-de-anuladas/listado-jugadas-anuladas-agrupadas",
                     },
                     "listado anuladas por pasador por día",
-                    "ver detalle de anulaciones por pasador"
-                ]
+                    "ver detalle de anulaciones por pasador",
+                ],
             },
             "anular jugada",
-            "buscar jugada quiniela"
-        ]
+            "buscar jugada quiniela",
+        ],
     },
     { titulo: "sorteos", href: "/sorteos" },
     { titulo: "extractos", href: "/extractos" },
@@ -123,9 +105,10 @@ const elementosMenu: MenuItem[] = [
             "rendicion de caja por pasador",
             "resumen diario todos los pasadores",
             "listado totales de pasadores por día",
-            "consulta de saldo"
-        ]
-    }
+            "consulta de saldo",
+            "listado diario",
+        ],
+    },
 ]
 
 const ElementoMenu: React.FC<{ item: MenuItem }> = React.memo(({ item }) => {
@@ -162,11 +145,7 @@ const ElementoMenu: React.FC<{ item: MenuItem }> = React.memo(({ item }) => {
     }
 
     return (
-        <div
-            className="relative"
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-        >
+        <div className="relative" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
             <button
                 className="px-2 py-1 rounded-md text-xs font-medium flex items-center whitespace-nowrap transition-all duration-300 ease-in-out hover:bg-gray-700 hover:text-white"
                 aria-expanded={estaAbierto}
@@ -176,7 +155,13 @@ const ElementoMenu: React.FC<{ item: MenuItem }> = React.memo(({ item }) => {
                     {item.titulo}
                     <span className="absolute left-0 bottom-0 w-full h-0.5 bg-white transform scale-x-0 transition-transform duration-300 origin-left group-hover:scale-x-100"></span>
                 </span>
-                {item.submenu && <ChevronDown className="ml-1 h-3 w-3 transition-transform duration-300 ease-in-out" style={{ transform: estaAbierto ? 'rotate(180deg)' : 'rotate(0deg)' }} aria-hidden="true" />}
+                {item.submenu && (
+                    <ChevronDown
+                        className="ml-1 h-3 w-3 transition-transform duration-300 ease-in-out"
+                        style={{ transform: estaAbierto ? "rotate(180deg)" : "rotate(0deg)" }}
+                        aria-hidden="true"
+                    />
+                )}
             </button>
             {item.submenu && estaAbierto && (
                 <div className="absolute left-0 mt-1 w-56 rounded-md shadow-lg bg-gray-800 ring-1 ring-black ring-opacity-5 z-50 transition-opacity duration-300 ease-in-out opacity-100">
@@ -191,95 +176,99 @@ const ElementoMenu: React.FC<{ item: MenuItem }> = React.memo(({ item }) => {
     )
 })
 
-ElementoMenu.displayName = 'ElementoMenu'
+ElementoMenu.displayName = "ElementoMenu"
 
-const ElementoSubmenu: React.FC<{ item: MenuItem | string; tituloParent: string }> = React.memo(({ item, tituloParent }) => {
-    const [estaAbierto, setEstaAbierto] = React.useState(false)
-    const timeoutRef = React.useRef<NodeJS.Timeout | null>(null)
+const ElementoSubmenu: React.FC<{ item: MenuItem | string; tituloParent: string }> = React.memo(
+    ({ item, tituloParent }) => {
+        const [estaAbierto, setEstaAbierto] = React.useState(false)
+        const timeoutRef = React.useRef<NodeJS.Timeout | null>(null)
 
-    const handleMouseEnter = React.useCallback(() => {
-        if (timeoutRef.current) clearTimeout(timeoutRef.current)
-        setEstaAbierto(true)
-    }, [])
-
-    const handleMouseLeave = React.useCallback(() => {
-        timeoutRef.current = setTimeout(() => setEstaAbierto(false), 300)
-    }, [])
-
-    React.useEffect(() => {
-        return () => {
+        const handleMouseEnter = React.useCallback(() => {
             if (timeoutRef.current) clearTimeout(timeoutRef.current)
+            setEstaAbierto(true)
+        }, [])
+
+        const handleMouseLeave = React.useCallback(() => {
+            timeoutRef.current = setTimeout(() => setEstaAbierto(false), 300)
+        }, [])
+
+        React.useEffect(() => {
+            return () => {
+                if (timeoutRef.current) clearTimeout(timeoutRef.current)
+            }
+        }, [])
+
+        const getHref = (item: MenuItem | string, tituloParent: string): string => {
+            if (typeof item === "string") {
+                return `/${tituloParent.toLowerCase()}/${item.toLowerCase().replace(/ /g, "-")}`
+            }
+            return item.href || `/${tituloParent.toLowerCase()}/${item.titulo.toLowerCase().replace(/ /g, "-")}`
         }
-    }, [])
 
-    const getHref = (item: MenuItem | string, tituloParent: string): string => {
-        if (typeof item === 'string') {
-            return `/${tituloParent.toLowerCase()}/${item.toLowerCase().replace(/ /g, '-')}`
+        const href = getHref(item, tituloParent)
+
+        if (typeof item === "string" || "href" in item) {
+            return (
+                <Link
+                    href={href}
+                    className="block px-4 py-2 text-xs text-white hover:bg-gray-700 transition-colors duration-300 ease-in-out"
+                    role="menuitem"
+                >
+                    <span className="relative overflow-hidden">
+                        {typeof item === "string" ? item : item.titulo}
+                        <span className="absolute left-0 bottom-0 w-full h-0.5 bg-white transform scale-x-0 transition-transform duration-300 origin-left group-hover:scale-x-100"></span>
+                    </span>
+                </Link>
+            )
         }
-        return item.href || `/${tituloParent.toLowerCase()}/${item.titulo.toLowerCase().replace(/ /g, '-')}`
-    }
 
-    const href = getHref(item, tituloParent)
-
-    if (typeof item === 'string' || 'href' in item) {
         return (
-            <Link
-                href={href}
-                className="block px-4 py-2 text-xs text-white hover:bg-gray-700 transition-colors duration-300 ease-in-out"
-                role="menuitem"
-            >
-                <span className="relative overflow-hidden">
-                    {typeof item === 'string' ? item : item.titulo}
-                    <span className="absolute left-0 bottom-0 w-full h-0.5 bg-white transform scale-x-0 transition-transform duration-300 origin-left group-hover:scale-x-100"></span>
-                </span>
-            </Link>
-        )
-    }
-
-    return (
-        <div
-            className="relative"
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-        >
-            <button
-                className="w-full text-left px-4 py-2 text-xs text-white hover:bg-gray-700 flex items-center justify-between transition-colors duration-300 ease-in-out"
-                aria-expanded={estaAbierto}
-                aria-haspopup="true"
-            >
-                <span className="relative overflow-hidden">
-                    {item.titulo}
-                    <span className="absolute left-0 bottom-0 w-full h-0.5 bg-white transform scale-x-0 transition-transform duration-300 origin-left group-hover:scale-x-100"></span>
-                </span>
-                {item.submenu && <ChevronRight className="h-3 w-3 transition-transform duration-300 ease-in-out" style={{ transform: estaAbierto ? 'rotate(90deg)' : 'rotate(0deg)' }} aria-hidden="true" />}
-            </button>
-            {item.submenu && estaAbierto && (
-                <div className="absolute left-full top-0 mt-0 w-56 rounded-md shadow-lg bg-gray-800 ring-1 ring-black ring-opacity-5 z-50 transition-opacity duration-300 ease-in-out opacity-100">
-                    <div className="py-1" role="menu" aria-orientation="vertical">
-                        {item.submenu.map((subItem, subIndex) => (
-                            <ElementoSubmenu key={subIndex} item={subItem} tituloParent={`${tituloParent}/${item.titulo}`} />
-                        ))}
+            <div className="relative" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+                <button
+                    className="w-full text-left px-4 py-2 text-xs text-white hover:bg-gray-700 flex items-center justify-between transition-colors duration-300 ease-in-out"
+                    aria-expanded={estaAbierto}
+                    aria-haspopup="true"
+                >
+                    <span className="relative overflow-hidden">
+                        {item.titulo}
+                        <span className="absolute left-0 bottom-0 w-full h-0.5 bg-white transform scale-x-0 transition-transform duration-300 origin-left group-hover:scale-x-100"></span>
+                    </span>
+                    {item.submenu && (
+                        <ChevronRight
+                            className="h-3 w-3 transition-transform duration-300 ease-in-out"
+                            style={{ transform: estaAbierto ? "rotate(90deg)" : "rotate(0deg)" }}
+                            aria-hidden="true"
+                        />
+                    )}
+                </button>
+                {item.submenu && estaAbierto && (
+                    <div className="absolute left-full top-0 mt-0 w-56 rounded-md shadow-lg bg-gray-800 ring-1 ring-black ring-opacity-5 z-50 transition-opacity duration-300 ease-in-out opacity-100">
+                        <div className="py-1" role="menu" aria-orientation="vertical">
+                            {item.submenu.map((subItem, subIndex) => (
+                                <ElementoSubmenu key={subIndex} item={subItem} tituloParent={`${tituloParent}/${item.titulo}`} />
+                            ))}
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
-    )
-})
+                )}
+            </div>
+        )
+    },
+)
 
-ElementoSubmenu.displayName = 'ElementoSubmenu'
+ElementoSubmenu.displayName = "ElementoSubmenu"
 
 export default function Navbar() {
-    const { isLoggedIn, username, logout } = useAuth();
-    const [isLoggingOut, setIsLoggingOut] = useState(false);
+    const { isLoggedIn, username, logout } = useAuth()
+    const [isLoggingOut, setIsLoggingOut] = useState(false)
 
     const handleLogout = async () => {
-        setIsLoggingOut(true);
+        setIsLoggingOut(true)
         try {
-            await logout();
+            await logout()
         } finally {
-            setIsLoggingOut(false);
+            setIsLoggingOut(false)
         }
-    };
+    }
 
     return (
         <nav className="bg-black text-white" aria-label="Navegación principal">
@@ -306,7 +295,7 @@ export default function Navbar() {
                                 ) : (
                                     <LogOut className="h-3 w-3 mr-1" aria-hidden="true" />
                                 )}
-                                {isLoggingOut ? 'Saliendo...' : 'Salir'}
+                                {isLoggingOut ? "Saliendo..." : "Salir"}
                             </button>
                         )}
                     </div>
