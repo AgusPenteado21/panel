@@ -1,11 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  images: {
-    unoptimized: true
-  },
   experimental: {
     serverComponentsExternalPackages: ["cheerio"],
   },
+  // Elimina la configuración de imágenes si no es necesaria
+  // images: {
+  //   unoptimized: true
+  // },
 }
 
 module.exports = nextConfig
