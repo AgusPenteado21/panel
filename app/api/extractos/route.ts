@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import * as cheerio from "cheerio"
-import type { CheerioAPI, Cheerio } from "cheerio"
-import { format, parse } from "date-fns"
+import { parse, format, startOfDay } from "date-fns"
+import { toZonedTime, formatInTimeZone } from "date-fns-tz"
 import { es } from "date-fns/locale"
 
 const TIEMPO_ESPERA_FETCH = 60000 // 60 segundos
@@ -67,7 +67,7 @@ function esSorteoFinalizado(turno: string): boolean {
         `Verificando si el sorteo ${turno} está finalizado. Hora actual: ${tiempoActual}, Hora del sorteo: ${tiempoSorteo}`,
     )
 
-    return tiempoActual >= tiempoSorteo
+    return tiempoActual > tiempoSorteo
 }
 
 async function obtenerResultadosPizarra(provincia: string, turno: string): Promise<string[]> {
@@ -91,79 +91,57 @@ async function obtenerResultadosPizarra(provincia: string, turno: string): Promi
         }
 
         const contenidoPizarra = await pizarraHtml.text()
-        const $: CheerioAPI = cheerio.load(contenidoPizarra)
+        const $ = cheerio.load(contenidoPizarra)
         let numeros: string[] = Array(20).fill("0000")
 
         if (provincia === "MONTEVIDEO") {
             console.log(`Buscando sección para ${provincia} - ${turno}`)
-            console.log("Estructura HTML de la página:")
-            $("body > *").each((index, element) => {
-                console.log(`Nivel ${index + 1}:`, $(element).prop("tagName"), $(element).attr("class") || "sin clase")
-            })
-
-            // Buscar todas las secciones que podrían contener los resultados
             const $posiblesSecciones = $("div.card, div.container, div.row, div.col")
-            console.log(`Posibles secciones encontradas: ${$posiblesSecciones.length}`)
 
             $posiblesSecciones.each((_, section) => {
                 const $section = $(section)
                 const textoSeccion = $section.text().toLowerCase()
-                console.log(`Analizando sección: ${textoSeccion.slice(0, 100)}...`)
 
                 if (textoSeccion.includes("montevideo") && textoSeccion.includes(turno.toLowerCase())) {
-                    console.log(`Sección potencial encontrada para ${turno}`)
-
-                    // Buscar tablas dentro de la sección
                     const $tablas = $section.find("table")
-                    console.log(`Tablas encontradas en la sección: ${$tablas.length}`)
 
                     $tablas.each((_, tabla) => {
                         const $tabla = $(tabla)
                         const numerosTabla: string[] = []
 
-                        $tabla.find("tr").each((index, fila) => {
-                            if (index < 10) {
-                                // Solo las primeras 10 filas
-                                const $celdas = $(fila).find("td")
-                                if ($celdas.length >= 2) {
-                                    const num1 = $celdas.eq(0).text().trim()
-                                    const num2 = $celdas.eq(1).text().trim()
-                                    console.log(`Números encontrados en fila ${index + 1}: ${num1}, ${num2}`)
-                                    if (/^\d{1,4}$/.test(num1)) numerosTabla.push(num1.padStart(4, "0"))
-                                    if (/^\d{1,4}$/.test(num2)) numerosTabla.push(num2.padStart(4, "0"))
-                                }
-                            }
+                        $tabla.find("tr").each((_, fila) => {
+                            const $celdas = $(fila).find("td")
+                            $celdas.each((_, celda) => {
+                                const num = $(celda).text().trim()
+                                if (/^\d{1,4}$/.test(num)) numerosTabla.push(num.padStart(4, "0"))
+                            })
                         })
 
                         if (numerosTabla.length > 0) {
-                            console.log(`Números válidos encontrados: ${numerosTabla.join(", ")}`)
                             numeros = numerosTabla.slice(0, 20)
                             while (numeros.length < 20) {
                                 numeros.push("0000")
                             }
-                            return false // Salir del bucle each si encontramos números
+                            return false // Salir del bucle each
                         }
                     })
 
                     if (numeros.some((n) => n !== "0000")) {
-                        return false // Salir del bucle principal si encontramos números
+                        return false // Salir del bucle each principal
                     }
                 }
             })
 
-            // Si aún no encontramos números, intentar una búsqueda más general
+            // Si no se encontraron números, realizar una búsqueda general
             if (numeros.every((n) => n === "0000")) {
-                console.log("Realizando búsqueda general de números")
                 const todosLosNumeros = $("body").text().match(/\d{4}/g) || []
-                console.log(`Todos los números de 4 dígitos encontrados: ${todosLosNumeros.join(", ")}`)
                 numeros = todosLosNumeros.slice(0, 20).map((n) => n.padStart(4, "0"))
                 while (numeros.length < 20) {
                     numeros.push("0000")
                 }
             }
         } else {
-            // Lógica para otras provincias (sin cambios)
-            let $seccionTurno: Cheerio<any> | null = null
+            let $seccionTurno = $()
 
             if (turno === "Previa") {
                 $seccionTurno = $("*")
@@ -184,7 +162,7 @@ async function obtenerResultadosPizarra(provincia: string, turno: string): Promi
                 console.log(`Contenido de la sección para ${provincia} - ${turno}:\n`, $seccionTurno.html() || "")
 
                 const numerosEncontrados: string[] = []
-                let elementoActual: Cheerio<any> = $seccionTurno
+                let elementoActual = $seccionTurno
                 let intentos = 0
                 const maxIntentos = 10
 
@@ -223,18 +201,17 @@ async function obtenerResultadosPizarra(provincia: string, turno: string): Promi
                     }
                 })
             }
-
-            const numerosOrdenados = Array(20).fill("0000")
-            numeros.forEach((num, index) => {
-                const nuevoIndice = index % 2 === 0 ? index / 2 : 10 + Math.floor(index / 2)
-                numerosOrdenados[nuevoIndice] = num
-            })
-
-            numeros = numerosOrdenados
         }
 
-        console.log(`Números finales para ${provincia} - ${turno}: ${numeros.join(", ")}`)
-        return numeros
+        // Reordenar los números según el patrón deseado
+        const numerosOrdenados = Array(20).fill("0000")
+        numeros.forEach((num, index) => {
+            const nuevoIndice = index % 2 === 0 ? index / 2 : 10 + Math.floor(index / 2)
+            numerosOrdenados[nuevoIndice] = num
+        })
+
+        console.log(`Números finales para ${provincia} - ${turno}: ${numerosOrdenados.join(", ")}`)
+        return numerosOrdenados
     } catch (error) {
         console.error(`Error al obtener resultados de la pizarra para ${provincia} - ${turno}:`, error)
         return Array(20).fill("0000")
@@ -277,7 +254,10 @@ async function procesarSorteo(
 
 async function obtenerResultados(fecha: Date) {
     console.time("obtenerResultados")
-    console.log("Iniciando obtenerResultados para la fecha:", fecha.toISOString())
+    console.log(
+        "Iniciando obtenerResultados para la fecha:",
+        formatInTimeZone(fecha, "America/Argentina/Buenos_Aires", "yyyy-MM-dd HH:mm:ss"),
+    )
 
     try {
         const resultados: {
@@ -290,19 +270,16 @@ async function obtenerResultados(fecha: Date) {
             pizarraLink: string
         }[] = []
 
-        // Usamos date-fns para formatear la fecha correctamente
         const fechaFormateada = format(fecha, "dd/MM/yyyy", { locale: es })
         const nombreDia = format(fecha, "EEEE", { locale: es })
         const nombreDiaCapitalizado = nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1)
 
-        // Usar solo la fecha formateada, sin incluir el día de la semana
         const fechaFinal = fechaFormateada
 
         console.log(`Fecha formateada: ${fechaFinal}, Día: ${nombreDiaCapitalizado}`)
 
         const diaSemana = fecha.getDay()
 
-        // Cambiamos esta condición para incluir sábados (0 es domingo, 6 es sábado)
         if (diaSemana === 0) {
             console.log("Hoy es domingo. No hay sorteos.")
             return { resultados }
@@ -314,7 +291,6 @@ async function obtenerResultados(fecha: Date) {
             console.log(`Procesando provincia: ${provinciaKey}`)
 
             if (provinciaKey === "MONTEVIDEO") {
-                // Montevideo sortea de lunes a viernes, solo Matutina y Nocturna
                 if (diaSemana >= 1 && diaSemana <= 5) {
                     const turnosMontevideoEspeciales = ["Matutina", "Nocturna"]
                     for (const turno of turnosMontevideoEspeciales) {
@@ -374,29 +350,30 @@ export async function GET(request: Request) {
 
         let fecha: Date
         if (parametroFecha) {
-            // Si se proporciona un parámetro de fecha, usarlo
             fecha = parse(parametroFecha, "yyyy-MM-dd", new Date())
         } else {
-            // Si no, usar la fecha actual de Argentina
-            fecha = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }))
+            fecha = new Date() // Usa la fecha actual
         }
 
-        // Asegurarse de que la fecha esté en la zona horaria de Argentina
-        fecha = new Date(fecha.toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }))
+        // Asegúrate de que la fecha esté en la zona horaria de Argentina
+        fecha = toZonedTime(fecha, "America/Argentina/Buenos_Aires")
+        fecha = startOfDay(fecha) // Asegura que estamos trabajando con el inicio del día
 
-        // Verificar si la fecha es futura
-        const hoy = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }))
-        if (fecha > hoy) {
-            return NextResponse.json({ error: "No se pueden obtener resultados para fechas futuras" }, { status: 400 })
-        }
-
-        console.log("Fecha de obtención de resultados:", fecha.toISOString())
+        console.log(
+            "Fecha de obtención de resultados:",
+            formatInTimeZone(fecha, "America/Argentina/Buenos_Aires", "yyyy-MM-dd HH:mm:ss"),
+        )
 
         const { resultados } = await obtenerResultados(fecha)
 
         if (resultados.length === 0) {
-            console.log("No se encontraron resultados para la fecha seleccionada")
-            return NextResponse.json({ message: "No se encontraron resultados para la fecha seleccionada" }, { status: 200 })
+            const diaSemana = fecha.getDay()
+            let mensaje = "No se encontraron resultados para la fecha seleccionada."
+            if (diaSemana === 0) {
+                mensaje = "Hoy es domingo. No hay sorteos programados para este día."
+            }
+            console.log(mensaje)
+            return NextResponse.json({ message: mensaje }, { status: 200 })
         }
 
         const cabeceras = {
