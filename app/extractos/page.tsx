@@ -377,12 +377,6 @@ export default function ExtractosPage() {
                             </TableBody>
                         </Table>
                     </div>
-
-                    <div className="mt-8 p-6 bg-yellow-100 border-2 border-yellow-300 rounded-lg text-center">
-                        <h2 className="text-xl font-bold mb-4">Página en Mantenimiento</h2>
-                        <p className="text-lg mb-4">Estamos realizando mejoras. Disculpe las molestias.</p>
-                        <p className="text-md font-semibold">Esta página está disponible desde el 01/02/2025</p>
-                    </div>
                 </div>
             </main>
         </div>

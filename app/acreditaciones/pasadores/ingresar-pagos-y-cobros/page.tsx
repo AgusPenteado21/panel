@@ -85,18 +85,20 @@ export default function IngresarPagosYCobros() {
                     const monto = Number.parseFloat(importe)
                     const data = {
                         pasadorId: pasadorId,
-                        monto: Math.abs(monto),
+                        monto: Math.abs(monto), // Guardamos el valor absoluto
                         fecha: fechaFormateada,
                         observaciones: `Módulo: ${pasador?.modulo}`,
                         usuario: auth.currentUser?.email || "admin@example.com",
                         createdAt: serverTimestamp(),
                     }
 
-                    if (monto > 0) {
+                    if (monto < 0) {
+                        // Los pagos son valores negativos
                         console.log("Guardando pago:", data)
                         await addDoc(pagosCollection, data)
                         console.log("Pago procesado:", data)
                     } else {
+                        // Los cobros son valores positivos
                         console.log("Guardando cobro:", data)
                         await addDoc(cobrosCollection, data)
                         console.log("Cobro procesado:", data)

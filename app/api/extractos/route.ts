@@ -3,7 +3,35 @@ import * as cheerio from "cheerio"
 import { parse, format, startOfDay } from "date-fns"
 import { toZonedTime, formatInTimeZone } from "date-fns-tz"
 import { es } from "date-fns/locale"
+import { db } from "@/lib/firebase"
+import { doc, setDoc, getDoc } from "firebase/firestore"
 
+// Interfaces y tipos
+interface ResultadoDia {
+    fecha: string
+    dia: string
+    resultados: {
+        loteria: string
+        provincia: string
+        sorteos: {
+            [key: string]: string[]
+        }
+    }[]
+}
+
+interface ResultadosPorDia {
+    [key: string]: ResultadoDia
+}
+
+interface Resultado {
+    loteria: string
+    provincia: string
+    sorteos: {
+        [key: string]: string[]
+    }
+}
+
+// Constantes
 const TIEMPO_ESPERA_FETCH = 60000 // 60 segundos
 
 const URLS_PIZARRAS = {
@@ -26,6 +54,7 @@ const HORARIOS_SORTEOS = {
     Nocturna: "21:00",
 }
 
+// Funciones auxiliares
 async function obtenerConTiempoLimite(url: string, opciones: RequestInit = {}): Promise<Response> {
     const controlador = new AbortController()
     const id = setTimeout(() => controlador.abort(), TIEMPO_ESPERA_FETCH)
@@ -34,6 +63,14 @@ async function obtenerConTiempoLimite(url: string, opciones: RequestInit = {}): 
         const respuesta = await fetch(url, {
             ...opciones,
             signal: controlador.signal,
+            cache: "no-store",
+            headers: {
+                ...opciones.headers,
+                "Cache-Control": "no-cache",
+                Pragma: "no-cache",
+                "User-Agent":
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            },
         })
         clearTimeout(id)
         return respuesta
@@ -79,13 +116,7 @@ async function obtenerResultadosPizarra(provincia: string, turno: string): Promi
         }
 
         console.log(`Obteniendo resultados de ${url} para ${provincia} - ${turno}`)
-        const pizarraHtml = await obtenerConTiempoLimite(url, {
-            headers: {
-                "User-Agent":
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            },
-            cache: "no-store",
-        })
+        const pizarraHtml = await obtenerConTiempoLimite(url)
         if (!pizarraHtml.ok) {
             throw new Error(`Error HTTP: ${pizarraHtml.status}`)
         }
@@ -96,50 +127,59 @@ async function obtenerResultadosPizarra(provincia: string, turno: string): Promi
 
         if (provincia === "MONTEVIDEO") {
             console.log(`Buscando sección para ${provincia} - ${turno}`)
-            const $posiblesSecciones = $("div.card, div.container, div.row, div.col")
+            const $posiblesSecciones = $("div.card, div.container, div.row, div.col, table, tbody, tr")
 
+            let seccionEncontrada = false
             $posiblesSecciones.each((_, section) => {
                 const $section = $(section)
                 const textoSeccion = $section.text().toLowerCase()
 
                 if (textoSeccion.includes("montevideo") && textoSeccion.includes(turno.toLowerCase())) {
-                    const $tablas = $section.find("table")
+                    console.log(`Sección encontrada para Montevideo - ${turno}`)
+                    seccionEncontrada = true
+                    let numerosEncontrados: string[] = []
 
-                    $tablas.each((_, tabla) => {
-                        const $tabla = $(tabla)
-                        const numerosTabla: string[] = []
-
-                        $tabla.find("tr").each((_, fila) => {
-                            const $celdas = $(fila).find("td")
-                            $celdas.each((_, celda) => {
-                                const num = $(celda).text().trim()
-                                if (/^\d{1,4}$/.test(num)) numerosTabla.push(num.padStart(4, "0"))
-                            })
-                        })
-
-                        if (numerosTabla.length > 0) {
-                            numeros = numerosTabla.slice(0, 20)
-                            while (numeros.length < 20) {
-                                numeros.push("0000")
-                            }
-                            return false // Salir del bucle each
+                    // Buscar números en la sección encontrada
+                    $section.find("td").each((_, td) => {
+                        const numero = $(td).text().trim()
+                        if (/^\d{1,4}$/.test(numero)) {
+                            numerosEncontrados.push(numero.padStart(4, "0"))
                         }
                     })
 
-                    if (numeros.some((n) => n !== "0000")) {
-                        return false // Salir del bucle each principal
+                    // Si no se encuentran suficientes números en las celdas, buscar en todo el texto de la sección
+                    if (numerosEncontrados.length < 20) {
+                        const numerosEnTexto = textoSeccion.match(/\d{1,4}/g) || []
+                        numerosEncontrados = numerosEncontrados
+                            .concat(numerosEnTexto.map((num) => num.padStart(4, "0")))
+                            .slice(0, 20)
                     }
+
+                    // Rellenar con ceros si no se encontraron 20 números
+                    while (numerosEncontrados.length < 20) {
+                        numerosEncontrados.push("0000")
+                    }
+
+                    numeros = numerosEncontrados
+                    console.log(`Números encontrados para Montevideo - ${turno}: ${numeros.join(", ")}`)
+                    return false // Salir del bucle each
                 }
             })
 
-            // Si no se encontraron números, realizar una búsqueda general
-            if (numeros.every((n) => n === "0000")) {
-                const todosLosNumeros = $("body").text().match(/\d{4}/g) || []
-                numeros = todosLosNumeros.slice(0, 20).map((n) => n.padStart(4, "0"))
+            // Si no se encontró la sección específica, realizar una búsqueda general
+            if (!seccionEncontrada) {
+                console.log("Realizando búsqueda general para Montevideo")
+                const todosLosNumeros =
+                    $("body")
+                        .text()
+                        .match(/\d{1,4}/g) || []
+                numeros = todosLosNumeros.map((n) => n.padStart(4, "0")).slice(0, 20)
                 while (numeros.length < 20) {
                     numeros.push("0000")
                 }
             }
+
+            console.log(`Números finales para Montevideo - ${turno}: ${numeros.join(", ")}`)
         } else {
             let $seccionTurno = $()
 
@@ -224,7 +264,7 @@ async function procesarSorteo(
     fechaFormateada: string,
     nombreDia: string,
     pizarraUrl: string,
-    resultados: any[],
+    resultadosPorDia: ResultadosPorDia,
     diaSemana: number,
 ) {
     if (esSorteoFinalizado(turno)) {
@@ -234,16 +274,37 @@ async function procesarSorteo(
         console.timeEnd(`obtenerResultadosPizarra-${provincia}-${turno}`)
 
         if (numeros.some((n) => n !== "0000")) {
-            resultados.push({
-                id: `${Date.now()}-${provincia}-${turno}`,
-                fecha: fechaFormateada,
-                dia: nombreDia,
-                sorteo: turno,
-                loteria: provincia,
-                numeros,
-                pizarraLink: pizarraUrl,
-            })
+            if (!resultadosPorDia[fechaFormateada]) {
+                resultadosPorDia[fechaFormateada] = {
+                    fecha: fechaFormateada,
+                    dia: nombreDia,
+                    resultados: [],
+                }
+            }
+
+            let provinciaResultado = resultadosPorDia[fechaFormateada].resultados.find((r) => r.provincia === provincia)
+            if (!provinciaResultado) {
+                provinciaResultado = {
+                    loteria: provincia === "NACION" ? "Nacional" : provincia === "PROVINCIA" ? "Provincial" : provincia,
+                    provincia: provincia,
+                    sorteos: {},
+                }
+                resultadosPorDia[fechaFormateada].resultados.push(provinciaResultado)
+            }
+
+            provinciaResultado.sorteos[turno] = numeros
+
             console.log(`Resultados agregados para ${provincia} - ${turno}: ${numeros.join(", ")}`)
+
+            // Actualizar Firebase en tiempo real
+            try {
+                const fechaKey = format(parse(fechaFormateada, "dd/MM/yyyy", new Date()), "yyyy-MM-dd")
+                const docRef = doc(db, "extractos", fechaKey)
+                await setDoc(docRef, { [fechaFormateada]: resultadosPorDia[fechaFormateada] }, { merge: true })
+                console.log(`Resultados actualizados en Firebase para ${provincia} - ${turno}`)
+            } catch (error) {
+                console.error(`Error al actualizar resultados en Firebase para ${provincia} - ${turno}:`, error)
+            }
         } else {
             console.log(`No se encontraron números válidos para ${provincia} - ${turno}`)
         }
@@ -253,6 +314,9 @@ async function procesarSorteo(
 }
 
 async function obtenerResultados(fecha: Date) {
+    console.log("Iniciando obtenerResultados")
+    console.log("Fecha recibida:", fecha)
+    console.log("Zona horaria del servidor:", Intl.DateTimeFormat().resolvedOptions().timeZone)
     console.time("obtenerResultados")
     console.log(
         "Iniciando obtenerResultados para la fecha:",
@@ -260,15 +324,7 @@ async function obtenerResultados(fecha: Date) {
     )
 
     try {
-        const resultados: {
-            id: string
-            fecha: string
-            dia: string
-            sorteo: string
-            loteria: string
-            numeros: string[]
-            pizarraLink: string
-        }[] = []
+        const resultadosPorDia: ResultadosPorDia = {}
 
         const fechaFormateada = format(fecha, "dd/MM/yyyy", { locale: es })
         const nombreDia = format(fecha, "EEEE", { locale: es })
@@ -282,7 +338,9 @@ async function obtenerResultados(fecha: Date) {
 
         if (diaSemana === 0) {
             console.log("Hoy es domingo. No hay sorteos.")
-            return { resultados }
+            return {
+                resultados: resultadosPorDia
+            }
         }
 
         const sorteos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
@@ -292,20 +350,28 @@ async function obtenerResultados(fecha: Date) {
 
             if (provinciaKey === "MONTEVIDEO") {
                 if (diaSemana >= 1 && diaSemana <= 5) {
-                    const turnosMontevideoEspeciales = ["Matutina", "Nocturna"]
-                    for (const turno of turnosMontevideoEspeciales) {
-                        await procesarSorteo(
-                            provinciaKey,
-                            turno,
-                            fechaFinal,
-                            nombreDiaCapitalizado,
-                            pizarraUrl,
-                            resultados,
-                            diaSemana,
-                        )
-                    }
-                } else {
-                    console.log(`No hay sorteos para ${provinciaKey} hoy (${nombreDiaCapitalizado})`)
+                    // Montevideo Matutina: de lunes a viernes
+                    await procesarSorteo(
+                        provinciaKey,
+                        "Matutina",
+                        fechaFinal,
+                        nombreDiaCapitalizado,
+                        pizarraUrl,
+                        resultadosPorDia,
+                        diaSemana,
+                    )
+                }
+                if (diaSemana >= 1 && diaSemana <= 6) {
+                    // Montevideo Nocturna: de lunes a sábado
+                    await procesarSorteo(
+                        provinciaKey,
+                        "Nocturna",
+                        fechaFinal,
+                        nombreDiaCapitalizado,
+                        pizarraUrl,
+                        resultadosPorDia,
+                        diaSemana,
+                    )
                 }
             } else {
                 // Para otras provincias, procesar todos los sorteos de lunes a sábado
@@ -317,7 +383,7 @@ async function obtenerResultados(fecha: Date) {
                             fechaFinal,
                             nombreDiaCapitalizado,
                             pizarraUrl,
-                            resultados,
+                            resultadosPorDia,
                             diaSemana,
                         )
                     }
@@ -327,13 +393,7 @@ async function obtenerResultados(fecha: Date) {
             }
         }
 
-        console.log(`Total de resultados obtenidos: ${resultados.length}`)
-        console.log("Resultados detallados:")
-        resultados.forEach((r) => {
-            console.log(`${r.loteria} - ${r.sorteo}: ${r.numeros.join(", ")}`)
-        })
-
-        return { resultados, timestamp: Date.now() }
+        return { resultados: resultadosPorDia, timestamp: Date.now() }
     } catch (error) {
         console.error("Error en obtenerResultados:", error)
         throw error
@@ -344,6 +404,8 @@ async function obtenerResultados(fecha: Date) {
 
 export async function GET(request: Request) {
     console.log("Iniciando obtención de resultados en vivo para /api/extractos")
+    console.log("Versión de Node.js:", process.version)
+    console.log("Variables de entorno:", JSON.stringify(process.env, null, 2))
     try {
         const url = new URL(request.url)
         const parametroFecha = url.searchParams.get("date")
@@ -366,7 +428,43 @@ export async function GET(request: Request) {
 
         const { resultados } = await obtenerResultados(fecha)
 
-        if (resultados.length === 0) {
+        console.log(`Intentando obtener todos los extractos de Firebase`)
+        const fechaKey = format(fecha, "yyyy-MM-dd")
+        const docRef = doc(db, "extractos", fechaKey)
+        const docSnap = await getDoc(docRef)
+
+        let extractosFormateados = []
+
+        if (docSnap.exists()) {
+            console.log(`Extractos encontrados en Firebase para la fecha: ${fechaKey}`)
+            const data = docSnap.data()
+            console.log("Datos crudos de Firebase:", JSON.stringify(data, null, 2))
+
+            // Asumiendo que la estructura es { "dd/mm/yyyy": { fecha, dia, resultados: [...] } }
+            const fechaFormateada = Object.keys(data)[0] // Debería ser "dd/mm/yyyy"
+            const extractosDia = data[fechaFormateada]
+
+            if (extractosDia && extractosDia.resultados) {
+                extractosFormateados = extractosDia.resultados.flatMap((resultado: Resultado) =>
+                    Object.entries(resultado.sorteos).map(([sorteo, numeros]) => ({
+                        id: `${resultado.provincia}-${sorteo}-${fechaFormateada}`,
+                        fecha: fechaFormateada,
+                        dia: extractosDia.dia,
+                        sorteo: sorteo.toUpperCase(),
+                        loteria: resultado.loteria,
+                        provincia: resultado.provincia,
+                        numeros: numeros,
+                        pizarraLink: URLS_PIZARRAS[resultado.provincia as keyof typeof URLS_PIZARRAS] || "",
+                    })),
+                )
+            }
+
+            console.log("Extractos formateados:", JSON.stringify(extractosFormateados, null, 2))
+        } else {
+            console.log(`No se encontraron extractos en Firebase para la fecha: ${fechaKey}`)
+        }
+
+        if (extractosFormateados.length === 0) {
             const diaSemana = fecha.getDay()
             let mensaje = "No se encontraron resultados para la fecha seleccionada."
             if (diaSemana === 0) {
@@ -382,17 +480,9 @@ export async function GET(request: Request) {
             "Access-Control-Allow-Headers": "Content-Type, Authorization",
         }
 
-        const resultadosFormateados = resultados.map((r) => ({
-            ...r,
-            numerosFormateados: r.numeros.join("\t"),
-        }))
+        console.log("Resultados finales enviados:", JSON.stringify(extractosFormateados, null, 2))
 
-        console.log("Resultados finales enviados:")
-        resultadosFormateados.forEach((r) => {
-            console.log(`${r.loteria} - ${r.sorteo}: ${r.numerosFormateados}`)
-        })
-
-        return NextResponse.json(resultadosFormateados, { headers: cabeceras })
+        return NextResponse.json(extractosFormateados, { headers: cabeceras })
     } catch (error) {
         console.error("Error al obtener los resultados en vivo:", error)
         return NextResponse.json(
@@ -405,3 +495,4 @@ export async function GET(request: Request) {
     }
 }
 
+console.log("route.ts file loaded successfully")
