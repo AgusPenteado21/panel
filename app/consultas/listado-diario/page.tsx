@@ -41,7 +41,7 @@ interface Pasador {
     ventasOnline: number
     fecha: string
     timestamp: string
-    premioTotal?: number
+    premioTotal: number
     comisionPorcentaje: number
 }
 
@@ -110,17 +110,16 @@ const SelectorFecha = ({
 
 const fetchAciertosData = async (fecha: Date) => {
     const aciertosRef = collection(db, "aciertos")
-    const startOfDayDate = startOfDay(fecha)
-    const endOfDayDate = endOfDay(fecha)
+    const fechaString = format(fecha, "yyyy-MM-dd")
 
-    const q = query(aciertosRef, where("fecha", ">=", startOfDayDate), where("fecha", "<=", endOfDayDate))
-
-    const querySnapshot = await getDocs(q)
+    const querySnapshot = await getDocs(aciertosRef)
     const aciertosData: { [key: string]: number } = {}
 
     querySnapshot.forEach((doc) => {
         const data = doc.data()
-        aciertosData[data.idPasador] = data.premioTotal || 0
+        if (data[fechaString] && data[fechaString].totalGanado) {
+            aciertosData[doc.id] = data[fechaString].totalGanado
+        }
     })
 
     return aciertosData
@@ -297,7 +296,7 @@ export default function ListadoDiario() {
             // Update listaPasadores with aciertos data
             const updatedListaPasadores = listaPasadores.map((pasador) => ({
                 ...pasador,
-                premioTotal: aciertosData[pasador.id] || 0,
+                premioTotal: aciertosData[pasador.nombre] || 0, // Cambiado de pasador.id a pasador.nombre
             }))
 
             // Obtener la comisión de cada pasador
@@ -505,7 +504,7 @@ export default function ListadoDiario() {
                                                 <TableHead className="text-right">Pagado</TableHead>
                                                 <TableHead className="text-right">Jugado</TableHead>
                                                 <TableHead className="text-right">Comisión</TableHead>
-                                                <TableHead className="text-right">Aciertos</TableHead>
+                                                <TableHead className="text-right">Total Ganado</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -521,7 +520,7 @@ export default function ListadoDiario() {
                                                     <TableCell className="text-right">{formatearMoneda(pasador.pagado)}</TableCell>
                                                     <TableCell className="text-right">{formatearMoneda(pasador.jugado)}</TableCell>
                                                     <TableCell className="text-right">{formatearMoneda(pasador.comisionPasador)}</TableCell>
-                                                    <TableCell className="text-right">{formatearMoneda(pasador.premioTotal || 0)}</TableCell>
+                                                    <TableCell className="text-right">{formatearMoneda(pasador.premioTotal)}</TableCell>
                                                 </TableRow>
                                             ))}
                                         </TableBody>
