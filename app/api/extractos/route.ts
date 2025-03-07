@@ -31,6 +31,20 @@ interface Resultado {
     }
 }
 
+// Función para obtener la fecha actual en Argentina
+function obtenerFechaArgentina() {
+    // Crear una nueva fecha y convertirla explícitamente a la zona horaria de Argentina
+    const fechaActual = new Date()
+    console.log("Fecha UTC antes de conversión:", fechaActual.toISOString())
+
+    // Convertir a zona horaria de Argentina
+    const fechaArgentina = toZonedTime(fechaActual, "America/Argentina/Buenos_Aires")
+    console.log("Fecha Argentina después de conversión:", fechaArgentina.toISOString())
+    console.log("Fecha Argentina formateada:", format(fechaArgentina, "yyyy-MM-dd HH:mm:ss"))
+
+    return fechaArgentina
+}
+
 // Constantes
 const TIEMPO_ESPERA_FETCH = 60000 // 60 segundos
 
@@ -68,8 +82,9 @@ async function obtenerConTiempoLimite(url: string, opciones: RequestInit = {}): 
             cache: "no-store",
             headers: {
                 ...opciones.headers,
-                "Cache-Control": "no-cache",
+                "Cache-Control": "no-cache, no-store, must-revalidate",
                 Pragma: "no-cache",
+                Expires: "0",
                 "User-Agent":
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
             },
@@ -98,17 +113,21 @@ function obtenerTiempoSorteo(turno: string): number {
 }
 
 function esSorteoFinalizado(turno: string, fecha: Date): boolean {
-    const ahora = toZonedTime(new Date(), "America/Argentina/Buenos_Aires")
+    // Usar la fecha actual en Argentina para la comparación
+    const ahora = obtenerFechaArgentina()
     const tiempoActual = ahora.getHours() * 60 + ahora.getMinutes()
     const tiempoSorteo = obtenerTiempoSorteo(turno)
 
     console.log(
-        `Verificando si el sorteo ${turno} está finalizado. Hora actual: ${ahora.getHours()}:${ahora.getMinutes()} (${tiempoActual} min), Hora del sorteo: ${tiempoSorteo} min`,
+        `Verificando si el sorteo ${turno} está finalizado. Hora actual en Argentina: ${ahora.getHours()}:${ahora.getMinutes()} (${tiempoActual} min), Hora del sorteo: ${tiempoSorteo} min`,
     )
 
-    // Si la fecha es anterior a hoy, consideramos que todos los sorteos están finalizados
-    if (isAfter(startOfDay(ahora), fecha)) {
-        console.log(`La fecha ${fecha.toISOString()} es anterior a hoy, sorteo finalizado`)
+    // Si la fecha es anterior a hoy en Argentina, consideramos que todos los sorteos están finalizados
+    const hoyArgentina = startOfDay(obtenerFechaArgentina())
+    if (isAfter(hoyArgentina, fecha)) {
+        console.log(
+            `La fecha ${fecha.toISOString()} es anterior a hoy en Argentina (${hoyArgentina.toISOString()}), sorteo finalizado`,
+        )
         return true
     }
 
@@ -129,9 +148,6 @@ function reordenarNumeros(numeros: string[]): string[] {
     })
     return numerosOrdenados
 }
-
-// Agregar una función de verificación para asegurar que los números no sean secuenciales o patrones obvios
-// Agregar esta función después de la función reordenarNumeros:
 
 function verificarNumerosValidos(numeros: string[]): boolean {
     // Verificar si hay demasiados números con patrones simples
@@ -163,9 +179,6 @@ function verificarNumerosValidos(numeros: string[]): boolean {
     // Si más del 25% de los números tienen patrones simples, considerarlos inválidos
     return patronesSimples <= numeros.length * 0.25
 }
-
-// Mejorar la extracción de números para Montevideo con una estrategia más agresiva
-// Agregar esta función auxiliar before obtenerResultadosPizarra:
 
 function extraerNumerosReales(texto: string): string[] {
     // Buscar todos los números de 4 dígitos
@@ -531,7 +544,7 @@ async function procesarSorteo(
 
 async function obtenerResultados(fecha: Date) {
     console.log("Iniciando obtenerResultados")
-    console.log("Fecha recibida:", fecha)
+    console.log("Fecha recibida:", fecha.toISOString())
     console.log("Zona horaria del servidor:", Intl.DateTimeFormat().resolvedOptions().timeZone)
     console.time("obtenerResultados")
     console.log(
@@ -542,15 +555,17 @@ async function obtenerResultados(fecha: Date) {
     try {
         const resultadosPorDia: ResultadosPorDia = {}
 
-        const fechaFormateada = format(fecha, "dd/MM/yyyy", { locale: es })
-        const nombreDia = format(fecha, "EEEE", { locale: es })
+        // Usar la fecha en zona horaria de Argentina para formatear
+        const fechaArgentina = toZonedTime(fecha, "America/Argentina/Buenos_Aires")
+        const fechaFormateada = format(fechaArgentina, "dd/MM/yyyy", { locale: es })
+        const nombreDia = format(fechaArgentina, "EEEE", { locale: es })
         const nombreDiaCapitalizado = nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1)
 
         const fechaFinal = fechaFormateada
 
         console.log(`Fecha formateada: ${fechaFinal}, Día: ${nombreDiaCapitalizado}`)
 
-        const diaSemana = fecha.getDay()
+        const diaSemana = fechaArgentina.getDay()
 
         if (diaSemana === 0) {
             console.log("Hoy es domingo. No hay sorteos.")
@@ -595,22 +610,39 @@ async function obtenerResultados(fecha: Date) {
 // Modificar la función GET para forzar la actualización de resultados
 export async function GET(request: Request) {
     console.log("Iniciando obtención de resultados en vivo para /api/extractos")
+    console.log("Zona horaria del servidor:", Intl.DateTimeFormat().resolvedOptions().timeZone)
 
     try {
         const url = new URL(request.url)
         const parametroFecha = url.searchParams.get("date")
         const forceRefresh = url.searchParams.get("forceRefresh") === "true"
 
+        // Endpoint de diagnóstico para verificar zonas horarias
+        if (url.searchParams.get("debug") === "timezone") {
+            const fechaUTC = new Date()
+            const fechaArgentina = obtenerFechaArgentina()
+
+            return NextResponse.json({
+                serverTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                utcDate: fechaUTC.toISOString(),
+                utcFormatted: format(fechaUTC, "yyyy-MM-dd HH:mm:ss"),
+                argentinaDate: fechaArgentina.toISOString(),
+                argentinaFormatted: format(fechaArgentina, "yyyy-MM-dd HH:mm:ss"),
+            })
+        }
+
         let fecha: Date
         if (parametroFecha) {
             fecha = parse(parametroFecha, "yyyy-MM-dd", new Date())
+            console.log("Usando fecha del parámetro:", parametroFecha)
         } else {
-            fecha = new Date() // Usa la fecha actual
+            // Usar la función para obtener la fecha en Argentina
+            fecha = obtenerFechaArgentina()
+            console.log("Usando fecha actual de Argentina")
         }
 
-        // Asegúrate de que la fecha esté en la zona horaria de Argentina
-        fecha = toZonedTime(fecha, "America/Argentina/Buenos_Aires")
-        fecha = startOfDay(fecha) // Asegura que estamos trabajando con el inicio del día
+        // Asegurarse de que estamos trabajando con el inicio del día
+        fecha = startOfDay(fecha)
 
         console.log(
             "Fecha de obtención de resultados:",
@@ -618,13 +650,17 @@ export async function GET(request: Request) {
         )
 
         const fechaKey = format(fecha, "yyyy-MM-dd")
+        console.log("Clave de fecha para Firebase:", fechaKey)
+
         const docRef = doc(db, "extractos", fechaKey)
 
-        // Si se fuerza la actualización o es la fecha actual, obtener resultados en vivo
-        const esHoy = format(fecha, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd")
+        // Verificar si es hoy en Argentina, no en la zona horaria del servidor
+        const hoyArgentina = obtenerFechaArgentina()
+        const esHoy = format(fecha, "yyyy-MM-dd") === format(hoyArgentina, "yyyy-MM-dd")
+        console.log(`¿Es la fecha actual en Argentina? ${esHoy ? "SÍ" : "NO"}`)
 
         if (forceRefresh || esHoy) {
-            console.log("Forzando actualización de resultados o es la fecha actual")
+            console.log("Forzando actualización de resultados o es la fecha actual en Argentina")
             const { resultados } = await obtenerResultados(fecha)
 
             // Formatear los resultados obtenidos en vivo
