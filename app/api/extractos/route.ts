@@ -37,12 +37,21 @@ function obtenerFechaArgentina() {
     const fechaActual = new Date()
     console.log("Fecha UTC antes de conversión:", fechaActual.toISOString())
 
-    // Convertir a zona horaria de Argentina
-    const fechaArgentina = toZonedTime(fechaActual, "America/Argentina/Buenos_Aires")
-    console.log("Fecha Argentina después de conversión:", fechaArgentina.toISOString())
-    console.log("Fecha Argentina formateada:", format(fechaArgentina, "yyyy-MM-dd HH:mm:ss"))
+    // Método 1: Usando date-fns-tz
+    try {
+        const fechaArgentina = toZonedTime(fechaActual, "America/Argentina/Buenos_Aires")
+        console.log("Fecha Argentina (método 1):", fechaArgentina.toISOString())
+        console.log("Fecha Argentina formateada:", format(fechaArgentina, "yyyy-MM-dd HH:mm:ss"))
+        return fechaArgentina
+    } catch (error) {
+        console.error("Error al usar toZonedTime:", error)
 
-    return fechaArgentina
+        // Método 2: Usar offset manual como respaldo
+        const fechaArgentinaManual = new Date(fechaActual.getTime() - 3 * 60 * 60 * 1000)
+        console.log("Fecha Argentina (método 2 - manual):", fechaArgentinaManual.toISOString())
+        console.log("Fecha Argentina manual formateada:", format(fechaArgentinaManual, "yyyy-MM-dd HH:mm:ss"))
+        return fechaArgentinaManual
+    }
 }
 
 // Constantes
@@ -606,6 +615,117 @@ async function obtenerResultados(fecha: Date) {
     }
 }
 
+// Modificar la función obtenerResultadosPizarraDirecto para guardar los resultados en Firebase
+async function obtenerResultadosPizarraDirecto(): Promise<any[]> {
+    console.log("Obteniendo resultados directamente de las pizarras")
+
+    try {
+        const resultados: any[] = []
+        const fechaActual = obtenerFechaArgentina()
+        const diaSemana = fechaActual.getDay()
+
+        // Formatear la fecha para Firebase y para mostrar
+        const fechaKey = format(fechaActual, "yyyy-MM-dd")
+        const fechaDisplayActual = format(fechaActual, "dd/MM/yyyy", { locale: es })
+        const nombreDiaActual = format(fechaActual, "EEEE", { locale: es })
+        const nombreDiaCapitalizado = nombreDiaActual.charAt(0).toUpperCase() + nombreDiaActual.slice(1)
+
+        console.log(`Fecha actual para Firebase: ${fechaKey}, Fecha para mostrar: ${fechaDisplayActual}`)
+
+        // No procesar en domingo
+        if (diaSemana === 0) {
+            console.log("Hoy es domingo. No hay sorteos.")
+            return resultados
+        }
+
+        const sorteos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
+
+        // Objeto para almacenar los resultados que se guardarán en Firebase
+        const resultadosPorDia: ResultadosPorDia = {}
+        resultadosPorDia[fechaDisplayActual] = {
+            fecha: fechaDisplayActual,
+            dia: nombreDiaCapitalizado,
+            resultados: [],
+        }
+
+        // Para cada provincia y sorteo, obtener resultados
+        for (const [provinciaKey, pizarraUrl] of Object.entries(URLS_PIZARRAS)) {
+            console.log(`Procesando provincia: ${provinciaKey}`)
+
+            // Procesar cada sorteo
+            for (const sorteo of sorteos) {
+                // Saltear sorteos específicos para Montevideo
+                if (provinciaKey === "MONTEVIDEO") {
+                    if (sorteo !== "Matutina" && sorteo !== "Nocturna") {
+                        continue
+                    }
+
+                    // Matutina Montevideo: solo de lunes a viernes (días 1-5)
+                    if (sorteo === "Matutina" && diaSemana > 5) {
+                        continue
+                    }
+
+                    // Nocturna Montevideo: de lunes a sábados (días 1-6)
+                    if (sorteo === "Nocturna" && diaSemana === 0) {
+                        continue
+                    }
+                }
+
+                // Verificar si el sorteo ya finalizó
+                if (esSorteoFinalizado(sorteo, fechaActual)) {
+                    console.log(`Obteniendo resultados para ${provinciaKey} - ${sorteo}`)
+                    const numeros = await obtenerResultadosPizarra(provinciaKey, sorteo)
+
+                    if (numeros.some((n) => n !== "0000") && verificarNumerosValidos(numeros)) {
+                        // Agregar al array de resultados para la respuesta API
+                        resultados.push({
+                            id: `${provinciaKey}-${sorteo}`,
+                            sorteo: sorteo.toUpperCase(),
+                            loteria:
+                                provinciaKey === "NACION" ? "Nacional" : provinciaKey === "PROVINCIA" ? "Provincial" : provinciaKey,
+                            provincia: provinciaKey,
+                            numeros: numeros,
+                            pizarraLink: URLS_PIZARRAS[provinciaKey as keyof typeof URLS_PIZARRAS] || "",
+                            fecha: fechaDisplayActual,
+                            dia: nombreDiaCapitalizado,
+                        })
+
+                        // Agregar al objeto para guardar en Firebase
+                        let provinciaResultado = resultadosPorDia[fechaDisplayActual].resultados.find(
+                            (r) => r.provincia === provinciaKey,
+                        )
+                        if (!provinciaResultado) {
+                            provinciaResultado = {
+                                loteria:
+                                    provinciaKey === "NACION" ? "Nacional" : provinciaKey === "PROVINCIA" ? "Provincial" : provinciaKey,
+                                provincia: provinciaKey,
+                                sorteos: {},
+                            }
+                            resultadosPorDia[fechaDisplayActual].resultados.push(provinciaResultado)
+                        }
+
+                        provinciaResultado.sorteos[sorteo] = numeros
+                    }
+                }
+            }
+        }
+
+        // Guardar todos los resultados en Firebase
+        try {
+            const docRef = doc(db, "extractos", fechaKey)
+            await setDoc(docRef, resultadosPorDia, { merge: true })
+            console.log(`Resultados guardados en Firebase con fecha: ${fechaKey}`)
+        } catch (error) {
+            console.error("Error al guardar resultados en Firebase:", error)
+        }
+
+        return resultados
+    } catch (error) {
+        console.error("Error al obtener resultados directamente:", error)
+        return []
+    }
+}
+
 // Modificar la función GET para asegurar que siempre use la fecha de Argentina en la respuesta
 export async function GET(request: Request) {
     console.log("Iniciando obtención de resultados en vivo para /api/extractos")
@@ -632,15 +752,22 @@ export async function GET(request: Request) {
             })
         }
 
+        // Siempre obtener la fecha actual de Argentina para la respuesta
+        const fechaActualArgentina = obtenerFechaArgentina()
+        const fechaDisplayActual = format(fechaActualArgentina, "dd/MM/yyyy", { locale: es })
+        const nombreDiaActual = format(fechaActualArgentina, "EEEE", { locale: es })
+        console.log("Fecha actual de Argentina para la respuesta:", fechaDisplayActual)
+
         let fecha: Date
         if (parametroFecha) {
             // Convertir el parámetro de fecha a la zona horaria de Argentina
             fecha = toZonedTime(parse(parametroFecha, "yyyy-MM-dd", new Date()), "America/Argentina/Buenos_Aires")
             console.log("Usando fecha del parámetro (convertida a Argentina):", parametroFecha)
+            console.log("Fecha convertida a Argentina:", format(fecha, "yyyy-MM-dd HH:mm:ss"))
         } else {
             // Usar la función para obtener la fecha en Argentina
-            fecha = obtenerFechaArgentina()
-            console.log("Usando fecha actual de Argentina")
+            fecha = fechaActualArgentina
+            console.log("Usando fecha actual de Argentina:", format(fecha, "yyyy-MM-dd HH:mm:ss"))
         }
 
         // Asegurarse de que estamos trabajando con el inicio del día
@@ -651,65 +778,37 @@ export async function GET(request: Request) {
             formatInTimeZone(fecha, "America/Argentina/Buenos_Aires", "yyyy-MM-dd HH:mm:ss"),
         )
 
-        // Formatear la fecha para la clave de Firebase y para mostrar en la respuesta
+        // Formatear la fecha para la clave de Firebase
         const fechaKey = format(fecha, "yyyy-MM-dd")
-        const fechaDisplay = format(fecha, "dd/MM/yyyy", { locale: es })
-        const nombreDia = format(fecha, "EEEE", { locale: es })
-
         console.log("Clave de fecha para Firebase:", fechaKey)
-        console.log("Fecha para mostrar:", fechaDisplay)
-        console.log("Nombre del día:", nombreDia)
-
-        const docRef = doc(db, "extractos", fechaKey)
 
         // Verificar si es hoy en Argentina, no en la zona horaria del servidor
-        const hoyArgentina = obtenerFechaArgentina()
+        const hoyArgentina = startOfDay(fechaActualArgentina)
         const esHoy = format(fecha, "yyyy-MM-dd") === format(hoyArgentina, "yyyy-MM-dd")
         console.log(`¿Es la fecha actual en Argentina? ${esHoy ? "SÍ" : "NO"}`)
 
         if (forceRefresh || esHoy) {
             console.log("Forzando actualización de resultados o es la fecha actual en Argentina")
-            const { resultados } = await obtenerResultados(fecha)
 
-            // Formatear los resultados obtenidos en vivo
-            // IMPORTANTE: Usar fechaDisplay y nombreDia que ya están en formato Argentina
-            const extractosFormateados = Object.values(resultados).flatMap((dia: ResultadoDia) =>
-                dia.resultados.flatMap((resultado: Resultado) =>
-                    Object.entries(resultado.sorteos).map(([sorteo, numeros]) => ({
-                        id: `${resultado.provincia}-${sorteo}-${fechaDisplay}`,
-                        fecha: fechaDisplay,
-                        dia: nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1),
-                        sorteo: sorteo.toUpperCase(),
-                        loteria: resultado.loteria,
-                        provincia: resultado.provincia,
-                        numeros: numeros,
-                        pizarraLink: URLS_PIZARRAS[resultado.provincia as keyof typeof URLS_PIZARRAS] || "",
-                    })),
-                ),
-            )
+            // IMPORTANTE: Siempre obtener resultados frescos para la fecha actual
+            // Obtener resultados directamente de las pizarras y guardarlos en Firebase
+            const resultadosVivos = await obtenerResultadosPizarraDirecto()
 
-            // Verificar si hay resultados de Montevideo
-            const tieneMontevideoMatutina = extractosFormateados.some(
-                (e) => e.provincia === "MONTEVIDEO" && e.sorteo === "MATUTINA",
-            )
-            const tieneMontevideoNocturna = extractosFormateados.some(
-                (e) => e.provincia === "MONTEVIDEO" && e.sorteo === "NOCTURNA",
-            )
-
-            console.log(`¿Tiene resultados de Montevideo Matutina? ${tieneMontevideoMatutina}`)
-            console.log(`¿Tiene resultados de Montevideo Nocturna? ${tieneMontevideoNocturna}`)
-
-            // Ya no filtramos Nocturna de Montevideo
-            return NextResponse.json(extractosFormateados, {
+            // Devolver los resultados frescos
+            return NextResponse.json(resultadosVivos, {
                 headers: {
                     "Access-Control-Allow-Origin": "*",
                     "Access-Control-Allow-Methods": "GET, OPTIONS",
                     "Access-Control-Allow-Headers": "Content-Type, Authorization",
+                    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+                    Pragma: "no-cache",
+                    Expires: "0",
                 },
             })
         }
 
         // Si no es forzado ni es hoy, obtener de Firebase
+        const docRef = doc(db, "extractos", fechaKey)
         const docSnap = await getDoc(docRef)
 
         let extractosFormateados = []
@@ -727,9 +826,9 @@ export async function GET(request: Request) {
                 // Ya no filtramos Nocturna de Montevideo
                 extractosFormateados = extractosDia.resultados.flatMap((resultado: Resultado) =>
                     Object.entries(resultado.sorteos).map(([sorteo, numeros]) => ({
-                        id: `${resultado.provincia}-${sorteo}-${fechaDisplay}`, // Usar fechaDisplay en lugar de fechaFormateada
-                        fecha: fechaDisplay, // Usar fechaDisplay en lugar de fechaFormateada
-                        dia: nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1), // Usar nombreDia en lugar de extractosDia.dia
+                        id: `${resultado.provincia}-${sorteo}-${fechaDisplayActual}`, // Usar fechaDisplayActual
+                        fecha: fechaDisplayActual, // Usar fechaDisplayActual en lugar de fechaFormateada
+                        dia: nombreDiaActual.charAt(0).toUpperCase() + nombreDiaActual.slice(1), // Usar nombreDiaActual
                         sorteo: sorteo.toUpperCase(),
                         loteria: resultado.loteria,
                         provincia: resultado.provincia,
@@ -759,6 +858,9 @@ export async function GET(request: Request) {
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
         }
 
         console.log("Resultados finales enviados:", JSON.stringify(extractosFormateados, null, 2))
