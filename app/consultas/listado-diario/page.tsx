@@ -181,15 +181,19 @@ const obtenerMontoJugadoPagosCobros = (
             const comisionCalculada = (comisionPorcentaje / 100) * ventasOnlineAcumuladas
             const comisionRedondeada = Math.round(comisionCalculada * 100) / 100
 
-            // Corrección: Restar también el premio total del saldo final
-            const saldoFinal = ventasOnlineAcumuladas - comisionRedondeada - premioTotal
+            // Corrección: Incluir pagos y cobros en el cálculo del saldo final
+            const saldoFinal = ventasOnlineAcumuladas - comisionRedondeada - premioTotal + totalPagos - totalCobros
             const saldoTotal = saldoFinal
 
             console.log(`Cálculo de saldo final para ${pasadorNombre}:`)
             console.log(`Ventas online: ${ventasOnlineAcumuladas}`)
             console.log(`Comisión (${comisionPorcentaje}%): ${comisionRedondeada}`)
             console.log(`Premio total: ${premioTotal}`)
-            console.log(`Saldo final: ${ventasOnlineAcumuladas} - ${comisionRedondeada} - ${premioTotal} = ${saldoFinal}`)
+            console.log(`Total pagos: ${totalPagos}`)
+            console.log(`Total cobros: ${totalCobros}`)
+            console.log(
+                `Saldo final: ${ventasOnlineAcumuladas} - ${comisionRedondeada} - ${premioTotal} + ${totalPagos} - ${totalCobros} = ${saldoFinal}`,
+            )
 
             actualizarMontoJugadoPagosCobros(pasadorId, ventasOnlineAcumuladas, totalPagos, totalCobros)
             actualizarComisionYSaldoFinal(pasadorId, comisionRedondeada, saldoFinal, saldoTotal)
