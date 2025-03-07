@@ -542,6 +542,7 @@ async function procesarSorteo(
     }
 }
 
+// También necesitamos modificar la función obtenerResultados para asegurar que use la fecha de Argentina
 async function obtenerResultados(fecha: Date) {
     console.log("Iniciando obtenerResultados")
     console.log("Fecha recibida:", fecha.toISOString())
@@ -555,15 +556,13 @@ async function obtenerResultados(fecha: Date) {
     try {
         const resultadosPorDia: ResultadosPorDia = {}
 
-        // Usar la fecha en zona horaria de Argentina para formatear
+        // Asegurarnos de que la fecha esté en zona horaria de Argentina
         const fechaArgentina = toZonedTime(fecha, "America/Argentina/Buenos_Aires")
         const fechaFormateada = format(fechaArgentina, "dd/MM/yyyy", { locale: es })
         const nombreDia = format(fechaArgentina, "EEEE", { locale: es })
         const nombreDiaCapitalizado = nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1)
 
-        const fechaFinal = fechaFormateada
-
-        console.log(`Fecha formateada: ${fechaFinal}, Día: ${nombreDiaCapitalizado}`)
+        console.log(`Fecha Argentina formateada: ${fechaFormateada}, Día: ${nombreDiaCapitalizado}`)
 
         const diaSemana = fechaArgentina.getDay()
 
@@ -585,12 +584,12 @@ async function obtenerResultados(fecha: Date) {
                     await procesarSorteo(
                         provinciaKey,
                         turno,
-                        fechaFinal,
+                        fechaFormateada,
                         nombreDiaCapitalizado,
                         pizarraUrl,
                         resultadosPorDia,
                         diaSemana,
-                        fecha,
+                        fechaArgentina, // Usar fechaArgentina en lugar de fecha
                     )
                 }
             } else {
@@ -607,7 +606,7 @@ async function obtenerResultados(fecha: Date) {
     }
 }
 
-// Modificar la función GET para forzar la actualización de resultados
+// Modificar la función GET para asegurar que siempre use la fecha de Argentina en la respuesta
 export async function GET(request: Request) {
     console.log("Iniciando obtención de resultados en vivo para /api/extractos")
     console.log("Zona horaria del servidor:", Intl.DateTimeFormat().resolvedOptions().timeZone)
@@ -628,13 +627,16 @@ export async function GET(request: Request) {
                 utcFormatted: format(fechaUTC, "yyyy-MM-dd HH:mm:ss"),
                 argentinaDate: fechaArgentina.toISOString(),
                 argentinaFormatted: format(fechaArgentina, "yyyy-MM-dd HH:mm:ss"),
+                argentinaFormattedDisplay: format(fechaArgentina, "dd/MM/yyyy", { locale: es }),
+                argentinaDay: format(fechaArgentina, "EEEE", { locale: es }),
             })
         }
 
         let fecha: Date
         if (parametroFecha) {
-            fecha = parse(parametroFecha, "yyyy-MM-dd", new Date())
-            console.log("Usando fecha del parámetro:", parametroFecha)
+            // Convertir el parámetro de fecha a la zona horaria de Argentina
+            fecha = toZonedTime(parse(parametroFecha, "yyyy-MM-dd", new Date()), "America/Argentina/Buenos_Aires")
+            console.log("Usando fecha del parámetro (convertida a Argentina):", parametroFecha)
         } else {
             // Usar la función para obtener la fecha en Argentina
             fecha = obtenerFechaArgentina()
@@ -649,8 +651,14 @@ export async function GET(request: Request) {
             formatInTimeZone(fecha, "America/Argentina/Buenos_Aires", "yyyy-MM-dd HH:mm:ss"),
         )
 
+        // Formatear la fecha para la clave de Firebase y para mostrar en la respuesta
         const fechaKey = format(fecha, "yyyy-MM-dd")
+        const fechaDisplay = format(fecha, "dd/MM/yyyy", { locale: es })
+        const nombreDia = format(fecha, "EEEE", { locale: es })
+
         console.log("Clave de fecha para Firebase:", fechaKey)
+        console.log("Fecha para mostrar:", fechaDisplay)
+        console.log("Nombre del día:", nombreDia)
 
         const docRef = doc(db, "extractos", fechaKey)
 
@@ -664,12 +672,13 @@ export async function GET(request: Request) {
             const { resultados } = await obtenerResultados(fecha)
 
             // Formatear los resultados obtenidos en vivo
+            // IMPORTANTE: Usar fechaDisplay y nombreDia que ya están en formato Argentina
             const extractosFormateados = Object.values(resultados).flatMap((dia: ResultadoDia) =>
                 dia.resultados.flatMap((resultado: Resultado) =>
                     Object.entries(resultado.sorteos).map(([sorteo, numeros]) => ({
-                        id: `${resultado.provincia}-${sorteo}-${dia.fecha}`,
-                        fecha: dia.fecha,
-                        dia: dia.dia,
+                        id: `${resultado.provincia}-${sorteo}-${fechaDisplay}`,
+                        fecha: fechaDisplay,
+                        dia: nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1),
                         sorteo: sorteo.toUpperCase(),
                         loteria: resultado.loteria,
                         provincia: resultado.provincia,
@@ -718,9 +727,9 @@ export async function GET(request: Request) {
                 // Ya no filtramos Nocturna de Montevideo
                 extractosFormateados = extractosDia.resultados.flatMap((resultado: Resultado) =>
                     Object.entries(resultado.sorteos).map(([sorteo, numeros]) => ({
-                        id: `${resultado.provincia}-${sorteo}-${fechaFormateada}`,
-                        fecha: fechaFormateada,
-                        dia: extractosDia.dia,
+                        id: `${resultado.provincia}-${sorteo}-${fechaDisplay}`, // Usar fechaDisplay en lugar de fechaFormateada
+                        fecha: fechaDisplay, // Usar fechaDisplay en lugar de fechaFormateada
+                        dia: nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1), // Usar nombreDia en lugar de extractosDia.dia
                         sorteo: sorteo.toUpperCase(),
                         loteria: resultado.loteria,
                         provincia: resultado.provincia,
@@ -767,6 +776,7 @@ export async function GET(request: Request) {
     }
 }
 
+// Modificar la función POST para asegurar que use la fecha de Argentina
 export async function POST(request: Request) {
     console.log("Iniciando actualización manual de resultados")
     try {
@@ -778,7 +788,13 @@ export async function POST(request: Request) {
             throw new Error("Datos incompletos o inválidos para la actualización manual")
         }
 
-        const fechaKey = format(parse(fecha, "dd/MM/yyyy", new Date()), "yyyy-MM-dd")
+        // Convertir la fecha a formato yyyy-MM-dd para la clave de Firebase
+        const fechaObj = parse(fecha, "dd/MM/yyyy", new Date())
+        const fechaArgentina = toZonedTime(fechaObj, "America/Argentina/Buenos_Aires")
+        const fechaKey = format(fechaArgentina, "yyyy-MM-dd")
+
+        console.log(`Fecha para actualización manual: ${fecha}, Clave Firebase: ${fechaKey}`)
+
         const docRef = doc(db, "extractos", fechaKey)
 
         await setDoc(
@@ -786,7 +802,7 @@ export async function POST(request: Request) {
             {
                 [fecha]: {
                     fecha: fecha,
-                    dia: format(parse(fecha, "dd/MM/yyyy", new Date()), "EEEE", { locale: es }),
+                    dia: format(fechaArgentina, "EEEE", { locale: es }),
                     resultados: [
                         {
                             loteria: provincia === "MONTEVIDEO" ? "Montevideo" : provincia,
