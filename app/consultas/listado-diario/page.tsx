@@ -131,6 +131,7 @@ const obtenerMontoJugadoPagosCobros = (
     fecha: Date,
     comisionPorcentaje: number,
     saldoAnterior: number,
+    premioTotal: number,
     actualizarMontoJugadoPagosCobros: (pasadorId: string, monto: number, pagos: number, cobros: number) => void,
     actualizarComisionYSaldoFinal: (pasadorId: string, comision: number, saldoFinal: number, saldoTotal: number) => void,
 ) => {
@@ -175,12 +176,20 @@ const obtenerMontoJugadoPagosCobros = (
             console.log(`Monto jugado para ${pasadorNombre}: ${ventasOnlineAcumuladas}`)
             console.log(`Pagos para ${pasadorNombre}: ${totalPagos}`)
             console.log(`Cobros para ${pasadorNombre}: ${totalCobros}`)
+            console.log(`Premio total para ${pasadorNombre}: ${premioTotal}`)
 
             const comisionCalculada = (comisionPorcentaje / 100) * ventasOnlineAcumuladas
             const comisionRedondeada = Math.round(comisionCalculada * 100) / 100
 
-            const saldoFinal = ventasOnlineAcumuladas - comisionRedondeada
+            // Corrección: Restar también el premio total del saldo final
+            const saldoFinal = ventasOnlineAcumuladas - comisionRedondeada - premioTotal
             const saldoTotal = saldoFinal
+
+            console.log(`Cálculo de saldo final para ${pasadorNombre}:`)
+            console.log(`Ventas online: ${ventasOnlineAcumuladas}`)
+            console.log(`Comisión (${comisionPorcentaje}%): ${comisionRedondeada}`)
+            console.log(`Premio total: ${premioTotal}`)
+            console.log(`Saldo final: ${ventasOnlineAcumuladas} - ${comisionRedondeada} - ${premioTotal} = ${saldoFinal}`)
 
             actualizarMontoJugadoPagosCobros(pasadorId, ventasOnlineAcumuladas, totalPagos, totalCobros)
             actualizarComisionYSaldoFinal(pasadorId, comisionRedondeada, saldoFinal, saldoTotal)
@@ -393,6 +402,7 @@ export default function ListadoDiario() {
                     fechaSeleccionada,
                     pasador.comisionPorcentaje,
                     pasador.saldoAnterior,
+                    pasador.premioTotal, // Pasar el premio total como parámetro
                     actualizarMontoJugadoPagosCobros,
                     actualizarComisionYSaldoFinal,
                 )

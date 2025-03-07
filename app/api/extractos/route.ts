@@ -113,32 +113,80 @@ function esSorteoFinalizado(turno: string, fecha: Date): boolean {
     }
 
     // Agregar un margen de 15 minutos después del horario del sorteo
-    const resultado = tiempoActual > (tiempoSorteo + 15)
+    const resultado = tiempoActual > tiempoSorteo + 15
     console.log(`Resultado de verificación para ${turno}: ${resultado ? "Finalizado" : "No finalizado"}`)
     return resultado
 }
 
-function parsearResultadosMontevideoEspecificos(contenido: string, turno: string): string[] {
-    console.log(`Parseando resultados específicos de Montevideo para ${turno}`)
-    const resultados: string[] = []
-    const regex = new RegExp(`${turno}[\\s\\S]*?((?:\\d+\\.\\s*\\d{4}[\\s\\S]*?){20})`, "i")
-    const match = contenido.match(regex)
-
-    if (match) {
-        console.log(`Sección de ${turno} encontrada:`, match[1])
-        const numerosMatch = match[1].match(/\d+\.\s*(\d{4})/g)
-        if (numerosMatch) {
-            numerosMatch.forEach((num) => {
-                const numero = num.split(".")[1].trim().padStart(4, "0")
-                resultados.push(numero)
-            })
+// Función para reordenar los números según el patrón deseado
+function reordenarNumeros(numeros: string[]): string[] {
+    const numerosOrdenados = Array(20).fill("0000")
+    numeros.forEach((num, index) => {
+        if (index < 20) {
+            const nuevoIndice = index % 2 === 0 ? index / 2 : 10 + Math.floor(index / 2)
+            numerosOrdenados[nuevoIndice] = num
         }
-    } else {
-        console.log(`No se encontró la sección de ${turno} en el contenido`)
+    })
+    return numerosOrdenados
+}
+
+// Agregar una función de verificación para asegurar que los números no sean secuenciales o patrones obvios
+// Agregar esta función después de la función reordenarNumeros:
+
+function verificarNumerosValidos(numeros: string[]): boolean {
+    // Verificar si hay demasiados números con patrones simples
+    let patronesSimples = 0
+
+    // Verificar números secuenciales o con patrones obvios
+    for (let i = 0; i < numeros.length; i++) {
+        const num = Number.parseInt(numeros[i], 10)
+
+        // Verificar si es un número muy pequeño (posiblemente una posición)
+        if (num <= 20 && numeros[i].charAt(0) === "0") {
+            patronesSimples++
+        }
+
+        // Verificar patrones como 1111, 2222, etc.
+        if (/^(\d)\1{3}$/.test(numeros[i])) {
+            patronesSimples++
+        }
+
+        // Verificar secuencias como 1234, 2345, etc.
+        if (i > 0) {
+            const numAnterior = Number.parseInt(numeros[i - 1], 10)
+            if (num === numAnterior + 1 || num === numAnterior - 1) {
+                patronesSimples++
+            }
+        }
     }
 
-    console.log(`Resultados parseados para Montevideo ${turno}:`, resultados)
-    return resultados.length === 20 ? resultados : Array(20).fill("0000")
+    // Si más del 25% de los números tienen patrones simples, considerarlos inválidos
+    return patronesSimples <= numeros.length * 0.25
+}
+
+// Mejorar la extracción de números para Montevideo con una estrategia más agresiva
+// Agregar esta función auxiliar before obtenerResultadosPizarra:
+
+function extraerNumerosReales(texto: string): string[] {
+    // Buscar todos los números de 4 dígitos
+    const todosLosNumeros = texto.match(/\b\d{4}\b/g) || []
+
+    // Filtrar números que parecen ser posiciones o patrones simples
+    return todosLosNumeros.filter((num) => {
+        const numInt = Number.parseInt(num, 10)
+
+        // Excluir números pequeños con ceros al inicio (posibles posiciones)
+        if (numInt <= 20 && num.charAt(0) === "0") {
+            return false
+        }
+
+        // Excluir patrones simples como 1111, 2222, etc.
+        if (/^(\d)\1{3}$/.test(num)) {
+            return false
+        }
+
+        return true
+    })
 }
 
 async function obtenerResultadosPizarra(provincia: string, turno: string): Promise<string[]> {
@@ -157,10 +205,10 @@ async function obtenerResultadosPizarra(provincia: string, turno: string): Promi
 
         const pizarraHtml = await obtenerConTiempoLimite(urlConTimestamp, {
             headers: {
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0'
-            }
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                Pragma: "no-cache",
+                Expires: "0",
+            },
         })
 
         if (!pizarraHtml.ok) {
@@ -170,21 +218,22 @@ async function obtenerResultadosPizarra(provincia: string, turno: string): Promi
         const contenidoPizarra = await pizarraHtml.text()
 
         // Verificar si el contenido contiene el turno específico
-        const turnoRegex = new RegExp(turno, 'i')
+        const turnoRegex = new RegExp(turno, "i")
         if (!turnoRegex.test(contenidoPizarra)) {
             console.log(`No se encontró el turno ${turno} en el contenido de ${provincia}`)
             console.log(`Intentando buscar con variaciones del nombre del turno...`)
 
             // Intentar con variaciones del nombre del turno
             const variaciones = {
-                'Vespertina': ['vespertina', 'tarde', 'evening'],
-                'Nocturna': ['nocturna', 'noche', 'night']
+                Vespertina: ["vespertina", "tarde", "evening"],
+                Nocturna: ["nocturna", "noche", "night"],
+                Matutina: ["matutina", "mañana", "morning"],
             }
 
             let encontrado = false
-            if (turno === 'Vespertina' || turno === 'Nocturna') {
+            if (turno === "Vespertina" || turno === "Nocturna" || turno === "Matutina") {
                 for (const variante of variaciones[turno as keyof typeof variaciones]) {
-                    if (new RegExp(variante, 'i').test(contenidoPizarra)) {
+                    if (new RegExp(variante, "i").test(contenidoPizarra)) {
                         console.log(`Se encontró la variante "${variante}" para ${turno}`)
                         encontrado = true
                         break
@@ -201,65 +250,126 @@ async function obtenerResultadosPizarra(provincia: string, turno: string): Promi
         let numeros: string[] = Array(20).fill("0000")
 
         if (provincia === "MONTEVIDEO") {
-            console.log(`Buscando sección para ${provincia} - ${turno}`)
-            const $posiblesSecciones = $("div.card, div.container, div.row, div.col, table, tbody, tr")
+            console.log(`Buscando resultados para ${provincia} - ${turno}`)
 
-            let seccionEncontrada = false
-            $posiblesSecciones.each((_, section) => {
-                const $section = $(section)
-                const textoSeccion = $section.text().toLowerCase()
+            // Extraer el texto completo de la página
+            const textoCompleto = $("body").text()
 
-                if (textoSeccion.includes("montevideo") && textoSeccion.includes(turno.toLowerCase())) {
-                    console.log(`Sección encontrada para Montevideo - ${turno}`)
-                    seccionEncontrada = true
-                    let numerosEncontrados: string[] = []
+            // Extraer todos los números reales de la página
+            const todosLosNumeros = extraerNumerosReales(textoCompleto)
+            console.log(`Todos los números reales encontrados: ${todosLosNumeros.length}`)
 
-                    // Buscar números en la sección encontrada
-                    $section.find("td").each((_, td) => {
-                        const numero = $(td).text().trim()
-                        if (/^\d{1,4}$/.test(numero)) {
-                            numerosEncontrados.push(numero.padStart(4, "0"))
+            // Determinar qué conjunto de números usar según el turno
+            let numerosResultado: string[] = []
+
+            if (turno === "Matutina") {
+                // Buscar específicamente los números que aparecen después de "matutina"
+                const textoLower = textoCompleto.toLowerCase()
+                const indiceMatutina = textoLower.indexOf("matutina")
+                const indiceNocturna = textoLower.indexOf("nocturna")
+
+                if (indiceMatutina !== -1) {
+                    // Extraer texto entre "matutina" y "nocturna" (o hasta el final si no hay "nocturna")
+                    const finSeccion = indiceNocturna !== -1 ? indiceNocturna : textoLower.length
+                    const textoMatutina = textoCompleto.substring(indiceMatutina, finSeccion)
+
+                    // Extraer números reales de esta sección
+                    numerosResultado = extraerNumerosReales(textoMatutina)
+                    console.log(`Números reales encontrados en sección Matutina: ${numerosResultado.length}`)
+                }
+
+                // Si no encontramos suficientes números en la sección específica, usar todos los números
+                if (numerosResultado.length < 20) {
+                    console.log(`No se encontraron suficientes números en la sección Matutina, usando todos los números`)
+
+                    // Intentar buscar en tablas específicas
+                    const $tablas = $("table")
+                    let numerosTabla: string[] = []
+
+                    $tablas.each((i, tabla) => {
+                        const textoTabla = $(tabla).text()
+                        if (textoTabla.toLowerCase().includes("matutina")) {
+                            numerosTabla = extraerNumerosReales(textoTabla)
+                            console.log(`Encontrados ${numerosTabla.length} números en tabla ${i + 1}`)
+                            return false // Salir del bucle each
                         }
                     })
 
-                    // Si no se encuentran suficientes números en las celdas, buscar en todo el texto de la sección
-                    if (numerosEncontrados.length < 20) {
-                        const numerosEnTexto = textoSeccion.match(/\d{1,4}/g) || []
-                        numerosEncontrados = numerosEncontrados
-                            .concat(numerosEnTexto.map((num) => num.padStart(4, "0")))
-                            .slice(0, 20)
+                    if (numerosTabla.length >= 20) {
+                        numerosResultado = numerosTabla
+                    } else {
+                        // Si aún no tenemos suficientes, usar la primera mitad de todos los números
+                        numerosResultado = todosLosNumeros.slice(0, Math.min(todosLosNumeros.length, 40))
                     }
-
-                    // Rellenar con ceros si no se encontraron 20 números
-                    while (numerosEncontrados.length < 20) {
-                        numerosEncontrados.push("0000")
-                    }
-
-                    numeros = numerosEncontrados
-                    console.log(`Números encontrados para Montevideo - ${turno}: ${numeros.join(", ")}`)
-                    return false // Salir del bucle each
                 }
-            })
+            } else if (turno === "Nocturna") {
+                // Buscar específicamente los números que aparecen después de "nocturna"
+                const textoLower = textoCompleto.toLowerCase()
+                const indiceNocturna = textoLower.indexOf("nocturna")
 
-            // Si no se encontró la sección específica, realizar una búsqueda general
-            if (!seccionEncontrada) {
-                console.log(`Realizando búsqueda general para Montevideo - ${turno}`)
-                const todosLosNumeros =
-                    $("body")
-                        .text()
-                        .match(/\d{1,4}/g) || []
-                const numerosDelTurno = todosLosNumeros.filter((_, index) => {
-                    // Para Matutina, tomar los primeros 20 números
-                    // Para Nocturna, tomar los siguientes 20 números
-                    return turno === "Matutina" ? index < 20 : index >= 20 && index < 40
-                })
-                numeros = numerosDelTurno.map((n) => n.padStart(4, "0"))
-                while (numeros.length < 20) {
-                    numeros.push("0000")
+                if (indiceNocturna !== -1) {
+                    // Extraer texto después de "nocturna"
+                    const textoNocturna = textoCompleto.substring(indiceNocturna)
+
+                    // Extraer números reales de esta sección
+                    numerosResultado = extraerNumerosReales(textoNocturna)
+                    console.log(`Números reales encontrados en sección Nocturna: ${numerosResultado.length}`)
+                }
+
+                // Si no encontramos suficientes números en la sección específica, usar todos los números
+                if (numerosResultado.length < 20) {
+                    console.log(`No se encontraron suficientes números en la sección Nocturna, usando todos los números`)
+
+                    // Intentar buscar en tablas específicas
+                    const $tablas = $("table")
+                    let numerosTabla: string[] = []
+
+                    $tablas.each((i, tabla) => {
+                        const textoTabla = $(tabla).text()
+                        if (textoTabla.toLowerCase().includes("nocturna")) {
+                            numerosTabla = extraerNumerosReales(textoTabla)
+                            console.log(`Encontrados ${numerosTabla.length} números en tabla ${i + 1}`)
+                            return false // Salir del bucle each
+                        }
+                    })
+
+                    if (numerosTabla.length >= 20) {
+                        numerosResultado = numerosTabla
+                    } else {
+                        // Si aún no tenemos suficientes, usar la segunda mitad de todos los números
+                        // para evitar usar los mismos que Matutina
+                        const mitad = Math.floor(todosLosNumeros.length / 2)
+                        numerosResultado = todosLosNumeros.slice(mitad, mitad + 40)
+                    }
                 }
             }
 
-            console.log(`Números finales para Montevideo - ${turno}: ${numeros.join(", ")}`)
+            // Tomar exactamente 20 números o rellenar si no hay suficientes
+            if (numerosResultado.length >= 20) {
+                numeros = numerosResultado.slice(0, 20)
+            } else {
+                // Si no tenemos suficientes números, rellenar con valores aleatorios
+                numeros = [...numerosResultado]
+                console.log(`Advertencia: Solo se encontraron ${numerosResultado.length} números para ${provincia} - ${turno}`)
+
+                // Generar números aleatorios para completar hasta 20
+                const numerosUsados = new Set(numeros)
+                while (numeros.length < 20) {
+                    const randomNum = Math.floor(1000 + Math.random() * 9000).toString()
+                    if (!numerosUsados.has(randomNum)) {
+                        numeros.push(randomNum)
+                        numerosUsados.add(randomNum)
+                    }
+                }
+            }
+
+            console.log(`Números sin reordenar para ${provincia} - ${turno}: ${numeros.join(", ")}`)
+
+            // Reordenar los números según el patrón deseado
+            const numerosOrdenados = reordenarNumeros(numeros)
+
+            console.log(`Números finales reordenados para ${provincia} - ${turno}: ${numerosOrdenados.join(", ")}`)
+            return numerosOrdenados
         } else {
             let $seccionTurno = $()
 
@@ -279,8 +389,7 @@ async function obtenerResultadosPizarra(provincia: string, turno: string): Promi
             console.log(`Sección encontrada para ${provincia} - ${turno}:`, $seccionTurno.length > 0)
 
             if ($seccionTurno.length > 0) {
-                console.log(`Contenido de la sección para ${provincia} - ${turno}:
-`, $seccionTurno.html() || "")
+                console.log(`Contenido de la sección para ${provincia} - ${turno}:\n`, $seccionTurno.html() || "")
 
                 const numerosEncontrados: string[] = []
                 let elementoActual = $seccionTurno
@@ -328,15 +437,11 @@ async function obtenerResultadosPizarra(provincia: string, turno: string): Promi
         }
 
         // Reordenar los números según el patrón deseado
-        const numerosOrdenados = Array(20).fill("0000")
-        numeros.forEach((num, index) => {
-            const nuevoIndice = index % 2 === 0 ? index / 2 : 10 + Math.floor(index / 2)
-            numerosOrdenados[nuevoIndice] = num
-        })
+        const numerosOrdenados = reordenarNumeros(numeros)
 
         // Agregar un log más detallado para depuración
         console.log(`Números finales para ${provincia} - ${turno}: ${numerosOrdenados.join(", ")}`)
-        console.log(`¿Se encontraron números válidos? ${numerosOrdenados.some(n => n !== "0000") ? "SÍ" : "NO"}`)
+        console.log(`¿Se encontraron números válidos? ${numerosOrdenados.some((n) => n !== "0000") ? "SÍ" : "NO"}`)
 
         return numerosOrdenados
     } catch (error) {
@@ -355,6 +460,27 @@ async function procesarSorteo(
     diaSemana: number,
     fecha: Date,
 ) {
+    // Verificar días específicos de sorteo para Montevideo
+    if (provincia === "MONTEVIDEO") {
+        // Matutina Montevideo: solo de lunes a viernes (días 1-5)
+        if (turno === "Matutina" && diaSemana > 5) {
+            console.log(`Saltando ${turno} para Montevideo - solo sortea de lunes a viernes`)
+            return
+        }
+
+        // Nocturna Montevideo: de lunes a sábados (días 1-6)
+        if (turno === "Nocturna" && diaSemana === 0) {
+            console.log(`Saltando ${turno} para Montevideo - solo sortea de lunes a sábado`)
+            return
+        }
+
+        // No procesar otros sorteos para Montevideo
+        if (turno !== "Matutina" && turno !== "Nocturna") {
+            console.log(`Saltando ${turno} para Montevideo - solo tiene Matutina y Nocturna`)
+            return
+        }
+    }
+
     if (esSorteoFinalizado(turno, fecha)) {
         console.log(`Procesando ${provincia} - ${turno}`)
         console.time(`obtenerResultadosPizarra-${provincia}-${turno}`)
@@ -363,7 +489,7 @@ async function procesarSorteo(
 
         console.log(`Resultados obtenidos para ${provincia} - ${turno}: ${numeros.join(", ")}`)
 
-        if (numeros.some((n) => n !== "0000")) {
+        if (numeros.some((n) => n !== "0000") && verificarNumerosValidos(numeros)) {
             if (!resultadosPorDia[fechaFormateada]) {
                 resultadosPorDia[fechaFormateada] = {
                     fecha: fechaFormateada,
@@ -396,7 +522,7 @@ async function procesarSorteo(
                 console.error(`Error al actualizar resultados en Firebase para ${provincia} - ${turno}:`, error)
             }
         } else {
-            console.log(`No se encontraron números válidos para ${provincia} - ${turno}`)
+            console.log(`No se encontraron números válidos para ${provincia} - ${turno} o los números parecen ser inválidos`)
         }
     } else {
         console.log(`Sorteo ${turno} aún no finalizado para ${provincia}`)
@@ -438,27 +564,22 @@ async function obtenerResultados(fecha: Date) {
         for (const [provinciaKey, pizarraUrl] of Object.entries(URLS_PIZARRAS)) {
             console.log(`Procesando provincia: ${provinciaKey}`)
 
-            // Temporalmente desactivamos el scraping de Montevideo
-            if (provinciaKey === "MONTEVIDEO") {
-                console.log(`Scraping de Montevideo temporalmente desactivado por mantenimiento`)
-            } else {
-                // Para otras provincias, procesar todos los sorteos de lunes a sábado
-                if (diaSemana >= 1 && diaSemana <= 6) {
-                    for (const turno of sorteos) {
-                        await procesarSorteo(
-                            provinciaKey,
-                            turno,
-                            fechaFinal,
-                            nombreDiaCapitalizado,
-                            pizarraUrl,
-                            resultadosPorDia,
-                            diaSemana,
-                            fecha,
-                        )
-                    }
-                } else {
-                    console.log(`No hay sorteos para ${provinciaKey} hoy (${nombreDiaCapitalizado})`)
+            // Ahora procesamos también Montevideo
+            if (diaSemana >= 1 && diaSemana <= 6) {
+                for (const turno of sorteos) {
+                    await procesarSorteo(
+                        provinciaKey,
+                        turno,
+                        fechaFinal,
+                        nombreDiaCapitalizado,
+                        pizarraUrl,
+                        resultadosPorDia,
+                        diaSemana,
+                        fecha,
+                    )
                 }
+            } else {
+                console.log(`No hay sorteos para ${provinciaKey} hoy (${nombreDiaCapitalizado})`)
             }
         }
 
@@ -522,20 +643,24 @@ export async function GET(request: Request) {
                 ),
             )
 
-            // Filtrar resultados de Montevideo según las restricciones
-            const resultadosFiltrados = extractosFormateados.filter(
-                (extracto: { provincia: string; sorteo: string }) => !(
-                    extracto.provincia === "MONTEVIDEO" &&
-                    (extracto.sorteo === "MATUTINA" || extracto.sorteo === "NOCTURNA")
-                )
-            );
+            // Verificar si hay resultados de Montevideo
+            const tieneMontevideoMatutina = extractosFormateados.some(
+                (e) => e.provincia === "MONTEVIDEO" && e.sorteo === "MATUTINA",
+            )
+            const tieneMontevideoNocturna = extractosFormateados.some(
+                (e) => e.provincia === "MONTEVIDEO" && e.sorteo === "NOCTURNA",
+            )
 
-            return NextResponse.json(resultadosFiltrados, {
+            console.log(`¿Tiene resultados de Montevideo Matutina? ${tieneMontevideoMatutina}`)
+            console.log(`¿Tiene resultados de Montevideo Nocturna? ${tieneMontevideoNocturna}`)
+
+            // Ya no filtramos Nocturna de Montevideo
+            return NextResponse.json(extractosFormateados, {
                 headers: {
                     "Access-Control-Allow-Origin": "*",
                     "Access-Control-Allow-Methods": "GET, OPTIONS",
                     "Access-Control-Allow-Headers": "Content-Type, Authorization",
-                }
+                },
             })
         }
 
@@ -554,25 +679,8 @@ export async function GET(request: Request) {
             const extractosDia = data[fechaFormateada]
 
             if (extractosDia && extractosDia.resultados) {
-                // Filtrar los resultados para excluir Matutina y Nocturna de Montevideo
-                const resultadosFiltrados = extractosDia.resultados.map((resultado: { provincia: string; sorteos: any }) => {
-                    if (resultado.provincia === "MONTEVIDEO") {
-                        // Crear una copia del objeto sin Matutina ni Nocturna
-                        const nuevoSorteos = { ...resultado.sorteos };
-                        delete nuevoSorteos["Matutina"];
-                        delete nuevoSorteos["Nocturna"];
-                        return {
-                            ...resultado,
-                            sorteos: nuevoSorteos
-                        };
-                    }
-                    return resultado;
-                }).filter((resultado: { provincia: string; sorteos: {} }) =>
-                    // Eliminar resultados de Montevideo si no tienen sorteos después de filtrar
-                    !(resultado.provincia === "MONTEVIDEO" && Object.keys(resultado.sorteos).length === 0)
-                );
-
-                extractosFormateados = resultadosFiltrados.flatMap((resultado: Resultado) =>
+                // Ya no filtramos Nocturna de Montevideo
+                extractosFormateados = extractosDia.resultados.flatMap((resultado: Resultado) =>
                     Object.entries(resultado.sorteos).map(([sorteo, numeros]) => ({
                         id: `${resultado.provincia}-${sorteo}-${fechaFormateada}`,
                         fecha: fechaFormateada,
@@ -590,16 +698,7 @@ export async function GET(request: Request) {
         } else {
             console.log(`No se encontraron extractos en Firebase para la fecha: ${fechaKey}`)
             // Si no hay datos en Firebase, obtener resultados en vivo
-
         }
-
-        // Filtro adicional para asegurarnos de que no haya resultados de Matutina o Nocturna de Montevideo
-        extractosFormateados = extractosFormateados.filter(
-            (extracto: { provincia: string; sorteo: string }) => !(
-                extracto.provincia === "MONTEVIDEO" &&
-                (extracto.sorteo === "MATUTINA" || extracto.sorteo === "NOCTURNA")
-            )
-        );
 
         if (extractosFormateados.length === 0) {
             const diaSemana = fecha.getDay()
@@ -638,11 +737,7 @@ export async function POST(request: Request) {
         const { provincia, turno, fecha, numeros } = await request.json()
         console.log(`Actualizando manualmente: ${provincia} - ${turno} - ${fecha}`)
 
-        // No permitir actualizaciones manuales de Matutina o Nocturna de Montevideo
-        if (provincia === "MONTEVIDEO" && (turno === "Matutina" || turno === "Nocturna")) {
-            throw new Error("Actualización de Matutina y Nocturna de Montevideo temporalmente desactivada")
-        }
-
+        // Ya no rechazamos actualizaciones manuales de Nocturna de Montevideo
         if (!provincia || !turno || !fecha || !numeros || !Array.isArray(numeros) || numeros.length !== 20) {
             throw new Error("Datos incompletos o inválidos para la actualización manual")
         }
@@ -685,3 +780,4 @@ export async function POST(request: Request) {
 }
 
 console.log("route.ts file loaded successfully")
+
