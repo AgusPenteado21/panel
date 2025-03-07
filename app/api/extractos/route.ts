@@ -37,12 +37,21 @@ function obtenerFechaArgentina() {
     const fechaActual = new Date()
     console.log("Fecha UTC antes de conversión:", fechaActual.toISOString())
 
-    // Convertir a zona horaria de Argentina
-    const fechaArgentina = toZonedTime(fechaActual, "America/Argentina/Buenos_Aires")
-    console.log("Fecha Argentina después de conversión:", fechaArgentina.toISOString())
-    console.log("Fecha Argentina formateada:", format(fechaArgentina, "yyyy-MM-dd HH:mm:ss"))
+    // Método 1: Usando date-fns-tz
+    try {
+        const fechaArgentina = toZonedTime(fechaActual, "America/Argentina/Buenos_Aires")
+        console.log("Fecha Argentina (método 1):", fechaArgentina.toISOString())
+        console.log("Fecha Argentina formateada:", format(fechaArgentina, "yyyy-MM-dd HH:mm:ss"))
+        return fechaArgentina
+    } catch (error) {
+        console.error("Error al usar toZonedTime:", error)
 
-    return fechaArgentina
+        // Método 2: Usar offset manual como respaldo
+        const fechaArgentinaManual = new Date(fechaActual.getTime() - (3 * 60 * 60 * 1000))
+        console.log("Fecha Argentina (método 2 - manual):", fechaArgentinaManual.toISOString())
+        console.log("Fecha Argentina manual formateada:", format(fechaArgentinaManual, "yyyy-MM-dd HH:mm:ss"))
+        return fechaArgentinaManual
+    }
 }
 
 // Constantes
@@ -606,6 +615,73 @@ async function obtenerResultados(fecha: Date) {
     }
 }
 
+// Nueva función para obtener resultados directamente de las pizarras sin usar Firebase
+async function obtenerResultadosPizarraDirecto(): Promise<any[]> {
+    console.log("Obteniendo resultados directamente de las pizarras")
+
+    try {
+        const resultados: any[] = []
+        const fechaActual = obtenerFechaArgentina()
+        const diaSemana = fechaActual.getDay()
+
+        // No procesar en domingo
+        if (diaSemana === 0) {
+            console.log("Hoy es domingo. No hay sorteos.")
+            return resultados
+        }
+
+        const sorteos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
+
+        // Para cada provincia y sorteo, obtener resultados
+        for (const [provinciaKey, pizarraUrl] of Object.entries(URLS_PIZARRAS)) {
+            console.log(`Procesando provincia: ${provinciaKey}`)
+
+            // Procesar cada sorteo
+            for (const sorteo of sorteos) {
+                // Saltear sorteos específicos para Montevideo
+                if (provinciaKey === "MONTEVIDEO") {
+                    if (sorteo !== "Matutina" && sorteo !== "Nocturna") {
+                        continue
+                    }
+
+                    // Matutina Montevideo: solo de lunes a viernes (días 1-5)
+                    if (sorteo === "Matutina" && diaSemana > 5) {
+                        continue
+                    }
+
+                    // Nocturna Montevideo: de lunes a sábados (días 1-6)
+                    if (sorteo === "Nocturna" && diaSemana === 0) {
+                        continue
+                    }
+                }
+
+                // Verificar si el sorteo ya finalizó
+                if (esSorteoFinalizado(sorteo, fechaActual)) {
+                    console.log(`Obteniendo resultados para ${provinciaKey} - ${sorteo}`)
+                    const numeros = await obtenerResultadosPizarra(provinciaKey, sorteo)
+
+                    if (numeros.some(n => n !== "0000") && verificarNumerosValidos(numeros)) {
+                        resultados.push({
+                            id: `${provinciaKey}-${sorteo}`,
+                            sorteo: sorteo.toUpperCase(),
+                            loteria: provinciaKey === "NACION" ? "Nacional" :
+                                provinciaKey === "PROVINCIA" ? "Provincial" : provinciaKey,
+                            provincia: provinciaKey,
+                            numeros: numeros,
+                            pizarraLink: URLS_PIZARRAS[provinciaKey as keyof typeof URLS_PIZARRAS] || "",
+                        })
+                    }
+                }
+            }
+        }
+
+        return resultados
+    } catch (error) {
+        console.error("Error al obtener resultados directamente:", error)
+        return []
+    }
+}
+
 // Modificar la función GET para asegurar que siempre use la fecha de Argentina en la respuesta
 export async function GET(request: Request) {
     console.log("Iniciando obtención de resultados en vivo para /api/extractos")
@@ -637,10 +713,11 @@ export async function GET(request: Request) {
             // Convertir el parámetro de fecha a la zona horaria de Argentina
             fecha = toZonedTime(parse(parametroFecha, "yyyy-MM-dd", new Date()), "America/Argentina/Buenos_Aires")
             console.log("Usando fecha del parámetro (convertida a Argentina):", parametroFecha)
+            console.log("Fecha convertida a Argentina:", format(fecha, "yyyy-MM-dd HH:mm:ss"))
         } else {
             // Usar la función para obtener la fecha en Argentina
             fecha = obtenerFechaArgentina()
-            console.log("Usando fecha actual de Argentina")
+            console.log("Usando fecha actual de Argentina:", format(fecha, "yyyy-MM-dd HH:mm:ss"))
         }
 
         // Asegurarse de que estamos trabajando con el inicio del día
@@ -669,42 +746,27 @@ export async function GET(request: Request) {
 
         if (forceRefresh || esHoy) {
             console.log("Forzando actualización de resultados o es la fecha actual en Argentina")
-            const { resultados } = await obtenerResultados(fecha)
 
-            // Formatear los resultados obtenidos en vivo
-            // IMPORTANTE: Usar fechaDisplay y nombreDia que ya están en formato Argentina
-            const extractosFormateados = Object.values(resultados).flatMap((dia: ResultadoDia) =>
-                dia.resultados.flatMap((resultado: Resultado) =>
-                    Object.entries(resultado.sorteos).map(([sorteo, numeros]) => ({
-                        id: `${resultado.provincia}-${sorteo}-${fechaDisplay}`,
-                        fecha: fechaDisplay,
-                        dia: nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1),
-                        sorteo: sorteo.toUpperCase(),
-                        loteria: resultado.loteria,
-                        provincia: resultado.provincia,
-                        numeros: numeros,
-                        pizarraLink: URLS_PIZARRAS[resultado.provincia as keyof typeof URLS_PIZARRAS] || "",
-                    })),
-                ),
-            )
+            // IMPORTANTE: Siempre obtener resultados frescos para la fecha actual
+            // Obtener resultados directamente de las pizarras
+            const resultadosVivos = await obtenerResultadosPizarraDirecto()
 
-            // Verificar si hay resultados de Montevideo
-            const tieneMontevideoMatutina = extractosFormateados.some(
-                (e) => e.provincia === "MONTEVIDEO" && e.sorteo === "MATUTINA",
-            )
-            const tieneMontevideoNocturna = extractosFormateados.some(
-                (e) => e.provincia === "MONTEVIDEO" && e.sorteo === "NOCTURNA",
-            )
+            // Formatear los resultados con la fecha correcta
+            const extractosFormateados = resultadosVivos.map(resultado => ({
+                ...resultado,
+                fecha: fechaDisplay,
+                dia: nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1),
+            }))
 
-            console.log(`¿Tiene resultados de Montevideo Matutina? ${tieneMontevideoMatutina}`)
-            console.log(`¿Tiene resultados de Montevideo Nocturna? ${tieneMontevideoNocturna}`)
-
-            // Ya no filtramos Nocturna de Montevideo
+            // Devolver los resultados frescos sin usar Firebase
             return NextResponse.json(extractosFormateados, {
                 headers: {
                     "Access-Control-Allow-Origin": "*",
                     "Access-Control-Allow-Methods": "GET, OPTIONS",
                     "Access-Control-Allow-Headers": "Content-Type, Authorization",
+                    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
                 },
             })
         }
@@ -759,6 +821,9 @@ export async function GET(request: Request) {
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
         }
 
         console.log("Resultados finales enviados:", JSON.stringify(extractosFormateados, null, 2))
@@ -832,4 +897,3 @@ export async function POST(request: Request) {
 }
 
 console.log("route.ts file loaded successfully")
-

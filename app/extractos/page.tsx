@@ -1,3 +1,4 @@
+// app/extractos/page.tsx
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
@@ -6,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, RefreshCcw, CalendarIcon } from "lucide-react"
+import { Loader2, RefreshCcw, CalendarIcon } from 'lucide-react'
 import * as XLSX from "xlsx"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -40,10 +41,21 @@ export default function ExtractosPage() {
     const [editMode, setEditMode] = useState(false)
     const [selectAll, setSelectAll] = useState(false)
     const [selectedDate, setSelectedDate] = useState<Date>(() => {
-        const today = startOfDay(new Date())
-        return setHours(today, 12)
+        // Inicializar con la fecha actual en Argentina
+        try {
+            // Intentar obtener la fecha de Argentina usando offset manual
+            const fechaUTC = new Date()
+            const fechaArgentina = new Date(fechaUTC.getTime() - (3 * 60 * 60 * 1000))
+            return setHours(startOfDay(fechaArgentina), 12)
+        } catch (error) {
+            console.error("Error al inicializar fecha:", error)
+            // Fallback a la fecha local
+            const today = startOfDay(new Date())
+            return setHours(today, 12)
+        }
     })
     const [debugInfo, setDebugInfo] = useState<string>("")
+    const [usarFechaForzada, setUsarFechaForzada] = useState(false)
 
     const fetchExtractos = useCallback(async (date: Date) => {
         console.log(`Fetching extractos for date: ${date.toISOString()}`)
@@ -51,14 +63,31 @@ export default function ExtractosPage() {
             setIsLoading(true)
             setError(null)
             setDebugInfo("Iniciando fetchExtractos")
+
+            // Formatear la fecha para la API
             const dateParam = format(date, "yyyy-MM-dd")
-            const apiUrl = `/api/extractos?date=${dateParam}`
+
+            // Determinar si es la fecha actual para forzar actualización
+            const hoy = new Date()
+            const esHoy = format(date, "yyyy-MM-dd") === format(hoy, "yyyy-MM-dd")
+
+            // Construir URL con parámetros
+            let apiUrl = `/api/extractos?date=${dateParam}`
+
+            // Si es hoy o se ha solicitado usar fecha forzada, añadir parámetro de forzar actualización
+            if (esHoy || usarFechaForzada) {
+                apiUrl += "&forceRefresh=true"
+            }
+
             setDebugInfo((prev) => prev + `\nIntentando cargar datos de: ${apiUrl}`)
 
             const response = await fetch(apiUrl, {
                 method: "GET",
                 headers: {
                     "Content-Type": "application/json",
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
                 },
             })
 
@@ -69,7 +98,7 @@ export default function ExtractosPage() {
             }
 
             const data = await response.json()
-            setDebugInfo((prev) => prev + `\nDatos recibidos: ${JSON.stringify(data)}`)
+            setDebugInfo((prev) => prev + `\nDatos recibidos: ${JSON.stringify(data).substring(0, 200)}...`)
 
             if (data && Array.isArray(data) && data.length > 0) {
                 const extractosConCamposAdicionales = data.map((extracto: any) => ({
@@ -80,6 +109,12 @@ export default function ExtractosPage() {
                 setExtractos(extractosConCamposAdicionales)
                 setLastUpdate(new Date().toLocaleTimeString())
                 setDebugInfo((prev) => prev + `\n${data.length} extractos cargados`)
+
+                // Verificar la fecha recibida
+                if (extractosConCamposAdicionales.length > 0) {
+                    const fechaRecibida = extractosConCamposAdicionales[0].fecha
+                    setDebugInfo((prev) => prev + `\nFecha recibida en los datos: ${fechaRecibida}`)
+                }
             } else {
                 setError("No se encontraron extractos para la fecha seleccionada.")
                 setDebugInfo((prev) => prev + "\nNo se encontraron extractos")
@@ -95,7 +130,7 @@ export default function ExtractosPage() {
             setIsLoading(false)
             setDebugInfo((prev) => prev + "\nFinalizado fetchExtractos")
         }
-    }, [])
+    }, [usarFechaForzada])
 
     const handleNumberChange = (extractoId: string, index: number, value: string) => {
         setExtractos((prevExtractos) =>
@@ -108,9 +143,14 @@ export default function ExtractosPage() {
     }
 
     const formatDateAndDay = (fecha: string) => {
-        const [day, month, year] = fecha.split("/")
-        const date = new Date(Number.parseInt(year), Number.parseInt(month) - 1, Number.parseInt(day))
-        return format(date, "dd/MM/yyyy (EEEE)", { locale: es })
+        try {
+            const [day, month, year] = fecha.split("/")
+            const date = new Date(Number.parseInt(year), Number.parseInt(month) - 1, Number.parseInt(day))
+            return format(date, "dd/MM/yyyy (EEEE)", { locale: es })
+        } catch (error) {
+            console.error("Error al formatear fecha:", error, fecha)
+            return fecha
+        }
     }
 
     const exportToExcel = () => {
@@ -194,6 +234,41 @@ export default function ExtractosPage() {
         fetchExtractos(selectedDate)
     }
 
+    const handleForzarFecha = async () => {
+        try {
+            setIsLoading(true)
+            setError(null)
+            setDebugInfo("Obteniendo fecha forzada de Argentina...")
+
+            const response = await fetch("/api/extractos/forzar-fecha", {
+                method: "GET",
+                headers: {
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                },
+            })
+
+            if (!response.ok) {
+                throw new Error(`Error HTTP! status: ${response.status}`)
+            }
+
+            const data = await response.json()
+            setDebugInfo((prev) => prev + `\nFecha forzada recibida: ${JSON.stringify(data)}`)
+
+            // Activar el uso de fecha forzada
+            setUsarFechaForzada(true)
+
+            // Refrescar los datos
+            fetchExtractos(selectedDate)
+        } catch (error) {
+            console.error("Error al forzar fecha:", error)
+            setError(error instanceof Error ? error.message : "Error desconocido al forzar fecha")
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
     const sorteoOrder = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
 
     const sortExtractos = (a: Extracto, b: Extracto) => {
@@ -211,10 +286,15 @@ export default function ExtractosPage() {
                 <div className="space-y-4">
                     <div className="flex items-center justify-between mb-2">
                         <h1 className="text-xl font-bold">Extractos del Día</h1>
-                        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoading}>
-                            {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3" />}
-                            <span className="ml-1 text-xs">Actualizar</span>
-                        </Button>
+                        <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoading}>
+                                {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3" />}
+                                <span className="ml-1 text-xs">Actualizar</span>
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={handleForzarFecha} disabled={isLoading}>
+                                <span className="text-xs">Forzar Fecha Argentina</span>
+                            </Button>
+                        </div>
                     </div>
 
                     <div className="flex flex-wrap gap-1 items-center">
@@ -283,6 +363,11 @@ export default function ExtractosPage() {
                     {extractos.length === 0 && !isLoading && (
                         <Alert variant="default" className="mb-4 bg-yellow-100 border-yellow-400 text-yellow-700">
                             <AlertDescription>No se encontraron extractos para la fecha seleccionada.</AlertDescription>
+                        </Alert>
+                    )}
+                    {usarFechaForzada && (
+                        <Alert variant="default" className="mb-4 bg-blue-100 border-blue-400 text-blue-700">
+                            <AlertDescription>Usando fecha forzada de Argentina para los resultados.</AlertDescription>
                         </Alert>
                     )}
                     <div className="rounded-md border overflow-x-auto">
@@ -377,9 +462,16 @@ export default function ExtractosPage() {
                             </TableBody>
                         </Table>
                     </div>
+
+                    {/* Sección de diagnóstico */}
+                    <div className="mt-4 p-4 bg-gray-100 border border-gray-300 rounded-lg">
+                        <h3 className="text-sm font-bold mb-2">Información de diagnóstico:</h3>
+                        <pre className="text-xs overflow-auto max-h-40 p-2 bg-gray-200 rounded">
+                            {debugInfo}
+                        </pre>
+                    </div>
                 </div>
             </main>
         </div>
     )
 }
-
