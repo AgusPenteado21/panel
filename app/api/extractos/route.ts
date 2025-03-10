@@ -841,7 +841,7 @@ export async function GET(request: Request) {
             console.log("Extractos formateados:", JSON.stringify(extractosFormateados, null, 2))
         } else {
             console.log(`No se encontraron extractos en Firebase para la fecha: ${fechaKey}`)
-            // Si no hay datos en Firebase, obtener resultados en vivo siempre
+            // Si no hay datos en Firebase, obtener resultados en vivo siempree
         }
 
         if (extractosFormateados.length === 0) {
