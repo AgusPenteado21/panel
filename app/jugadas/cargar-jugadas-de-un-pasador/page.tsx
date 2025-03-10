@@ -47,12 +47,19 @@ const provinceAbbreviations: { [key: string]: string } = {
     CHACO: "CH",
 }
 
+// Crear un array de 50 jugadas vacías para inicializar el estado
+const createEmptyJugadas = () => {
+    return Array(50)
+        .fill(null)
+        .map(() => ({ numero: "", posicion: "", importe: "" }))
+}
+
 export default function CargarJugadas() {
     const [selectedLotteries, setSelectedLotteries] = useState<string[]>([])
     const [pasadores, setPasadores] = useState<Pasador[]>([])
     const [selectedPasador, setSelectedPasador] = useState<string>("")
     const [selectedSorteo, setSelectedSorteo] = useState<string>("")
-    const [jugadas, setJugadas] = useState<Jugada[]>(Array(50).fill({ numero: "", posicion: "", importe: "" }))
+    const [jugadas, setJugadas] = useState<Jugada[]>(createEmptyJugadas())
     const [totalMonto, setTotalMonto] = useState(0)
     const [ticketContent, setTicketContent] = useState<string>("")
     const [isTicketDialogOpen, setIsTicketDialogOpen] = useState(false)
@@ -63,10 +70,16 @@ export default function CargarJugadas() {
 
     // Inicializar el array de referencias
     useEffect(() => {
+        // Asegurarse de que tenemos 50 filas de jugadas
+        if (jugadas.length < 50) {
+            setJugadas(createEmptyJugadas())
+        }
+
+        // Inicializar las referencias
         inputRefs.current = Array(50)
             .fill(0)
             .map(() => Array(3).fill(null))
-    }, [])
+    }, [jugadas.length])
 
     const horarios = [
         { id: "LAPREVIA", label: "La Previa (10:15)" },
@@ -270,7 +283,7 @@ export default function CargarJugadas() {
     }
 
     const limpiarFormulario = () => {
-        setJugadas(Array(50).fill({ numero: "", posicion: "", importe: "" }))
+        setJugadas(createEmptyJugadas())
         setSelectedLotteries([])
         setSelectedSorteo("")
         setTotalMonto(0)
@@ -310,6 +323,45 @@ export default function CargarJugadas() {
         if (el && inputRefs.current[rowIndex]) {
             inputRefs.current[rowIndex][colIndex] = el
         }
+    }
+
+    // Generar las filas de jugadas para asegurar que siempre haya 50
+    const renderJugadasRows = () => {
+        // Asegurarse de que tenemos 50 filas
+        const filasJugadas = jugadas.length < 50 ? createEmptyJugadas() : jugadas
+
+        return filasJugadas.map((jugada, rowIndex) => (
+            <TableRow key={rowIndex}>
+                <TableCell className="font-medium">{(rowIndex + 1).toString().padStart(3, "0")}</TableCell>
+                <TableCell>
+                    <Input
+                        className="w-full"
+                        value={jugada.numero}
+                        onChange={(e) => handleJugadaChange(rowIndex, "numero", e.target.value)}
+                        onKeyDown={(e) => handleKeyDown(e, rowIndex, 0)}
+                        ref={(el) => setInputRef(el, rowIndex, 0)}
+                    />
+                </TableCell>
+                <TableCell>
+                    <Input
+                        className="w-full"
+                        value={jugada.posicion}
+                        onChange={(e) => handleJugadaChange(rowIndex, "posicion", e.target.value)}
+                        onKeyDown={(e) => handleKeyDown(e, rowIndex, 1)}
+                        ref={(el) => setInputRef(el, rowIndex, 1)}
+                    />
+                </TableCell>
+                <TableCell>
+                    <Input
+                        className="w-full"
+                        value={jugada.importe}
+                        onChange={(e) => handleJugadaChange(rowIndex, "importe", e.target.value)}
+                        onKeyDown={(e) => handleKeyDown(e, rowIndex, 2)}
+                        ref={(el) => setInputRef(el, rowIndex, 2)}
+                    />
+                </TableCell>
+            </TableRow>
+        ))
     }
 
     return (
@@ -388,40 +440,7 @@ export default function CargarJugadas() {
                                                 <TableHead>IMPORTE</TableHead>
                                             </TableRow>
                                         </TableHeader>
-                                        <TableBody>
-                                            {jugadas.map((jugada, rowIndex) => (
-                                                <TableRow key={rowIndex}>
-                                                    <TableCell className="font-medium">{(rowIndex + 1).toString().padStart(3, "0")}</TableCell>
-                                                    <TableCell>
-                                                        <Input
-                                                            className="w-full"
-                                                            value={jugada.numero}
-                                                            onChange={(e) => handleJugadaChange(rowIndex, "numero", e.target.value)}
-                                                            onKeyDown={(e) => handleKeyDown(e, rowIndex, 0)}
-                                                            ref={(el) => setInputRef(el, rowIndex, 0)}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Input
-                                                            className="w-full"
-                                                            value={jugada.posicion}
-                                                            onChange={(e) => handleJugadaChange(rowIndex, "posicion", e.target.value)}
-                                                            onKeyDown={(e) => handleKeyDown(e, rowIndex, 1)}
-                                                            ref={(el) => setInputRef(el, rowIndex, 1)}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Input
-                                                            className="w-full"
-                                                            value={jugada.importe}
-                                                            onChange={(e) => handleJugadaChange(rowIndex, "importe", e.target.value)}
-                                                            onKeyDown={(e) => handleKeyDown(e, rowIndex, 2)}
-                                                            ref={(el) => setInputRef(el, rowIndex, 2)}
-                                                        />
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
+                                        <TableBody>{renderJugadasRows()}</TableBody>
                                     </Table>
                                 </div>
                             </div>
