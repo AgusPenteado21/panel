@@ -890,7 +890,7 @@ export async function POST(request: Request) {
             throw new Error("Datos incompletos o inválidos para la actualización manual")
         }
 
-        // Convertir la fecha a formato yyyy-MM-dd para la clave de Firebase
+        // Convertir la fecha a formato yyyy-MM-dd para la clave de Firebase esto es muy clave
         const fechaObj = parse(fecha, "dd/MM/yyyy", new Date())
         const fechaArgentina = toZonedTime(fechaObj, "America/Argentina/Buenos_Aires")
         const fechaKey = format(fechaArgentina, "yyyy-MM-dd")
