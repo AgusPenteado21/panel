@@ -47,9 +47,12 @@ const provinceAbbreviations: { [key: string]: string } = {
     CHACO: "CH",
 }
 
-// Crear un array de 50 jugadas vacías para inicializar el estado
+// Número total de filas de jugadas
+const TOTAL_FILAS = 100
+
+// Crear un array de 100 jugadas vacías para inicializar el estado
 const createEmptyJugadas = () => {
-    return Array(50)
+    return Array(TOTAL_FILAS)
         .fill(null)
         .map(() => ({ numero: "", posicion: "", importe: "" }))
 }
@@ -70,13 +73,13 @@ export default function CargarJugadas() {
 
     // Inicializar el array de referencias
     useEffect(() => {
-        // Asegurarse de que tenemos 50 filas de jugadas
-        if (jugadas.length < 50) {
+        // Asegurarse de que tenemos 100 filas de jugadas
+        if (jugadas.length < TOTAL_FILAS) {
             setJugadas(createEmptyJugadas())
         }
 
         // Inicializar las referencias
-        inputRefs.current = Array(50)
+        inputRefs.current = Array(TOTAL_FILAS)
             .fill(0)
             .map(() => Array(3).fill(null))
     }, [jugadas.length])
@@ -325,10 +328,10 @@ export default function CargarJugadas() {
         }
     }
 
-    // Generar las filas de jugadas para asegurar que siempre haya 50
+    // Generar las filas de jugadas para asegurar que siempre haya 100
     const renderJugadasRows = () => {
-        // Asegurarse de que tenemos 50 filas
-        const filasJugadas = jugadas.length < 50 ? createEmptyJugadas() : jugadas
+        // Asegurarse de que tenemos 100 filas
+        const filasJugadas = jugadas.length < TOTAL_FILAS ? createEmptyJugadas() : jugadas
 
         return filasJugadas.map((jugada, rowIndex) => (
             <TableRow key={rowIndex}>
