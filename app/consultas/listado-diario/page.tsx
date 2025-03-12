@@ -12,7 +12,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { db } from "@/lib/firebase"
-import { collection, getDocs, getDoc, doc, query, where, onSnapshot } from "firebase/firestore"
+import { collection, getDocs, getDoc, doc, query, where, onSnapshot, setDoc } from "firebase/firestore"
+import toast from "react-hot-toast"
 
 interface Pasador {
     id: string
@@ -125,83 +126,43 @@ const fetchAciertosData = async (fecha: Date) => {
     return aciertosData
 }
 
-const obtenerMontoJugadoPagosCobros = (
-    pasadorId: string,
-    pasadorNombre: string,
-    fecha: Date,
-    comisionPorcentaje: number,
-    saldoAnterior: number,
-    premioTotal: number,
-    actualizarMontoJugadoPagosCobros: (pasadorId: string, monto: number, pagos: number, cobros: number) => void,
-    actualizarComisionYSaldoFinal: (pasadorId: string, comision: number, saldoFinal: number, saldoTotal: number) => void,
-) => {
-    const jugadasRef = collection(db, `JUGADAS DE ${pasadorNombre}`)
-    const pagosRef = collection(db, "pagos")
-    const cobrosRef = collection(db, "cobros")
-    const fechaString = format(fecha, "yyyy-MM-dd")
+// Función para guardar los saldos diarios en Firestore
+const guardarSaldosDiarios = async (pasador: Pasador, fecha: Date) => {
+    try {
+        const fechaStr = format(fecha, "yyyy-MM-dd")
+        const docId = `${pasador.id}_${fechaStr}`
 
-    const jugadasQuery = query(
-        jugadasRef,
-        where("fechaHora", ">=", startOfDay(fecha)),
-        where("fechaHora", "<=", endOfDay(fecha)),
-    )
-    const pagosQuery = query(pagosRef, where("pasadorId", "==", pasadorId), where("fecha", "==", fechaString))
-    const cobrosQuery = query(cobrosRef, where("pasadorId", "==", pasadorId), where("fecha", "==", fechaString))
+        console.log(`Guardando saldos diarios para ${pasador.nombre} en fecha ${fechaStr}`)
+        console.log(`ID del documento: ${docId}`)
+        console.log(`Saldo anterior: ${pasador.saldoAnterior}`)
+        console.log(`Saldo final: ${pasador.saldoFinal}`)
+        console.log(`Saldo total: ${pasador.saldoTotal}`)
 
-    const unsubscribeJugadas = onSnapshot(jugadasQuery, (jugadasSnapshot) => {
-        let ventasOnlineAcumuladas = 0
-        let anulacionVentaOnline = 0
+        // Crear o actualizar el documento de saldos diarios
+        await setDoc(
+            doc(db, "saldos_diarios", docId),
+            {
+                pasador_id: pasador.id,
+                pasador_nombre: pasador.nombre,
+                fecha: fechaStr,
+                timestamp: format(new Date(), "dd/MM/yy HH:mm"),
+                saldo_anterior: pasador.saldoAnterior,
+                saldo_final: pasador.saldoFinal,
+                saldo_total: pasador.saldoTotal,
+                ventas_online: pasador.jugado,
+                comision_pasador: pasador.comisionPasador,
+                total_pagos: pasador.pagado,
+                total_cobros: pasador.cobrado,
+                total_ganado: pasador.premioTotal,
+            },
+            { merge: true },
+        )
 
-        jugadasSnapshot.forEach((doc) => {
-            const jugada = doc.data()
-            if (jugada.anulada !== true) {
-                ventasOnlineAcumuladas += Number(jugada.totalMonto) || 0
-            } else {
-                anulacionVentaOnline += Number(jugada.totalMonto) || 0
-            }
-        })
-
-        Promise.all([getDocs(pagosQuery), getDocs(cobrosQuery)]).then(([pagosSnapshot, cobrosSnapshot]) => {
-            let totalPagos = 0
-            let totalCobros = 0
-
-            pagosSnapshot.forEach((doc) => {
-                totalPagos += doc.data().monto || 0
-            })
-
-            cobrosSnapshot.forEach((doc) => {
-                totalCobros += doc.data().monto || 0
-            })
-
-            console.log(`Monto jugado para ${pasadorNombre}: ${ventasOnlineAcumuladas}`)
-            console.log(`Pagos para ${pasadorNombre}: ${totalPagos}`)
-            console.log(`Cobros para ${pasadorNombre}: ${totalCobros}`)
-            console.log(`Premio total para ${pasadorNombre}: ${premioTotal}`)
-
-            const comisionCalculada = (comisionPorcentaje / 100) * ventasOnlineAcumuladas
-            const comisionRedondeada = Math.round(comisionCalculada * 100) / 100
-
-            // Corrección: Incluir pagos y cobros en el cálculo del saldo final
-            const saldoFinal = ventasOnlineAcumuladas - comisionRedondeada - premioTotal + totalPagos - totalCobros
-            const saldoTotal = saldoFinal
-
-            console.log(`Cálculo de saldo final para ${pasadorNombre}:`)
-            console.log(`Ventas online: ${ventasOnlineAcumuladas}`)
-            console.log(`Comisión (${comisionPorcentaje}%): ${comisionRedondeada}`)
-            console.log(`Premio total: ${premioTotal}`)
-            console.log(`Total pagos: ${totalPagos}`)
-            console.log(`Total cobros: ${totalCobros}`)
-            console.log(
-                `Saldo final: ${ventasOnlineAcumuladas} - ${comisionRedondeada} - ${premioTotal} + ${totalPagos} - ${totalCobros} = ${saldoFinal}`,
-            )
-
-            actualizarMontoJugadoPagosCobros(pasadorId, ventasOnlineAcumuladas, totalPagos, totalCobros)
-            actualizarComisionYSaldoFinal(pasadorId, comisionRedondeada, saldoFinal, saldoTotal)
-        })
-    })
-
-    return () => {
-        unsubscribeJugadas()
+        console.log(`Saldos diarios guardados correctamente para ${pasador.nombre}`)
+        return true
+    } catch (error) {
+        console.error(`Error al guardar saldos diarios para ${pasador.nombre}:`, error)
+        return false
     }
 }
 
@@ -225,19 +186,28 @@ export default function ListadoDiario() {
         })
     }
 
-    const actualizarComisionYSaldoFinal = (
-        pasadorId: string,
-        comision: number,
-        saldoFinal: number,
-        saldoTotal: number,
-    ) => {
+    const actualizarComisionYSaldoFinal = (pasadorId: string, comision: number, saldoFinal: number) => {
         setPasadores((prevPasadores: Pasador[]) => {
-            return prevPasadores.map((p: Pasador) => {
+            const nuevoPasadores = prevPasadores.map((p: Pasador) => {
                 if (p.id === pasadorId) {
-                    return { ...p, comisionPasador: comision, saldoFinal: saldoFinal, saldoTotal: saldoTotal }
+                    // Ahora el saldo total es igual al saldo final
+                    const pasadorActualizado = {
+                        ...p,
+                        comisionPasador: comision,
+                        saldoFinal: saldoFinal,
+                        saldoTotal: saldoFinal, // Saldo total = Saldo final
+                    }
+
+                    // Guardar los datos en Firestore después de actualizar el estado
+                    setTimeout(() => {
+                        guardarSaldosDiarios(pasadorActualizado, fechaSeleccionada)
+                    }, 0)
+
+                    return pasadorActualizado
                 }
                 return p
             })
+            return nuevoPasadores
         })
     }
 
@@ -248,6 +218,86 @@ export default function ListadoDiario() {
     useEffect(() => {
         console.log("Estado actual de pasadores:", pasadores)
     }, [pasadores])
+
+    const obtenerMontoJugadoPagosCobros = (
+        pasadorId: string,
+        pasadorNombre: string,
+        fecha: Date,
+        comisionPorcentaje: number,
+        saldoAnterior: number,
+        premioTotal: number,
+    ) => {
+        const jugadasRef = collection(db, `JUGADAS DE ${pasadorNombre}`)
+        const pagosRef = collection(db, "pagos")
+        const cobrosRef = collection(db, "cobros")
+        const fechaString = format(fecha, "yyyy-MM-dd")
+
+        const jugadasQuery = query(
+            jugadasRef,
+            where("fechaHora", ">=", startOfDay(fecha)),
+            where("fechaHora", "<=", endOfDay(fecha)),
+        )
+        const pagosQuery = query(pagosRef, where("pasadorId", "==", pasadorId), where("fecha", "==", fechaString))
+        const cobrosQuery = query(cobrosRef, where("pasadorId", "==", pasadorId), where("fecha", "==", fechaString))
+
+        const unsubscribeJugadas = onSnapshot(jugadasQuery, (jugadasSnapshot) => {
+            let ventasOnlineAcumuladas = 0
+            let anulacionVentaOnline = 0
+
+            jugadasSnapshot.forEach((doc) => {
+                const jugada = doc.data()
+                if (jugada.anulada !== true) {
+                    ventasOnlineAcumuladas += Number(jugada.totalMonto) || 0
+                } else {
+                    anulacionVentaOnline += Number(jugada.totalMonto) || 0
+                }
+            })
+
+            Promise.all([getDocs(pagosQuery), getDocs(cobrosQuery)]).then(([pagosSnapshot, cobrosSnapshot]) => {
+                let totalPagos = 0
+                let totalCobros = 0
+
+                pagosSnapshot.forEach((doc) => {
+                    totalPagos += doc.data().monto || 0
+                })
+
+                cobrosSnapshot.forEach((doc) => {
+                    totalCobros += doc.data().monto || 0
+                })
+
+                console.log(`Monto jugado para ${pasadorNombre}: ${ventasOnlineAcumuladas}`)
+                console.log(`Pagos para ${pasadorNombre}: ${totalPagos}`)
+                console.log(`Cobros para ${pasadorNombre}: ${totalCobros}`)
+                console.log(`Premio total para ${pasadorNombre}: ${premioTotal}`)
+                console.log(`Saldo anterior para ${pasadorNombre}: ${saldoAnterior}`)
+
+                const comisionCalculada = (comisionPorcentaje / 100) * ventasOnlineAcumuladas
+                const comisionRedondeada = Math.round(comisionCalculada * 100) / 100
+
+                // Corrección: Incluir pagos y cobros en el cálculo del saldo final
+                const saldoFinal = ventasOnlineAcumuladas - comisionRedondeada - premioTotal + totalPagos - totalCobros
+
+                console.log(`Cálculo de saldo final para ${pasadorNombre}:`)
+                console.log(`Ventas online: ${ventasOnlineAcumuladas}`)
+                console.log(`Comisión (${comisionPorcentaje}%): ${comisionRedondeada}`)
+                console.log(`Premio total: ${premioTotal}`)
+                console.log(`Total pagos: ${totalPagos}`)
+                console.log(`Total cobros: ${totalCobros}`)
+                console.log(`Saldo anterior: ${saldoAnterior}`)
+                console.log(
+                    `Saldo final: ${ventasOnlineAcumuladas} - ${comisionRedondeada} - ${premioTotal} + ${totalPagos} - ${totalCobros} = ${saldoFinal}`,
+                )
+                console.log(`Saldo total: ${saldoFinal} (igual al saldo final)`)
+
+                actualizarMontoJugadoPagosCobros(pasadorId, ventasOnlineAcumuladas, totalPagos, totalCobros)
+                actualizarComisionYSaldoFinal(pasadorId, comisionRedondeada, saldoFinal)
+            })
+        })
+
+        return () => {
+            unsubscribeJugadas()
+        }
+    }
 
     const manejarBusqueda = async () => {
         setEstaCargando(true)
@@ -328,26 +378,61 @@ export default function ListadoDiario() {
                 comisionPorcentaje: comisionesPasadores[pasador.id] || 0,
             }))
 
-            // Obtener saldo anterior (saldo final del día anterior)
+            // Obtener saldo anterior (saldo total del día anterior)
             const fechaAnterior = new Date(fechaSeleccionada)
             fechaAnterior.setDate(fechaAnterior.getDate() - 1)
-            const saldoAnteriorPromesas = updatedListaPasadoresComision.map((pasador) => {
-                const saldoDiarioAnteriorRef = doc(db, "saldos_diarios", `${pasador.id}_${format(fechaAnterior, "yyyy-MM-dd")}`)
-                return getDoc(saldoDiarioAnteriorRef)
-            })
-            const snapshotsSaldosAnteriores = await Promise.all(saldoAnteriorPromesas)
+            const fechaAnteriorStr = format(fechaAnterior, "yyyy-MM-dd")
+            console.log(`Buscando saldos del día anterior: ${fechaAnteriorStr}`)
 
-            // Actualizar saldo anterior con el saldo final del día anterior
-            snapshotsSaldosAnteriores.forEach((snapshot, index) => {
-                if (snapshot.exists()) {
-                    const datosSaldoAnterior = snapshot.data()
-                    updatedListaPasadoresComision[index].saldoAnterior = datosSaldoAnterior.saldo_final || 0
-                } else {
-                    console.log(`No se encontraron datos de saldo anterior para ${updatedListaPasadoresComision[index].nombre}`)
+            // Primero, obtener los saldos diarios del día anterior para cada pasador
+            const saldosAnteriores: { [key: string]: number } = {}
+
+            // Obtener todos los documentos de saldos_diarios que corresponden al día anterior
+            const saldosDiariosRef = collection(db, "saldos_diarios")
+            const saldosDiariosSnapshot = await getDocs(saldosDiariosRef)
+
+            // Filtrar los documentos que corresponden al día anterior
+            saldosDiariosSnapshot.forEach((docSnapshot) => {
+                const docId = docSnapshot.id
+                // Los IDs tienen el formato "pasadorId_fecha"
+                if (docId.endsWith(fechaAnteriorStr)) {
+                    const pasadorId = docId.split("_")[0]
+                    const data = docSnapshot.data()
+
+                    // SOLO usar saldo_total del día anterior como saldo anterior
+                    if (data.saldo_total !== undefined) {
+                        saldosAnteriores[pasadorId] = data.saldo_total
+                        console.log(
+                            `Encontrado saldo_total para pasador ${pasadorId} en fecha ${fechaAnteriorStr}: ${data.saldo_total}`,
+                        )
+                    }
                 }
             })
 
-            // Ejecutar todas las consultas de saldos diarios en paralelo
+            // Actualizar cada pasador con el saldo total del día anterior como saldo anterior
+            updatedListaPasadoresComision.forEach((pasador, index) => {
+                if (saldosAnteriores[pasador.id] !== undefined) {
+                    updatedListaPasadoresComision[index].saldoAnterior = saldosAnteriores[pasador.id]
+                    console.log(`Asignado saldo anterior para ${pasador.nombre}: ${saldosAnteriores[pasador.id]}`)
+                } else {
+                    console.log(`No se encontró saldo anterior para ${pasador.nombre} en fecha ${fechaAnteriorStr}`)
+
+                    // Si no hay datos del día anterior, intentar obtener el saldo del pasador directamente
+                    const pasadorDoc = pasadoresSnapshot.docs.find((doc) => doc.id === pasador.id)
+                    if (pasadorDoc) {
+                        const pasadorData = pasadorDoc.data()
+                        // Intentar usar saldoTotal si existe, de lo contrario usar saldoFinal
+                        const saldoPasador = pasadorData.saldoTotal || pasadorData.saldoFinal || 0
+                        updatedListaPasadoresComision[index].saldoAnterior = saldoPasador
+                        console.log(`Usando saldo del pasador como saldo anterior: ${saldoPasador}`)
+                    } else {
+                        console.log(`No se encontró documento del pasador ${pasador.nombre}`)
+                        updatedListaPasadoresComision[index].saldoAnterior = 0
+                    }
+                }
+            })
+
+            // Ejecutar todas las consultas de saldos diarios en paralelo para el día actual
             const promesasSaldosDiarios = updatedListaPasadoresComision.map((pasador) => {
                 // Preparar la consulta para los saldos diarios de este pasador
                 const saldoDiarioRef = doc(db, "saldos_diarios", `${pasador.id}_${format(fechaSeleccionada, "yyyy-MM-dd")}`)
@@ -355,16 +440,21 @@ export default function ListadoDiario() {
             })
             const snapshotsSaldosDiarios = await Promise.all(promesasSaldosDiarios)
 
-            // Procesar los resultados de los saldos diarios
+            // Procesar los resultados de los saldos diarios del día actual
             snapshotsSaldosDiarios.forEach((snapshot, index) => {
                 // Obtener el saldo anterior y el saldo final del día seleccionado
                 if (snapshot.exists()) {
                     const datosSaldoDiario = snapshot.data()
+                    // Mantener el saldo anterior que ya obtuvimos del día anterior
+                    const saldoAnterior = updatedListaPasadoresComision[index].saldoAnterior
+                    const saldoFinal = datosSaldoDiario.saldo_final || 0
+
                     updatedListaPasadoresComision[index] = {
                         ...updatedListaPasadoresComision[index],
-                        saldoAnterior: datosSaldoDiario.saldo_anterior || 0,
-                        saldoFinal: datosSaldoDiario.saldo_final || 0,
-                        saldoTotal: datosSaldoDiario.saldo_total || 0,
+                        // Mantener el saldo anterior que ya obtuvimos
+                        saldoAnterior: saldoAnterior,
+                        saldoFinal: saldoFinal,
+                        saldoTotal: saldoFinal, // Saldo total = Saldo final
                         jugado: datosSaldoDiario.ventas_online || 0,
                         aciertos: datosSaldoDiario.aciertos || [],
                         aciertosBorratinas: datosSaldoDiario.aciertos_borratinas || [],
@@ -396,6 +486,9 @@ export default function ListadoDiario() {
                 console.log(
                     `Saldo final para ${updatedListaPasadoresComision[index].nombre}: ${updatedListaPasadoresComision[index].saldoFinal}`,
                 )
+                console.log(
+                    `Saldo total para ${updatedListaPasadoresComision[index].nombre}: ${updatedListaPasadoresComision[index].saldoTotal}`,
+                )
             })
 
             // Suscribirse a las actualizaciones de jugado, pagos y cobros para cada pasador
@@ -405,10 +498,8 @@ export default function ListadoDiario() {
                     pasador.nombre,
                     fechaSeleccionada,
                     pasador.comisionPorcentaje,
-                    pasador.saldoAnterior,
-                    pasador.premioTotal, // Pasar el premio total como parámetro
-                    actualizarMontoJugadoPagosCobros,
-                    actualizarComisionYSaldoFinal,
+                    pasador.saldoAnterior, // Pasar el saldo anterior actualizado
+                    pasador.premioTotal,
                 )
             })
 
@@ -421,6 +512,19 @@ export default function ListadoDiario() {
             if (modulosUnicos.length > 0 && !modulosUnicos.includes(moduloSeleccionado)) {
                 console.log("Actualizando módulo seleccionado a:", modulosUnicos[0])
                 setModuloSeleccionado(modulosUnicos[0])
+            }
+
+            // Guardar automáticamente los saldos diarios al consultar
+            console.log("Guardando saldos diarios para la fecha:", format(fechaSeleccionada, "yyyy-MM-dd"))
+            try {
+                const resultadosGuardado = await Promise.all(
+                    updatedListaPasadoresComision.map((pasador) => guardarSaldosDiarios(pasador, fechaSeleccionada)),
+                )
+                const exitosos = resultadosGuardado.filter((r) => r).length
+                toast.success(`Saldos diarios actualizados: ${exitosos} de ${updatedListaPasadoresComision.length}`)
+            } catch (error) {
+                console.error("Error al guardar saldos diarios:", error)
+                toast.error("Error al guardar los saldos diarios")
             }
 
             console.log("Búsqueda completada")
