@@ -219,6 +219,7 @@ export default function ListadoDiario() {
         console.log("Estado actual de pasadores:", pasadores)
     }, [pasadores])
 
+    // Modificar la función obtenerMontoJugadoPagosCobros para incluir el saldo anterior en los cálculos
     const obtenerMontoJugadoPagosCobros = (
         pasadorId: string,
         pasadorNombre: string,
@@ -274,18 +275,19 @@ export default function ListadoDiario() {
                 const comisionCalculada = (comisionPorcentaje / 100) * ventasOnlineAcumuladas
                 const comisionRedondeada = Math.round(comisionCalculada * 100) / 100
 
-                // Corrección: Incluir pagos y cobros en el cálculo del saldo final
-                const saldoFinal = ventasOnlineAcumuladas - comisionRedondeada - premioTotal + totalPagos - totalCobros
+                // MODIFICACIÓN: Incluir saldo anterior en el cálculo del saldo final
+                const saldoFinal =
+                    saldoAnterior + ventasOnlineAcumuladas - comisionRedondeada - premioTotal + totalPagos - totalCobros
 
                 console.log(`Cálculo de saldo final para ${pasadorNombre}:`)
+                console.log(`Saldo anterior: ${saldoAnterior}`)
                 console.log(`Ventas online: ${ventasOnlineAcumuladas}`)
                 console.log(`Comisión (${comisionPorcentaje}%): ${comisionRedondeada}`)
                 console.log(`Premio total: ${premioTotal}`)
                 console.log(`Total pagos: ${totalPagos}`)
                 console.log(`Total cobros: ${totalCobros}`)
-                console.log(`Saldo anterior: ${saldoAnterior}`)
                 console.log(
-                    `Saldo final: ${ventasOnlineAcumuladas} - ${comisionRedondeada} - ${premioTotal} + ${totalPagos} - ${totalCobros} = ${saldoFinal}`,
+                    `Saldo final: ${saldoAnterior} + ${ventasOnlineAcumuladas} - ${comisionRedondeada} - ${premioTotal} + ${totalPagos} - ${totalCobros} = ${saldoFinal}`,
                 )
                 console.log(`Saldo total: ${saldoFinal} (igual al saldo final)`)
 
