@@ -76,29 +76,46 @@ export default function IngresarPagosYCobros() {
         try {
             const pagosCollection = collection(db, "pagos")
             const cobrosCollection = collection(db, "cobros")
+
+            // Obtener la fecha actual en la zona horaria local
             const fecha = new Date()
-            const fechaFormateada = fecha.toISOString().split("T")[0] // Formato YYYY-MM-DD
+
+            // Formatear la fecha en formato YYYY-MM-DD usando la zona horaria local
+            const year = fecha.getFullYear()
+            const month = String(fecha.getMonth() + 1).padStart(2, "0")
+            const day = String(fecha.getDate()).padStart(2, "0")
+            const fechaFormateada = `${year}-${month}-${day}`
+
+            console.log("Fecha que se guardará:", fechaFormateada)
 
             for (const [pasadorId, importe] of Object.entries(importes)) {
                 if (importe && Number.parseFloat(importe) !== 0) {
                     const pasador = pasadores.find((p) => p.id === pasadorId)
                     const monto = Number.parseFloat(importe)
-                    const data = {
-                        pasadorId: pasadorId,
-                        monto: Math.abs(monto), // Guardamos el valor absoluto
-                        fecha: fechaFormateada,
-                        observaciones: `Módulo: ${pasador?.modulo}`,
-                        usuario: auth.currentUser?.email || "admin@example.com",
-                        createdAt: serverTimestamp(),
-                    }
 
                     if (monto < 0) {
-                        // Los pagos son valores negativos
+                        // Los pagos son valores negativos - guardamos con signo negativo
+                        const data = {
+                            pasadorId: pasadorId,
+                            monto: monto, // Guardamos con signo negativo
+                            fecha: fechaFormateada,
+                            observaciones: `Módulo: ${pasador?.modulo}`,
+                            usuario: auth.currentUser?.email || "admin@example.com",
+                            createdAt: serverTimestamp(),
+                        }
                         console.log("Guardando pago:", data)
                         await addDoc(pagosCollection, data)
                         console.log("Pago procesado:", data)
                     } else {
                         // Los cobros son valores positivos
+                        const data = {
+                            pasadorId: pasadorId,
+                            monto: monto, // Guardamos con signo positivo
+                            fecha: fechaFormateada,
+                            observaciones: `Módulo: ${pasador?.modulo}`,
+                            usuario: auth.currentUser?.email || "admin@example.com",
+                            createdAt: serverTimestamp(),
+                        }
                         console.log("Guardando cobro:", data)
                         await addDoc(cobrosCollection, data)
                         console.log("Cobro procesado:", data)
@@ -192,6 +209,10 @@ export default function IngresarPagosYCobros() {
                             <Button onClick={handleProcesar} disabled={loading}>
                                 {loading ? "Procesando..." : "Procesar"}
                             </Button>
+                        </div>
+
+                        <div className="mt-4 text-center text-sm text-gray-600">
+                            <p>Ingrese valores negativos para pagos (ej: -50000) y valores positivos para cobros (ej: 50000)</p>
                         </div>
                     </div>
                 </div>
