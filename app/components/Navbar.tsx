@@ -54,7 +54,7 @@ const elementosMenu: MenuItem[] = [
     },
     {
         titulo: "administrar",
-        submenu: ["pasadores", "terminales", "listas de precio", "pasadores por correo", "usuarios"],
+        submenu: ["pasadores", "terminales", "listas de precio", "pasadores por correo", "usuarios", "loterias"],
     },
     {
         titulo: "jugadas",
