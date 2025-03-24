@@ -573,7 +573,7 @@ export default function AdministrarLoterias() {
                                                 <p className="font-medium">{loteria.nombre}</p>
                                                 <p className="text-xs">{estadoTexto}</p>
                                             </div>
-                                            <Badge variant={loteria.habilitada ? "success" : "destructive"}>
+                                            <Badge variant={loteria.habilitada ? "success" : "destructive"} className="ml-2">
                                                 {loteria.habilitada ? "ON" : "OFF"}
                                             </Badge>
                                         </div>
