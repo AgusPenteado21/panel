@@ -92,6 +92,15 @@ const presetsConfig = [
     },
 ]
 
+// Mapeo de secciones a IDs de lotería
+const sectionToLoteriaId = {
+    LAPREVIA: "laprevia",
+    PRIMERA: "primera",
+    MATUTINA: "matutina",
+    VESPERTINA: "vespertina",
+    NOCTURNA: "nocturna",
+}
+
 // Estado inicial de loterías
 const loteriasInicial: Loteria[] = [
     {
@@ -186,11 +195,20 @@ export default function AdministrarLoterias() {
     const [cargando, setCargando] = useState(true)
     const [guardando, setGuardando] = useState(false)
     const [cambiosSinGuardar, setCambiosSinGuardar] = useState(false)
+    // Cambiar la definición del estado cutoffTimes para que acepte un tipo más flexible
+    const [cutoffTimes, setCutoffTimes] = useState<Record<string, string>>({
+        LAPREVIA: "10:15",
+        PRIMERA: "12:00",
+        MATUTINA: "15:00",
+        VESPERTINA: "18:00",
+        NOCTURNA: "21:00",
+    })
     const [tabActiva, setTabActiva] = useState("todas")
     const [presetSeleccionado, setPresetSeleccionado] = useState("")
 
     useEffect(() => {
         cargarConfiguracion()
+        cargarHorarios()
     }, [])
 
     // Detectar cambios para mostrar alerta de cambios sin guardar
@@ -224,6 +242,33 @@ export default function AdministrarLoterias() {
             toast.error("Error al cargar la configuración")
         } finally {
             setCargando(false)
+        }
+    }
+
+    // Modificar la función cargarHorarios para manejar correctamente los tipos
+    const cargarHorarios = async () => {
+        try {
+            // Leer los horarios de cierre
+            const docRef = doc(db, "horarios", "quinela")
+            const docSnap = await getDoc(docRef)
+
+            if (docSnap.exists()) {
+                console.log("Cargando horarios desde horarios/quinela")
+                const data = docSnap.data()
+                // Convertir explícitamente a Record<string, string>
+                const horarios: Record<string, string> = {}
+
+                // Asegurarse de que solo se asignen strings
+                Object.entries(data).forEach(([key, value]) => {
+                    if (typeof value === "string") {
+                        horarios[key] = value
+                    }
+                })
+
+                setCutoffTimes(horarios)
+            }
+        } catch (error) {
+            console.error("Error al cargar los horarios:", error)
         }
     }
 
@@ -356,6 +401,56 @@ export default function AdministrarLoterias() {
                 ? loterias.filter((l) => l.habilitada)
                 : loterias.filter((l) => !l.habilitada)
 
+    // Modificar la parte donde se accede a cutoffTimes con una variable
+    const sincronizarEstadoSegunHorarios = async () => {
+        try {
+            setGuardando(true)
+
+            const now = new Date()
+            const horaActual = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`
+            const esDomingo = now.getDay() === 0
+
+            // Actualizar el estado de las loterías según los horarios
+            const loteriasActualizadas = loterias.map((loteria) => {
+                const seccionNombre = Object.entries(sectionToLoteriaId).find(([_, id]) => id === loteria.id)?.[0]
+                // Verificar que seccionNombre existe y es una clave válida en cutoffTimes
+                const horarioCierre = seccionNombre && seccionNombre in cutoffTimes ? cutoffTimes[seccionNombre] : null
+
+                // Determinar si la lotería debe estar habilitada o no
+                let debeEstarHabilitada = true
+
+                // Si es domingo, todas las loterías deben estar deshabilitadas
+                if (esDomingo) {
+                    debeEstarHabilitada = false
+                } else if (horarioCierre) {
+                    // Comparar la hora actual con la hora de cierre
+                    debeEstarHabilitada = horaActual < horarioCierre
+                }
+
+                return {
+                    ...loteria,
+                    habilitada: debeEstarHabilitada,
+                }
+            })
+
+            setLoterias(loteriasActualizadas)
+
+            // Guardar los cambios automáticamente
+            await setDoc(doc(db, "configuracion", "loterias"), {
+                loterias: loteriasActualizadas,
+                actualizado: new Date(),
+            })
+
+            toast.success("Estado de loterías sincronizado con los horarios")
+            setCambiosSinGuardar(false)
+        } catch (error) {
+            console.error("Error al sincronizar el estado de las loterías:", error)
+            toast.error("Error al sincronizar el estado de las loterías")
+        } finally {
+            setGuardando(false)
+        }
+    }
+
     return (
         <div className="flex flex-col min-h-screen bg-gray-50">
             <Navbar />
@@ -390,6 +485,16 @@ export default function AdministrarLoterias() {
                                 </Button>
 
                                 <Button
+                                    variant="outline"
+                                    onClick={sincronizarEstadoSegunHorarios}
+                                    disabled={cargando || guardando}
+                                    className="border-blue-600 text-blue-700 hover:bg-blue-50"
+                                >
+                                    <Calendar className="h-4 w-4 mr-2" />
+                                    Sincronizar con Horarios
+                                </Button>
+
+                                <Button
                                     onClick={guardarConfiguracion}
                                     disabled={cargando || guardando || !cambiosSinGuardar}
                                     className={`${cambiosSinGuardar ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-400"}`}
@@ -418,6 +523,68 @@ export default function AdministrarLoterias() {
                                 aplicación en cualquier día. La configuración establecida aquí se aplicará en tiempo real.
                             </AlertDescription>
                         </Alert>
+
+                        <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
+                            <h3 className="text-lg font-medium text-gray-800 mb-2">Estado actual de las loterías</h3>
+                            {/* Modificar la parte donde se muestra el estado actual de las loterías */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                {loterias.map((loteria) => {
+                                    // Determinar si la lotería debería estar habilitada según el horario
+                                    const seccionNombre = Object.entries(sectionToLoteriaId).find(([_, id]) => id === loteria.id)?.[0]
+                                    // Verificar que seccionNombre existe y es una clave válida en cutoffTimes
+                                    const horarioCierre =
+                                        seccionNombre && seccionNombre in cutoffTimes ? cutoffTimes[seccionNombre] : null
+                                    const now = new Date()
+                                    const horaActual = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`
+                                    const esDomingo = now.getDay() === 0
+
+                                    // Por defecto, usar el estado actual de la lotería
+                                    const estadoActual = loteria.habilitada
+                                    let estadoTexto = loteria.habilitada ? "Habilitada" : "Deshabilitada"
+                                    let estadoColor = loteria.habilitada ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+
+                                    // Si es domingo, todas las loterías deberían estar deshabilitadas
+                                    if (esDomingo) {
+                                        const deberiaEstar = false
+                                        if (estadoActual !== deberiaEstar) {
+                                            estadoTexto = `${estadoTexto} (Debería estar deshabilitada - Domingo)`
+                                            estadoColor = "bg-amber-100 text-amber-800"
+                                        }
+                                    }
+                                    // Si hay un horario de cierre, verificar si ya pasó
+                                    else if (horarioCierre) {
+                                        const deberiaEstar = horaActual < horarioCierre
+                                        if (estadoActual !== deberiaEstar) {
+                                            estadoTexto = deberiaEstar
+                                                ? `${estadoTexto} (Debería estar habilitada - Cierra a las ${horarioCierre})`
+                                                : `${estadoTexto} (Debería estar deshabilitada - Cerró a las ${horarioCierre})`
+                                            estadoColor = "bg-amber-100 text-amber-800"
+                                        } else if (deberiaEstar) {
+                                            estadoTexto = `${estadoTexto} (Cierra a las ${horarioCierre})`
+                                        }
+                                    }
+
+                                    return (
+                                        <div
+                                            key={`estado-${loteria.id}`}
+                                            className={`p-3 rounded-md ${estadoColor} flex justify-between items-center`}
+                                        >
+                                            <div>
+                                                <p className="font-medium">{loteria.nombre}</p>
+                                                <p className="text-xs">{estadoTexto}</p>
+                                            </div>
+                                            <Badge variant={loteria.habilitada ? "success" : "destructive"}>
+                                                {loteria.habilitada ? "ON" : "OFF"}
+                                            </Badge>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-3">
+                                Las loterías se actualizan automáticamente según sus horarios de cierre. Los domingos todas las loterías
+                                están deshabilitadas.
+                            </p>
+                        </div>
 
                         {/* Configuraciones predefinidas */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
