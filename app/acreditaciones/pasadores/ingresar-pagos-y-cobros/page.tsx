@@ -8,6 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import Navbar from "@/app/components/Navbar"
 import { collection, getDocs, addDoc, serverTimestamp } from "firebase/firestore"
 import { db, auth } from "@/lib/firebase"
+import { Loader2, RefreshCw, DollarSign, AlertCircle } from "lucide-react"
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card"
 
 interface Pasador {
     id: string
@@ -24,12 +26,14 @@ export default function IngresarPagosYCobros() {
     const [importes, setImportes] = useState<{ [key: string]: string }>({})
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [isLoading, setIsLoading] = useState(true)
 
     useEffect(() => {
         fetchPasadores()
     }, [])
 
     const fetchPasadores = async () => {
+        setIsLoading(true)
         try {
             const pasadoresCollection = collection(db, "pasadores")
             const pasadoresSnapshot = await getDocs(pasadoresCollection)
@@ -53,9 +57,12 @@ export default function IngresarPagosYCobros() {
                 nuevosImportes[pasador.id] = ""
             })
             setImportes(nuevosImportes)
+            setError(null)
         } catch (error) {
             console.error("Error al cargar pasadores:", error)
             setError("Hubo un problema al cargar los pasadores. Por favor, intente de nuevo.")
+        } finally {
+            setIsLoading(false)
         }
     }
 
@@ -141,19 +148,21 @@ export default function IngresarPagosYCobros() {
     const pasadoresFiltrados = pasadores.filter((p) => p.modulo === modulo)
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-gradient-to-b from-blue-50 to-indigo-50">
             <Navbar />
-            <div className="p-4">
-                <div className="bg-black text-white p-2">
-                    <h1 className="text-lg text-center">INGRESAR PAGOS Y COBROS</h1>
-                </div>
-
-                <div className="max-w-4xl mx-auto mt-4">
-                    <div className="bg-white p-6 rounded-lg shadow">
-                        <div className="flex items-center gap-4 mb-6 justify-center">
-                            <span>Seleccione el módulo:</span>
+            <div className="container mx-auto p-4">
+                <Card className="shadow-xl border border-blue-200">
+                    <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white">
+                        <CardTitle className="text-2xl font-bold text-center flex items-center justify-center">
+                            <DollarSign className="h-6 w-6 mr-2" />
+                            INGRESAR PAGOS Y COBROS
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-6">
+                        <div className="flex items-center gap-4 mb-6 justify-center bg-blue-50 p-4 rounded-lg border border-blue-200 shadow-sm">
+                            <span className="text-blue-800 font-medium">Seleccione el módulo:</span>
                             <Select value={modulo} onValueChange={setModulo}>
-                                <SelectTrigger className="w-24">
+                                <SelectTrigger className="w-24 border-blue-300 focus:ring-blue-500">
                                     <SelectValue placeholder="Módulo" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -164,58 +173,106 @@ export default function IngresarPagosYCobros() {
                                     ))}
                                 </SelectContent>
                             </Select>
-                            <Button variant="secondary" onClick={handleActualizar}>
+                            <Button
+                                variant="outline"
+                                onClick={handleActualizar}
+                                className="border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-500"
+                            >
+                                <RefreshCw className="h-4 w-4 mr-2" />
                                 Actualizar
                             </Button>
                         </div>
 
-                        {error && <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">{error}</div>}
+                        {error && (
+                            <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg shadow-sm flex items-start">
+                                <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0 mt-0.5" />
+                                <span>{error}</span>
+                            </div>
+                        )}
 
-                        <div className="border rounded-md">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow className="bg-gray-100">
-                                        <TableHead className="font-bold">Nº</TableHead>
-                                        <TableHead className="font-bold">Nombre</TableHead>
-                                        <TableHead className="font-bold">Módulo</TableHead>
-                                        <TableHead className="font-bold">Importe</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {pasadoresFiltrados.map((pasador) => (
-                                        <TableRow key={pasador.id}>
-                                            <TableCell className="font-medium">{pasador.displayId}</TableCell>
-                                            <TableCell>
-                                                {pasador.numero} - {pasador.nombre}
-                                            </TableCell>
-                                            <TableCell>{pasador.modulo}</TableCell>
-                                            <TableCell>
-                                                <Input
-                                                    type="number"
-                                                    value={importes[pasador.id]}
-                                                    onChange={(e) => handleImporteChange(pasador.id, e.target.value)}
-                                                    placeholder="0.00"
-                                                    className="w-full"
-                                                    step="0.01"
-                                                />
-                                            </TableCell>
+                        {isLoading ? (
+                            <div className="flex justify-center items-center p-12">
+                                <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
+                            </div>
+                        ) : (
+                            <div className="border border-blue-200 rounded-lg shadow-md overflow-hidden">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="bg-gradient-to-r from-blue-600 to-indigo-700">
+                                            <TableHead className="font-bold text-white">Nº</TableHead>
+                                            <TableHead className="font-bold text-white">Nombre</TableHead>
+                                            <TableHead className="font-bold text-white">Módulo</TableHead>
+                                            <TableHead className="font-bold text-white">Importe</TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {pasadoresFiltrados.map((pasador, index) => (
+                                            <TableRow
+                                                key={pasador.id}
+                                                className={`${index % 2 === 0 ? "bg-blue-50" : "bg-white"} hover:bg-blue-100 transition-colors`}
+                                            >
+                                                <TableCell className="font-medium text-blue-800">{pasador.displayId}</TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center">
+                                                        <div className="h-8 w-8 rounded-full bg-blue-600 text-white flex items-center justify-center mr-2">
+                                                            {pasador.nombre.charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <span>
+                                                            {pasador.numero} - {pasador.nombre}
+                                                        </span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-indigo-600 font-semibold">{pasador.modulo}</TableCell>
+                                                <TableCell>
+                                                    <Input
+                                                        type="number"
+                                                        value={importes[pasador.id]}
+                                                        onChange={(e) => handleImporteChange(pasador.id, e.target.value)}
+                                                        placeholder="0.00"
+                                                        className={`w-full border-blue-200 focus:border-blue-500 focus:ring-blue-500 ${importes[pasador.id] && Number.parseFloat(importes[pasador.id]) < 0
+                                                                ? "text-red-600 font-medium"
+                                                                : importes[pasador.id] && Number.parseFloat(importes[pasador.id]) > 0
+                                                                    ? "text-green-600 font-medium"
+                                                                    : ""
+                                                            }`}
+                                                        step="0.01"
+                                                    />
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        )}
 
-                        <div className="mt-6 flex justify-center">
-                            <Button onClick={handleProcesar} disabled={loading}>
-                                {loading ? "Procesando..." : "Procesar"}
+                        <CardFooter className="flex flex-col items-center mt-6 pt-4 border-t border-blue-200">
+                            <Button
+                                onClick={handleProcesar}
+                                disabled={loading}
+                                className="bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white shadow-md transition-all duration-200 transform hover:scale-105 mb-4"
+                                size="lg"
+                            >
+                                {loading ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Procesando...
+                                    </>
+                                ) : (
+                                    <>
+                                        <DollarSign className="mr-2 h-4 w-4" />
+                                        Procesar
+                                    </>
+                                )}
                             </Button>
-                        </div>
 
-                        <div className="mt-4 text-center text-sm text-gray-600">
-                            <p>Ingrese valores negativos para pagos (ej: -50000) y valores positivos para cobros (ej: 50000)</p>
-                        </div>
-                    </div>
-                </div>
+                            <div className="text-center text-sm text-gray-600 bg-yellow-50 p-3 rounded-lg border border-yellow-200 w-full">
+                                <p className="font-medium text-yellow-800">
+                                    Ingrese valores negativos para pagos (ej: -50000) y valores positivos para cobros (ej: 50000)
+                                </p>
+                            </div>
+                        </CardFooter>
+                    </CardContent>
+                </Card>
             </div>
         </div>
     )

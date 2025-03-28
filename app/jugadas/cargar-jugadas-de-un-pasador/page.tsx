@@ -13,6 +13,7 @@ import { db } from "@/lib/firebase"
 import { collection, getDocs, addDoc, serverTimestamp } from "firebase/firestore"
 import toast from "react-hot-toast"
 import Navbar from "@/app/components/Navbar"
+import { Loader2, Save, Printer, X, Calculator } from "lucide-react"
 
 interface Pasador {
     id: string
@@ -67,6 +68,7 @@ export default function CargarJugadas() {
     const [ticketContent, setTicketContent] = useState<string>("")
     const [isTicketDialogOpen, setIsTicketDialogOpen] = useState(false)
     const [secuenciaCounter, setSecuenciaCounter] = useState(10000)
+    const [isLoading, setIsLoading] = useState(false)
 
     // Crear un array para almacenar las referencias a los inputs
     const inputRefs = useRef<HTMLInputElement[][]>([])
@@ -230,6 +232,7 @@ export default function CargarJugadas() {
         }
 
         try {
+            setIsLoading(true)
             const pasadorSeleccionado = pasadores.find((p) => p.id === selectedPasador)
             if (!pasadorSeleccionado) {
                 toast.error("Pasador no encontrado")
@@ -282,6 +285,8 @@ export default function CargarJugadas() {
         } catch (error) {
             console.error("Error al guardar las jugadas:", error)
             toast.error("Error al guardar las jugadas")
+        } finally {
+            setIsLoading(false)
         }
     }
 
@@ -334,11 +339,14 @@ export default function CargarJugadas() {
         const filasJugadas = jugadas.length < TOTAL_FILAS ? createEmptyJugadas() : jugadas
 
         return filasJugadas.map((jugada, rowIndex) => (
-            <TableRow key={rowIndex}>
-                <TableCell className="font-medium">{(rowIndex + 1).toString().padStart(3, "0")}</TableCell>
+            <TableRow
+                key={rowIndex}
+                className={`${rowIndex % 2 === 0 ? "bg-blue-50" : "bg-white"} hover:bg-blue-100 transition-colors`}
+            >
+                <TableCell className="font-medium text-blue-800">{(rowIndex + 1).toString().padStart(3, "0")}</TableCell>
                 <TableCell>
                     <Input
-                        className="w-full"
+                        className="w-full border-blue-200 focus:border-blue-500 focus:ring-blue-500"
                         value={jugada.numero}
                         onChange={(e) => handleJugadaChange(rowIndex, "numero", e.target.value)}
                         onKeyDown={(e) => handleKeyDown(e, rowIndex, 0)}
@@ -347,7 +355,7 @@ export default function CargarJugadas() {
                 </TableCell>
                 <TableCell>
                     <Input
-                        className="w-full"
+                        className="w-full border-blue-200 focus:border-blue-500 focus:ring-blue-500"
                         value={jugada.posicion}
                         onChange={(e) => handleJugadaChange(rowIndex, "posicion", e.target.value)}
                         onKeyDown={(e) => handleKeyDown(e, rowIndex, 1)}
@@ -356,7 +364,7 @@ export default function CargarJugadas() {
                 </TableCell>
                 <TableCell>
                     <Input
-                        className="w-full"
+                        className="w-full border-blue-200 focus:border-blue-500 focus:ring-blue-500"
                         value={jugada.importe}
                         onChange={(e) => handleJugadaChange(rowIndex, "importe", e.target.value)}
                         onKeyDown={(e) => handleKeyDown(e, rowIndex, 2)}
@@ -368,56 +376,40 @@ export default function CargarJugadas() {
     }
 
     return (
-        <>
+        <div className="min-h-screen bg-gradient-to-b from-blue-50 to-indigo-50">
             <Navbar />
             <div className="container mx-auto p-4">
-                <Card>
-                    <CardHeader className="bg-primary text-primary-foreground">
+                <Card className="shadow-xl border border-blue-200">
+                    <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white">
                         <CardTitle className="text-2xl font-bold text-center">PASAR JUGADAS QUINIELA</CardTitle>
                     </CardHeader>
                     <CardContent className="pt-6">
                         <div className="space-y-6">
-                            <div className="flex items-center gap-4">
-                                <Label htmlFor="sorteo" className="min-w-[80px]">
-                                    SORTEO:
-                                </Label>
-                                <Select value={selectedSorteo} onValueChange={setSelectedSorteo}>
-                                    <SelectTrigger id="sorteo" className="w-[200px]">
-                                        <SelectValue placeholder="Seleccionar horario" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {horarios.map((horario) => (
-                                            <SelectItem key={horario.id} value={horario.id}>
-                                                {horario.label}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div>
-                                <Label className="mb-2 block">LOTERÍAS:</Label>
-                                <div className="grid grid-cols-3 gap-4">
-                                    {loterias.map((loteria) => (
-                                        <div key={loteria.id} className="flex items-center space-x-2">
-                                            <Checkbox
-                                                id={loteria.id}
-                                                checked={selectedLotteries.includes(loteria.id)}
-                                                onCheckedChange={(checked) => handleLotteryChange(loteria.id, checked === true)}
-                                            />
-                                            <Label htmlFor={loteria.id}>{loteria.label}</Label>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="flex">
+                            <div className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-blue-50 rounded-lg border border-blue-200 shadow-sm">
                                 <div className="flex items-center gap-4">
-                                    <Label htmlFor="pasador" className="min-w-[80px]">
+                                    <Label htmlFor="sorteo" className="min-w-[80px] text-blue-800 font-semibold">
+                                        SORTEO:
+                                    </Label>
+                                    <Select value={selectedSorteo} onValueChange={setSelectedSorteo}>
+                                        <SelectTrigger id="sorteo" className="w-[200px] border-blue-300 focus:ring-blue-500">
+                                            <SelectValue placeholder="Seleccionar horario" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {horarios.map((horario) => (
+                                                <SelectItem key={horario.id} value={horario.id}>
+                                                    {horario.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="flex items-center gap-4">
+                                    <Label htmlFor="pasador" className="min-w-[80px] text-blue-800 font-semibold">
                                         PASADOR:
                                     </Label>
                                     <Select value={selectedPasador} onValueChange={setSelectedPasador}>
-                                        <SelectTrigger id="pasador" className="w-[200px]">
+                                        <SelectTrigger id="pasador" className="w-[200px] border-blue-300 focus:ring-blue-500">
                                             <SelectValue placeholder="Seleccionar pasador" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -431,16 +423,38 @@ export default function CargarJugadas() {
                                 </div>
                             </div>
 
+                            <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200 shadow-sm">
+                                <Label className="mb-3 block text-indigo-800 font-semibold">LOTERÍAS:</Label>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                    {loterias.map((loteria) => (
+                                        <div key={loteria.id} className="flex items-center space-x-2 bg-white p-2 rounded-md shadow-sm">
+                                            <Checkbox
+                                                id={loteria.id}
+                                                checked={selectedLotteries.includes(loteria.id)}
+                                                onCheckedChange={(checked) => handleLotteryChange(loteria.id, checked === true)}
+                                                className="border-indigo-400 text-indigo-600"
+                                            />
+                                            <Label htmlFor={loteria.id} className="text-gray-700">
+                                                {loteria.label}
+                                            </Label>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
                             <div>
-                                <h3 className="text-lg font-semibold mb-2">DATOS DE LA JUGADA</h3>
-                                <div className="border rounded-md overflow-auto max-h-[600px]">
+                                <h3 className="text-lg font-semibold mb-2 text-blue-800 border-b-2 border-blue-300 pb-2 flex items-center">
+                                    <Calculator className="h-5 w-5 mr-2 text-blue-600" />
+                                    DATOS DE LA JUGADA
+                                </h3>
+                                <div className="border border-blue-200 rounded-md overflow-auto max-h-[600px] shadow-md">
                                     <Table>
-                                        <TableHeader className="sticky top-0 bg-white z-10">
+                                        <TableHeader className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-700 z-10">
                                             <TableRow>
-                                                <TableHead className="w-[60px]">Nº</TableHead>
-                                                <TableHead>NÚMERO</TableHead>
-                                                <TableHead>POSICIÓN</TableHead>
-                                                <TableHead>IMPORTE</TableHead>
+                                                <TableHead className="w-[60px] text-white font-bold">Nº</TableHead>
+                                                <TableHead className="text-white font-bold">NÚMERO</TableHead>
+                                                <TableHead className="text-white font-bold">POSICIÓN</TableHead>
+                                                <TableHead className="text-white font-bold">IMPORTE</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>{renderJugadasRows()}</TableBody>
@@ -448,63 +462,92 @@ export default function CargarJugadas() {
                                 </div>
                             </div>
 
-                            <div className="flex justify-between items-center">
-                                <div className="text-xl font-bold">Total: ${totalMonto.toFixed(2)}</div>
-                                <Button onClick={guardarJugadas}>Cargar Jugadas</Button>
+                            <div className="flex justify-between items-center p-4 bg-blue-50 rounded-lg border border-blue-200 shadow-sm">
+                                <div className="text-xl font-bold text-blue-800">
+                                    Total: <span className="text-green-600">${totalMonto.toFixed(2)}</span>
+                                </div>
+                                <Button
+                                    onClick={guardarJugadas}
+                                    className="bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white shadow-md transition-all duration-200 transform hover:scale-105"
+                                    disabled={isLoading}
+                                >
+                                    {isLoading ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Guardando...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Save className="mr-2 h-4 w-4" />
+                                            Cargar Jugadas
+                                        </>
+                                    )}
+                                </Button>
                             </div>
                         </div>
                     </CardContent>
                 </Card>
 
                 <Dialog open={isTicketDialogOpen} onOpenChange={setIsTicketDialogOpen}>
-                    <DialogContent>
+                    <DialogContent className="bg-white border border-blue-200 shadow-xl max-w-md">
                         <DialogHeader>
-                            <DialogTitle>Ticket de Jugada</DialogTitle>
+                            <DialogTitle className="text-blue-800 text-center">Ticket de Jugada</DialogTitle>
                         </DialogHeader>
-                        <pre className="whitespace-pre-wrap font-mono text-sm">{ticketContent}</pre>
-                        <DialogFooter>
-                            <Button onClick={() => setIsTicketDialogOpen(false)}>Cerrar</Button>
+                        <div className="bg-blue-50 p-4 rounded-md border border-blue-200">
+                            <pre className="whitespace-pre-wrap font-mono text-sm">{ticketContent}</pre>
+                        </div>
+                        <DialogFooter className="flex justify-between">
+                            <Button
+                                onClick={() => setIsTicketDialogOpen(false)}
+                                variant="outline"
+                                className="border-red-300 text-red-700 hover:bg-red-50"
+                            >
+                                <X className="mr-2 h-4 w-4" />
+                                Cerrar
+                            </Button>
                             <Button
                                 onClick={() => {
                                     const printWindow = window.open("", "", "width=300,height=600")
                                     if (printWindow) {
                                         printWindow.document.write(`
-                      <html>
-                        <head>
-                          <title>Ticket de Jugada</title>
-                          <style>
-                            body {
-                              font-family: 'Courier New', monospace;
-                              font-size: 12px;
-                              width: 80mm;
-                              margin: 0;
-                              padding: 10px;
-                            }
-                            pre {
-                              white-space: pre-wrap;
-                              margin: 0;
-                            }
-                          </style>
-                        </head>
-                        <body>
-                          <pre>${ticketContent}</pre>
-                        </body>
-                      </html>
-                    `)
+                                            <html>
+                                                <head>
+                                                    <title>Ticket de Jugada</title>
+                                                    <style>
+                                                        body {
+                                                            font-family: 'Courier New', monospace;
+                                                            font-size: 12px;
+                                                            width: 80mm;
+                                                            margin: 0;
+                                                            padding: 10px;
+                                                        }
+                                                        pre {
+                                                            white-space: pre-wrap;
+                                                            margin: 0;
+                                                        }
+                                                    </style>
+                                                </head>
+                                                <body>
+                                                    <pre>${ticketContent}</pre>
+                                                </body>
+                                            </html>
+                                        `)
                                         printWindow.document.close()
                                         printWindow.focus()
                                         printWindow.print()
                                         printWindow.close()
                                     }
                                 }}
+                                className="bg-gradient-to-r from-green-600 to-teal-700 hover:from-green-700 hover:to-teal-800 text-white"
                             >
+                                <Printer className="mr-2 h-4 w-4" />
                                 Imprimir
                             </Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
             </div>
-        </>
+        </div>
     )
 }
 

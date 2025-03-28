@@ -49,6 +49,7 @@ interface Pasador {
 const ITEMS_POR_PAGINA = 15
 const PASADORES_POR_MODULO = 20
 
+// Actualizar el componente BotonSelectorFecha para que tenga más color
 const BotonSelectorFecha = ({
     fecha,
     onChange,
@@ -58,24 +59,29 @@ const BotonSelectorFecha = ({
         <PopoverTrigger asChild>
             <Button
                 variant={"outline"}
-                className={cn("w-[120px] h-8 justify-start text-left font-normal text-xs", !fecha && "text-muted-foreground")}
+                className={cn(
+                    "w-[120px] h-8 justify-start text-left font-normal text-xs border-blue-300 hover:border-blue-500 hover:bg-blue-50",
+                    !fecha && "text-muted-foreground",
+                )}
             >
-                <CalendarIcon className="mr-2 h-3 w-3" />
+                <CalendarIcon className="mr-2 h-3 w-3 text-blue-500" />
                 {fecha ? format(fecha, "dd/MM/yyyy", { locale: es }) : etiqueta}
             </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0">
+        <PopoverContent className="w-auto p-0 border-blue-200 shadow-lg">
             <Calendar
                 mode="single"
                 selected={fecha}
                 onSelect={(fecha) => fecha && onChange(fecha)}
                 initialFocus
                 locale={es}
+                className="rounded-md"
             />
         </PopoverContent>
     </Popover>
 )
 
+// Actualizar el componente SelectorFecha para que tenga más color
 const SelectorFecha = ({
     fechaSeleccionada,
     onCambioFecha,
@@ -89,12 +95,12 @@ const SelectorFecha = ({
 }) => (
     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 text-xs">
         <div className="flex items-center gap-1">
-            <span className="font-medium">Fecha:</span>
+            <span className="font-medium text-blue-700">Fecha:</span>
             <BotonSelectorFecha fecha={fechaSeleccionada} onChange={onCambioFecha} etiqueta="Seleccionar" />
         </div>
         <Button
             onClick={onBuscar}
-            className="bg-black text-white hover:bg-gray-800 h-8 px-3 text-xs"
+            className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white hover:from-blue-700 hover:to-indigo-800 h-8 px-4 text-xs rounded-md shadow-md transition-all duration-200 transform hover:scale-105"
             disabled={estaCargando}
         >
             {estaCargando ? (
@@ -591,14 +597,14 @@ export default function ListadoDiario() {
         <div className="flex flex-col min-h-screen bg-gray-100">
             <Navbar />
             <main className="container mx-auto p-4">
-                <h1 className="text-xl font-bold text-black mb-4">Listado Diario</h1>
+                <h1 className="text-2xl font-bold text-blue-800 mb-4 border-b-2 border-blue-500 pb-2">Listado Diario</h1>
 
-                <div className="bg-white rounded-lg shadow-md p-4 mb-4">
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-md p-4 mb-4 border border-blue-200">
                     <div className="flex justify-between items-center mb-4">
                         <div className="flex items-center gap-4">
-                            <span className="font-medium">Seleccione el módulo:</span>
+                            <span className="font-medium text-blue-700">Seleccione el módulo:</span>
                             <Select value={moduloSeleccionado} onValueChange={setModuloSeleccionado}>
-                                <SelectTrigger className="w-[100px]">
+                                <SelectTrigger className="w-[100px] border-blue-300 focus:ring-blue-500">
                                     <SelectValue placeholder="Módulo" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -620,64 +626,125 @@ export default function ListadoDiario() {
                 </div>
 
                 {error && (
-                    <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded mb-4 text-sm" role="alert">
-                        <p className="font-bold">Error</p>
-                        <p>{error}</p>
+                    <div
+                        className="bg-red-100 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded mb-4 shadow-md"
+                        role="alert"
+                    >
+                        <div className="flex">
+                            <div className="py-1">
+                                <svg
+                                    className="fill-current h-6 w-6 text-red-500 mr-4"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    viewBox="0 0 20 20"
+                                >
+                                    <path d="M2.93 17.07A10 10 0 1 1 17.07 2.93 10 10 0 0 1 2.93 17.07zm12.73-1.41A8 8 0 1 0 4.34 4.34a8 8 0 0 0 11.32 11.32zM9 11V9h2v6H9v-4zm0-6h2v2H9V5z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <p className="font-bold">Error</p>
+                                <p>{error}</p>
+                            </div>
+                        </div>
                     </div>
                 )}
 
                 {estaCargando ? (
                     <div className="flex justify-center p-8">
-                        <Loader2 className="h-8 w-8 animate-spin" />
+                        <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
                     </div>
                 ) : (
                     <>
                         {pasadoresFiltrados.length === 0 ? (
                             <div
-                                className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-3 py-2 rounded mb-4 text-sm"
+                                className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded mb-4 shadow-md"
                                 role="alert"
                             >
-                                <p>No se encontraron datos para la fecha y módulo seleccionados.</p>
+                                <div className="flex">
+                                    <div className="py-1">
+                                        <svg
+                                            className="fill-current h-6 w-6 text-yellow-500 mr-4"
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            viewBox="0 0 20 20"
+                                        >
+                                            <path d="M2.93 17.07A10 10 0 1 1 17.07 2.93 10 10 0 0 1 2.93 17.07zm12.73-1.41A8 8 0 1 0 4.34 4.34a8 8 0 0 0 11.32 11.32zM9 11V9h2v6H9v-4zm0-6h2v2H9V5z" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p className="font-bold">Sin datos</p>
+                                        <p>No se encontraron datos para la fecha y módulo seleccionados.</p>
+                                    </div>
+                                </div>
                             </div>
                         ) : (
                             <>
-                                <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                                <div className="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-200">
                                     <Table>
-                                        <TableHeader>
+                                        <TableHeader className="bg-gradient-to-r from-blue-600 to-indigo-700">
                                             <TableRow>
-                                                <TableHead>Pasador</TableHead>
-                                                <TableHead className="text-right">Saldo Final</TableHead>
-                                                <TableHead className="text-right">Saldo Anterior</TableHead>
-                                                <TableHead className="text-right">Saldo Total</TableHead>
-                                                <TableHead className="text-right">Cobrado</TableHead>
-                                                <TableHead className="text-right">Pagado</TableHead>
-                                                <TableHead className="text-right">Jugado</TableHead>
-                                                <TableHead className="text-right">Comisión</TableHead>
-                                                <TableHead className="text-right">Total Ganado</TableHead>
+                                                <TableHead className="text-white font-bold">Pasador</TableHead>
+                                                <TableHead className="text-right text-white font-bold">Saldo Final</TableHead>
+                                                <TableHead className="text-right text-white font-bold">Saldo Anterior</TableHead>
+                                                <TableHead className="text-right text-white font-bold">Saldo Total</TableHead>
+                                                <TableHead className="text-right text-white font-bold">Cobrado</TableHead>
+                                                <TableHead className="text-right text-white font-bold">Pagado</TableHead>
+                                                <TableHead className="text-right text-white font-bold">Jugado</TableHead>
+                                                <TableHead className="text-right text-white font-bold">Comisión</TableHead>
+                                                <TableHead className="text-right text-white font-bold">Total Ganado</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {pasadoresPaginados.map((pasador) => (
-                                                <TableRow key={pasador.id}>
-                                                    <TableCell>
-                                                        {pasador.displayId} {pasador.nombre}
+                                            {pasadoresPaginados.map((pasador, index) => (
+                                                <TableRow
+                                                    key={pasador.id}
+                                                    className={index % 2 === 0 ? "bg-blue-50" : "bg-white hover:bg-blue-100"}
+                                                >
+                                                    <TableCell className="font-medium">
+                                                        <div className="flex items-center">
+                                                            <div className="h-8 w-8 rounded-full bg-blue-600 text-white flex items-center justify-center mr-2">
+                                                                {pasador.nombre.charAt(0).toUpperCase()}
+                                                            </div>
+                                                            <div>
+                                                                <div className="font-bold text-blue-800">{pasador.displayId}</div>
+                                                                <div className="text-sm text-gray-600">{pasador.nombre}</div>
+                                                            </div>
+                                                        </div>
                                                     </TableCell>
-                                                    <TableCell className="text-right">{formatearMoneda(pasador.saldoFinal)}</TableCell>
-                                                    <TableCell className="text-right">{formatearMoneda(pasador.saldoAnterior)}</TableCell>
-                                                    <TableCell className="text-right">{formatearMoneda(pasador.saldoTotal)}</TableCell>
-                                                    <TableCell className="text-right">{formatearMoneda(pasador.cobrado)}</TableCell>
-                                                    <TableCell className="text-right">{formatearMoneda(pasador.pagado)}</TableCell>
-                                                    <TableCell className="text-right">{formatearMoneda(pasador.jugado)}</TableCell>
-                                                    <TableCell className="text-right">{formatearMoneda(pasador.comisionPasador)}</TableCell>
-                                                    <TableCell className="text-right">{formatearMoneda(pasador.premioTotal)}</TableCell>
+                                                    <TableCell
+                                                        className={`text-right font-semibold ${pasador.saldoFinal >= 0 ? "text-green-600" : "text-red-600"}`}
+                                                    >
+                                                        {formatearMoneda(pasador.saldoFinal)}
+                                                    </TableCell>
+                                                    <TableCell
+                                                        className={`text-right ${pasador.saldoAnterior >= 0 ? "text-green-600" : "text-red-600"}`}
+                                                    >
+                                                        {formatearMoneda(pasador.saldoAnterior)}
+                                                    </TableCell>
+                                                    <TableCell
+                                                        className={`text-right font-semibold ${pasador.saldoTotal >= 0 ? "text-green-600" : "text-red-600"}`}
+                                                    >
+                                                        {formatearMoneda(pasador.saldoTotal)}
+                                                    </TableCell>
+                                                    <TableCell className="text-right text-blue-600">{formatearMoneda(pasador.cobrado)}</TableCell>
+                                                    <TableCell className="text-right text-purple-600">
+                                                        {formatearMoneda(pasador.pagado)}
+                                                    </TableCell>
+                                                    <TableCell className="text-right text-indigo-600">
+                                                        {formatearMoneda(pasador.jugado)}
+                                                    </TableCell>
+                                                    <TableCell className="text-right text-orange-600">
+                                                        {formatearMoneda(pasador.comisionPasador)}
+                                                    </TableCell>
+                                                    <TableCell className="text-right text-teal-600">
+                                                        {formatearMoneda(pasador.premioTotal)}
+                                                    </TableCell>
                                                 </TableRow>
                                             ))}
                                         </TableBody>
                                     </Table>
                                 </div>
 
-                                <div className="flex items-center justify-between mt-4">
-                                    <div className="text-sm text-muted-foreground">
+                                <div className="flex items-center justify-between mt-6 bg-gray-50 p-3 rounded-lg shadow-sm border border-gray-200">
+                                    <div className="text-sm text-blue-700 font-medium">
                                         Página {paginaActual} de {totalPaginas}
                                     </div>
                                     <div className="flex gap-2">
@@ -686,6 +753,7 @@ export default function ListadoDiario() {
                                             size="sm"
                                             onClick={() => setPaginaActual((prev) => Math.max(prev - 1, 1))}
                                             disabled={paginaActual === 1}
+                                            className="border-blue-300 text-blue-700 hover:bg-blue-50"
                                         >
                                             Anterior
                                         </Button>
@@ -694,6 +762,7 @@ export default function ListadoDiario() {
                                             size="sm"
                                             onClick={() => setPaginaActual((prev) => Math.min(prev + 1, totalPaginas))}
                                             disabled={paginaActual === totalPaginas}
+                                            className="border-blue-300 text-blue-700 hover:bg-blue-50"
                                         >
                                             Siguiente
                                         </Button>
