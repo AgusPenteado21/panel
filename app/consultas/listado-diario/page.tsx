@@ -254,45 +254,74 @@ export default function ListadoDiario() {
                 }
             })
 
-            Promise.all([getDocs(pagosQuery), getDocs(cobrosQuery)]).then(([pagosSnapshot, cobrosSnapshot]) => {
+            // Obtener pagos y cobros por separado para depurar
+            getDocs(pagosQuery).then((pagosSnapshot) => {
                 let totalPagos = 0
-                let totalCobros = 0
 
+                // Depurar cada documento de pago
                 pagosSnapshot.forEach((doc) => {
-                    totalPagos += doc.data().monto || 0
+                    const pagoData = doc.data()
+                    // Asegurarse de que el monto del pago sea un valor positivo
+                    const montoPago = Math.abs(pagoData.monto || 0)
+                    console.log(`Pago encontrado para ${pasadorNombre}: ID=${doc.id}, Monto=${montoPago}`)
+                    totalPagos += montoPago
                 })
 
-                cobrosSnapshot.forEach((doc) => {
-                    totalCobros += doc.data().monto || 0
+                console.log(`Total de pagos para ${pasadorNombre}: ${totalPagos}`)
+
+                // Obtener cobros después de procesar pagos
+                getDocs(cobrosQuery).then((cobrosSnapshot) => {
+                    let totalCobros = 0
+
+                    // Depurar cada documento de cobro
+                    cobrosSnapshot.forEach((doc) => {
+                        const cobroData = doc.data()
+                        // Asegurarse de que el monto del cobro sea un valor positivo
+                        const montoCobro = Math.abs(cobroData.monto || 0)
+                        console.log(`Cobro encontrado para ${pasadorNombre}: ID=${doc.id}, Monto=${montoCobro}`)
+                        totalCobros += montoCobro
+                    })
+
+                    console.log(`Total de cobros para ${pasadorNombre}: ${totalCobros}`)
+
+                    console.log(`Monto jugado para ${pasadorNombre}: ${ventasOnlineAcumuladas}`)
+                    console.log(`Pagos para ${pasadorNombre}: ${totalPagos}`)
+                    console.log(`Cobros para ${pasadorNombre}: ${totalCobros}`)
+                    console.log(`Premio total para ${pasadorNombre}: ${premioTotal}`)
+                    console.log(`Saldo anterior para ${pasadorNombre}: ${saldoAnterior}`)
+
+                    const comisionCalculada = (comisionPorcentaje / 100) * ventasOnlineAcumuladas
+                    const comisionRedondeada = Math.round(comisionCalculada * 100) / 100
+
+                    // Cálculo del saldo final con signos explícitos para mayor claridad
+                    // Asegurarse de que los pagos se resten y los cobros se sumen
+                    const saldoFinal =
+                        saldoAnterior +
+                        ventasOnlineAcumuladas -
+                        comisionRedondeada -
+                        premioTotal -
+                        Math.abs(totalPagos) +
+                        Math.abs(totalCobros)
+
+                    console.log(`Cálculo de saldo final para ${pasadorNombre}:`)
+                    console.log(`Saldo anterior: ${saldoAnterior}`)
+                    console.log(`+ Ventas online: ${ventasOnlineAcumuladas}`)
+                    console.log(`- Comisión (${comisionPorcentaje}%): ${comisionRedondeada}`)
+                    console.log(`- Premio total: ${premioTotal}`)
+                    console.log(`- Total pagos: ${Math.abs(totalPagos)}`)
+                    console.log(`+ Total cobros: ${Math.abs(totalCobros)}`)
+                    console.log(`= Saldo final: ${saldoFinal}`)
+
+                    // Actualizar el estado con los valores calculados
+                    // Asegurarse de que los valores se almacenen como positivos para mostrarlos correctamente en la UI
+                    actualizarMontoJugadoPagosCobros(
+                        pasadorId,
+                        ventasOnlineAcumuladas,
+                        Math.abs(totalPagos),
+                        Math.abs(totalCobros),
+                    )
+                    actualizarComisionYSaldoFinal(pasadorId, comisionRedondeada, saldoFinal)
                 })
-
-                console.log(`Monto jugado para ${pasadorNombre}: ${ventasOnlineAcumuladas}`)
-                console.log(`Pagos para ${pasadorNombre}: ${totalPagos}`)
-                console.log(`Cobros para ${pasadorNombre}: ${totalCobros}`)
-                console.log(`Premio total para ${pasadorNombre}: ${premioTotal}`)
-                console.log(`Saldo anterior para ${pasadorNombre}: ${saldoAnterior}`)
-
-                const comisionCalculada = (comisionPorcentaje / 100) * ventasOnlineAcumuladas
-                const comisionRedondeada = Math.round(comisionCalculada * 100) / 100
-
-                // MODIFICACIÓN: Incluir saldo anterior en el cálculo del saldo final
-                const saldoFinal =
-                    saldoAnterior + ventasOnlineAcumuladas - comisionRedondeada - premioTotal + totalPagos - totalCobros
-
-                console.log(`Cálculo de saldo final para ${pasadorNombre}:`)
-                console.log(`Saldo anterior: ${saldoAnterior}`)
-                console.log(`Ventas online: ${ventasOnlineAcumuladas}`)
-                console.log(`Comisión (${comisionPorcentaje}%): ${comisionRedondeada}`)
-                console.log(`Premio total: ${premioTotal}`)
-                console.log(`Total pagos: ${totalPagos}`)
-                console.log(`Total cobros: ${totalCobros}`)
-                console.log(
-                    `Saldo final: ${saldoAnterior} + ${ventasOnlineAcumuladas} - ${comisionRedondeada} - ${premioTotal} + ${totalPagos} - ${totalCobros} = ${saldoFinal}`,
-                )
-                console.log(`Saldo total: ${saldoFinal} (igual al saldo final)`)
-
-                actualizarMontoJugadoPagosCobros(pasadorId, ventasOnlineAcumuladas, totalPagos, totalCobros)
-                actualizarComisionYSaldoFinal(pasadorId, comisionRedondeada, saldoFinal)
             })
         })
 
