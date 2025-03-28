@@ -230,10 +230,10 @@ export default function IngresarPagosYCobros() {
                                                         onChange={(e) => handleImporteChange(pasador.id, e.target.value)}
                                                         placeholder="0.00"
                                                         className={`w-full border-blue-200 focus:border-blue-500 focus:ring-blue-500 ${importes[pasador.id] && Number.parseFloat(importes[pasador.id]) < 0
-                                                                ? "text-red-600 font-medium"
-                                                                : importes[pasador.id] && Number.parseFloat(importes[pasador.id]) > 0
-                                                                    ? "text-green-600 font-medium"
-                                                                    : ""
+                                                            ? "text-red-600 font-medium"
+                                                            : importes[pasador.id] && Number.parseFloat(importes[pasador.id]) > 0
+                                                                ? "text-green-600 font-medium"
+                                                                : ""
                                                             }`}
                                                         step="0.01"
                                                     />
@@ -267,7 +267,7 @@ export default function IngresarPagosYCobros() {
 
                             <div className="text-center text-sm text-gray-600 bg-yellow-50 p-3 rounded-lg border border-yellow-200 w-full">
                                 <p className="font-medium text-yellow-800">
-                                    Ingrese valores negativos para pagos (ej: -50000) y valores positivos para cobros (ej: 50000)
+                                    Ingrese valores positivos para pagos (ej: 50000) y valores negativos para cobros (ej: -50000)
                                 </p>
                             </div>
                         </CardFooter>
