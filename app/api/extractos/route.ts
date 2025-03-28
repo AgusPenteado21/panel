@@ -67,6 +67,7 @@ const URLS_PIZARRAS = {
     CORRIENTES: "https://vivitusuerte.com/pizarra/corrientes",
     CHACO: "https://vivitusuerte.com/pizarra/chaco",
     MONTEVIDEO: "https://vivitusuerte.com/pizarra/montevideo",
+    "RIO NEGRO": "https://vivitusuerte.com/pizarra/rio+negro", // Agregado Rio Negro
 }
 
 const HORARIOS_SORTEOS = {
@@ -411,7 +412,8 @@ async function obtenerResultadosPizarra(provincia: string, turno: string): Promi
             console.log(`Sección encontrada para ${provincia} - ${turno}:`, $seccionTurno.length > 0)
 
             if ($seccionTurno.length > 0) {
-                console.log(`Contenido de la sección para ${provincia} - ${turno}:\n`, $seccionTurno.html() || "")
+                console.log(`Contenido de la sección para ${provincia} - ${turno}:
+`, $seccionTurno.html() || "")
 
                 const numerosEncontrados: string[] = []
                 let elementoActual = $seccionTurno
@@ -640,16 +642,20 @@ async function obtenerResultadosPizarraDirecto(): Promise<any[]> {
 
         const sorteos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
 
-        // Objeto para almacenar los resultados que se guardarán en Firebase
-        const resultadosPorDia: ResultadosPorDia = {}
-        resultadosPorDia[fechaDisplayActual] = {
-            fecha: fechaDisplayActual,
-            dia: nombreDiaCapitalizado,
-            resultados: [],
+        // Crear el objeto resultadosPorDia para almacenar los resultados
+        const resultadosPorDia: { [key: string]: ResultadoDia } = {
+            [fechaDisplayActual]: {
+                fecha: fechaDisplayActual,
+                dia: nombreDiaCapitalizado,
+                resultados: [],
+            }
         }
 
         // Para cada provincia y sorteo, obtener resultados
         for (const [provinciaKey, pizarraUrl] of Object.entries(URLS_PIZARRAS)) {
+            console.log(`Procesando provincia: ${provinciaKey}`)
+
+            // Procesar cada sort  {
             console.log(`Procesando provincia: ${provinciaKey}`)
 
             // Procesar cada sorteo
@@ -934,4 +940,3 @@ export async function POST(request: Request) {
 }
 
 console.log("route.ts file loaded successfully")
-
