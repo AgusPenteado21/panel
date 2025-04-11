@@ -100,32 +100,33 @@ export default function IngresarPagosYCobros() {
                     const pasador = pasadores.find((p) => p.id === pasadorId)
                     const monto = Number.parseFloat(importe)
 
-                    if (monto < 0) {
-                        // Los pagos son valores negativos - guardamos con signo negativo
+                    // SOLUCIÓN CORREGIDA: Guardar en las colecciones correctas
+                    if (monto > 0) {
+                        // Los pagos son valores positivos - guardamos en la colección de pagos
                         const data = {
                             pasadorId: pasadorId,
-                            monto: monto, // Guardamos con signo negativo
+                            monto: monto,
                             fecha: fechaFormateada,
                             observaciones: `Módulo: ${pasador?.modulo}`,
                             usuario: auth.currentUser?.email || "admin@example.com",
                             createdAt: serverTimestamp(),
                         }
-                        console.log("Guardando pago:", data)
+                        console.log("Guardando pago en colección pagos:", data)
                         await addDoc(pagosCollection, data)
-                        console.log("Pago procesado:", data)
+                        console.log("Pago procesado correctamente")
                     } else {
-                        // Los cobros son valores positivos
+                        // Los cobros son valores negativos - guardamos en la colección de cobros
                         const data = {
                             pasadorId: pasadorId,
-                            monto: monto, // Guardamos con signo positivo
+                            monto: Math.abs(monto), // Guardamos el valor absoluto para mantener consistencia
                             fecha: fechaFormateada,
                             observaciones: `Módulo: ${pasador?.modulo}`,
                             usuario: auth.currentUser?.email || "admin@example.com",
                             createdAt: serverTimestamp(),
                         }
-                        console.log("Guardando cobro:", data)
+                        console.log("Guardando cobro en colección cobros:", data)
                         await addDoc(cobrosCollection, data)
-                        console.log("Cobro procesado:", data)
+                        console.log("Cobro procesado correctamente")
                     }
                 }
             }
@@ -230,10 +231,10 @@ export default function IngresarPagosYCobros() {
                                                         onChange={(e) => handleImporteChange(pasador.id, e.target.value)}
                                                         placeholder="0.00"
                                                         className={`w-full border-blue-200 focus:border-blue-500 focus:ring-blue-500 ${importes[pasador.id] && Number.parseFloat(importes[pasador.id]) < 0
-                                                            ? "text-red-600 font-medium"
-                                                            : importes[pasador.id] && Number.parseFloat(importes[pasador.id]) > 0
-                                                                ? "text-green-600 font-medium"
-                                                                : ""
+                                                                ? "text-red-600 font-medium"
+                                                                : importes[pasador.id] && Number.parseFloat(importes[pasador.id]) > 0
+                                                                    ? "text-green-600 font-medium"
+                                                                    : ""
                                                             }`}
                                                         step="0.01"
                                                     />
@@ -277,4 +278,3 @@ export default function IngresarPagosYCobros() {
         </div>
     )
 }
-
