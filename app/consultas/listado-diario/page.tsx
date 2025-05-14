@@ -776,4 +776,3 @@ export default function ListadoDiario() {
         </div>
     )
 }
-
