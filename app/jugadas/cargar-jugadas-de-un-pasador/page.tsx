@@ -46,6 +46,7 @@ const provinceAbbreviations: { [key: string]: string } = {
     MENDOZ: "M",
     CORRIE: "CR",
     CHACO: "CH",
+    RIONEG: "RN",
 }
 
 // Número total de filas de jugadas
@@ -104,6 +105,7 @@ export default function CargarJugadas() {
         { id: "MENDOZ", label: "Mendoza" },
         { id: "CORRIE", label: "Corrientes" },
         { id: "CHACO", label: "Chaco" },
+        { id: "RIONEG", label: "Rio Negro" },
     ]
 
     useEffect(() => {
@@ -550,4 +552,3 @@ export default function CargarJugadas() {
         </div>
     )
 }
-
