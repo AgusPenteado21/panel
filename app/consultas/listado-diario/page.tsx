@@ -115,21 +115,76 @@ const SelectorFecha = ({
     </div>
 )
 
+// Modificar la función fetchAciertosData para validar mejor los datos
 const fetchAciertosData = async (fecha: Date) => {
     const aciertosRef = collection(db, "aciertos")
     const fechaString = format(fecha, "yyyy-MM-dd")
+    console.log(`Obteniendo aciertos para la fecha: ${fechaString}`)
 
-    const querySnapshot = await getDocs(aciertosRef)
-    const aciertosData: { [key: string]: number } = {}
+    try {
+        // Obtener todos los documentos de aciertos
+        const querySnapshot = await getDocs(aciertosRef)
+        const aciertosData: { [key: string]: number } = {}
 
-    querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        if (data[fechaString] && data[fechaString].totalGanado) {
-            aciertosData[doc.id] = data[fechaString].totalGanado
+        // Procesar cada documento de aciertos (uno por pasador)
+        querySnapshot.forEach((doc) => {
+            const data = doc.data()
+            if (data[fechaString] && data[fechaString].totalGanado !== undefined) {
+                // Validar que el valor sea un número válido
+                const totalGanado = Number(data[fechaString].totalGanado)
+                if (!isNaN(totalGanado)) {
+                    // Guardar el total ganado para este pasador
+                    aciertosData[doc.id] = totalGanado
+                    console.log(`Aciertos encontrados para ${doc.id}: ${totalGanado}`)
+                } else {
+                    console.log(`Valor inválido de aciertos para ${doc.id}: ${data[fechaString].totalGanado}`)
+                }
+            } else {
+                console.log(`No se encontraron aciertos para ${doc.id} en la fecha ${fechaString}`)
+            }
+        })
+
+        // Si no hay aciertos en la colección "aciertos", buscar en "extractos"
+        if (Object.keys(aciertosData).length === 0) {
+            console.log("No se encontraron aciertos en la colección 'aciertos', buscando en 'extractos'...")
+            const extractosRef = doc(db, "extractos", fechaString)
+            const extractoSnapshot = await getDoc(extractosRef)
+
+            if (extractoSnapshot.exists()) {
+                const extractoData = extractoSnapshot.data()
+                if (extractoData && extractoData.aciertos) {
+                    // Agrupar aciertos por pasador
+                    const aciertos = extractoData.aciertos
+
+                    // Crear un mapa para acumular los premios por pasador
+                    const premiosPorPasador: { [key: string]: number } = {}
+
+                    // Procesar cada acierto
+                    aciertos.forEach((acierto: any) => {
+                        if (acierto.pasador && acierto.premio !== undefined) {
+                            const pasador = acierto.pasador
+                            const premio =
+                                typeof acierto.premio === "number" ? acierto.premio : Number.parseFloat(acierto.premio) || 0
+
+                            // Acumular premio para este pasador
+                            premiosPorPasador[pasador] = (premiosPorPasador[pasador] || 0) + premio
+                        }
+                    })
+
+                    // Transferir los premios acumulados al resultado
+                    Object.keys(premiosPorPasador).forEach((pasador) => {
+                        aciertosData[pasador] = premiosPorPasador[pasador]
+                        console.log(`Aciertos encontrados en extractos para ${pasador}: ${premiosPorPasador[pasador]}`)
+                    })
+                }
+            }
         }
-    })
 
-    return aciertosData
+        return aciertosData
+    } catch (error) {
+        console.error("Error al obtener aciertos:", error)
+        return {}
+    }
 }
 
 // Función para guardar los saldos diarios en Firestore
@@ -180,6 +235,28 @@ export default function ListadoDiario() {
     const [estaCargando, setEstaCargando] = useState(true)
     const [fechaSeleccionada, setFechaSeleccionada] = useState<Date>(startOfDay(new Date()))
     const [error, setError] = useState<string | null>(null)
+    const [intervaloActualizacion, setIntervaloActualizacion] = useState<NodeJS.Timeout | null>(null)
+    const [ultimaActualizacion, setUltimaActualizacion] = useState<Date>(new Date())
+
+    useEffect(() => {
+        // Configurar intervalo para actualización automática (cada 5 minutos)
+        const intervalo = setInterval(
+            () => {
+                console.log("Ejecutando actualización automática de aciertos...")
+                actualizarAciertosAutomaticamente()
+            },
+            5 * 60 * 1000,
+        ) // 5 minutos
+
+        setIntervaloActualizacion(intervalo)
+
+        // Limpiar intervalo al desmontar
+        return () => {
+            if (intervaloActualizacion) {
+                clearInterval(intervaloActualizacion)
+            }
+        }
+    }, [])
 
     const actualizarMontoJugadoPagosCobros = (pasadorId: string, monto: number, pagos: number, cobros: number) => {
         setPasadores((prevPasadores: Pasador[]) => {
@@ -192,16 +269,27 @@ export default function ListadoDiario() {
         })
     }
 
+    // Modificar la función actualizarComisionYSaldoFinal para validar los datos
     const actualizarComisionYSaldoFinal = (pasadorId: string, comision: number, saldoFinal: number) => {
         setPasadores((prevPasadores: Pasador[]) => {
             const nuevoPasadores = prevPasadores.map((p: Pasador) => {
                 if (p.id === pasadorId) {
+                    // Validar que el saldo final sea un número razonable
+                    let saldoFinalValidado = saldoFinal
+
+                    // Si hay un premio pero no hay jugadas, pagos ni cobros, el saldo no debería cambiar
+                    if (p.premioTotal > 0 && p.jugado === 0 && p.pagado === 0 && p.cobrado === 0) {
+                        console.log(`ADVERTENCIA: Premio sin jugadas para ${p.nombre}. Premio: ${p.premioTotal}`)
+                        // Mantener el saldo anterior en este caso
+                        saldoFinalValidado = p.saldoAnterior
+                    }
+
                     // Ahora el saldo total es igual al saldo final
                     const pasadorActualizado = {
                         ...p,
                         comisionPasador: comision,
-                        saldoFinal: saldoFinal,
-                        saldoTotal: saldoFinal, // Saldo total = Saldo final
+                        saldoFinal: saldoFinalValidado,
+                        saldoTotal: saldoFinalValidado, // Saldo total = Saldo final
                     }
 
                     // Guardar los datos en Firestore después de actualizar el estado
@@ -299,6 +387,22 @@ export default function ListadoDiario() {
                     const comisionCalculada = (comisionPorcentaje / 100) * ventasOnlineAcumuladas
                     const comisionRedondeada = Math.round(comisionCalculada * 100) / 100
 
+                    // Validar si hay premio pero no hay jugadas
+                    if (premioTotal > 0 && ventasOnlineAcumuladas === 0 && totalPagos === 0 && totalCobros === 0) {
+                        console.log(`ADVERTENCIA: Premio sin jugadas para ${pasadorNombre}. Premio: ${premioTotal}`)
+
+                        // Actualizar solo el monto jugado, pagos y cobros, pero no el saldo
+                        actualizarMontoJugadoPagosCobros(
+                            pasadorId,
+                            ventasOnlineAcumuladas,
+                            Math.abs(totalPagos),
+                            Math.abs(totalCobros),
+                        )
+
+                        // No actualizar el saldo en este caso
+                        return
+                    }
+
                     // Cálculo del saldo final con signos explícitos para mayor claridad
                     // Asegurarse de que los pagos se resten y los cobros se sumen
                     const saldoFinal =
@@ -336,6 +440,63 @@ export default function ListadoDiario() {
         }
     }
 
+    // Modificar la función actualizarAciertosAutomaticamente para validar los datos
+    const actualizarAciertosAutomaticamente = async () => {
+        try {
+            console.log("Actualizando aciertos automáticamente...")
+            const aciertosData = await fetchAciertosData(fechaSeleccionada)
+
+            // Actualizar solo los premios totales sin cambiar el resto de datos
+            setPasadores((prevPasadores) =>
+                prevPasadores.map((pasador) => {
+                    const nuevoPremioPasador = aciertosData[pasador.nombre] || 0
+
+                    // Si hay un premio pero no hay jugadas, no actualizar el saldo
+                    if (nuevoPremioPasador > 0 && pasador.jugado === 0) {
+                        console.log(`ADVERTENCIA: Premio sin jugadas para ${pasador.nombre}. Premio: ${nuevoPremioPasador}`)
+                        // Solo actualizar el premio, no el saldo
+                        return {
+                            ...pasador,
+                            premioTotal: nuevoPremioPasador,
+                            // Mantener los saldos como estaban
+                        }
+                    }
+
+                    return {
+                        ...pasador,
+                        premioTotal: nuevoPremioPasador,
+                    }
+                }),
+            )
+
+            // Recalcular saldos finales con los nuevos premios
+            pasadores.forEach((pasador) => {
+                const premioTotal = aciertosData[pasador.nombre] || pasador.premioTotal
+
+                // Solo actualizar si el premio cambió y hay jugadas
+                if (premioTotal !== pasador.premioTotal && pasador.jugado > 0) {
+                    console.log(`Actualizando premio para ${pasador.nombre}: ${pasador.premioTotal} -> ${premioTotal}`)
+
+                    // Recalcular saldo final con el nuevo premio
+                    const comisionCalculada = (pasador.comisionPorcentaje / 100) * pasador.jugado
+                    const comisionRedondeada = Math.round(comisionCalculada * 100) / 100
+
+                    const saldoFinal =
+                        pasador.saldoAnterior + pasador.jugado - comisionRedondeada - premioTotal - pasador.pagado + pasador.cobrado
+
+                    // Actualizar comisión y saldo final
+                    actualizarComisionYSaldoFinal(pasador.id, comisionRedondeada, saldoFinal)
+                }
+            })
+
+            toast.success("Aciertos actualizados automáticamente")
+            setUltimaActualizacion(new Date())
+        } catch (error) {
+            console.error("Error al actualizar aciertos automáticamente:", error)
+        }
+    }
+
+    // Modificar la función manejarBusqueda para validar mejor los datos
     const manejarBusqueda = async () => {
         setEstaCargando(true)
         setError(null)
@@ -528,6 +689,18 @@ export default function ListadoDiario() {
                 )
             })
 
+            // Validar los premios totales antes de actualizar los pasadores
+            updatedListaPasadoresComision.forEach((pasador, index) => {
+                // Si hay un premio pero no hay jugadas, no afectar el saldo
+                if (pasador.premioTotal > 0 && pasador.jugado === 0) {
+                    console.log(`ADVERTENCIA: Premio sin jugadas para ${pasador.nombre}. Premio: ${pasador.premioTotal}`)
+
+                    // Establecer el saldo final igual al saldo anterior en este caso
+                    updatedListaPasadoresComision[index].saldoFinal = pasador.saldoAnterior
+                    updatedListaPasadoresComision[index].saldoTotal = pasador.saldoAnterior
+                }
+            })
+
             // Suscribirse a las actualizaciones de jugado, pagos y cobros para cada pasador
             updatedListaPasadoresComision.forEach((pasador) => {
                 obtenerMontoJugadoPagosCobros(
@@ -565,6 +738,7 @@ export default function ListadoDiario() {
             }
 
             console.log("Búsqueda completada")
+            setUltimaActualizacion(new Date())
         } catch (err) {
             console.error("Error en manejarBusqueda:", err)
             setError(`Hubo un error al buscar los datos: ${err instanceof Error ? err.message : String(err)}`)
@@ -623,6 +797,17 @@ export default function ListadoDiario() {
                             estaCargando={estaCargando}
                         />
                     </div>
+                </div>
+                <div className="text-xs text-gray-500 mt-2">
+                    Última actualización: {format(ultimaActualizacion, "dd/MM/yyyy HH:mm:ss", { locale: es })}
+                    <Button
+                        onClick={actualizarAciertosAutomaticamente}
+                        variant="ghost"
+                        size="sm"
+                        className="ml-2 h-6 px-2 text-blue-600"
+                    >
+                        <Loader2 className="h-3 w-3 mr-1" /> Actualizar ahora
+                    </Button>
                 </div>
 
                 {error && (

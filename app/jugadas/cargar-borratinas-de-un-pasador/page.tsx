@@ -292,7 +292,8 @@ export default function CargarJugadas() {
         }
 
         setQuintinaApuestas([...quintinaApuestas, nuevaApuesta])
-        setTotal(total + selectedLotteries.length * 50)
+        // Cambiar de 50 a 100 pesos por provincia
+        setTotal(total + selectedLotteries.length * 100)
         toast.success("Quintina agregada correctamente")
 
         quintinaRefs.current.forEach((ref) => {
@@ -317,7 +318,8 @@ export default function CargarJugadas() {
     const eliminarQuintina = (index: number) => {
         const apuestaEliminada = quintinaApuestas[index]
         setQuintinaApuestas(quintinaApuestas.filter((_, i) => i !== index))
-        setTotal(total - apuestaEliminada.provincias.length * 50)
+        // Cambiar de 50 a 100 pesos por provincia
+        setTotal(total - apuestaEliminada.provincias.length * 100)
         toast.success("Quintina eliminada")
     }
 
@@ -425,11 +427,13 @@ export default function CargarJugadas() {
 
             quintinaApuestas.forEach((apuesta) => {
                 const numerosFormateados = apuesta.numeros.join("-")
-                ticketContent += `${numerosFormateados}   $50.00\n`
+                // Cambiar de $50.00 a $100.00 en el ticket
+                ticketContent += `${numerosFormateados}   $100.00\n`
             })
 
             ticketContent += "-".repeat(32) + "\n"
-            ticketContent += `TOTAL: $${(quintinaApuestas.length * 50 * quintinaApuestas[0].provincias.length).toFixed(2)}\n\n`
+            // Cambiar de 50 a 100 pesos por provincia en el cálculo del total
+            ticketContent += `TOTAL: $${(quintinaApuestas.length * 100 * quintinaApuestas[0].provincias.length).toFixed(2)}\n\n`
         }
 
         if (exactaApuestas.length > 0) {
@@ -600,7 +604,8 @@ export default function CargarJugadas() {
                         provincias: selectedLotteries,
                         secuencia: nuevaSecuencia,
                         tipo: "NUEVA QUINTINA",
-                        totalMonto: apuestas.length * selectedLotteries.length * 50,
+                        // Cambiar de 50 a 100 pesos por provincia
+                        totalMonto: apuestas.length * selectedLotteries.length * 100,
                     }
 
                     const docRef = await addDoc(jugadasCollection, nuevaJugada)
@@ -1270,4 +1275,3 @@ export default function CargarJugadas() {
         </>
     )
 }
-
