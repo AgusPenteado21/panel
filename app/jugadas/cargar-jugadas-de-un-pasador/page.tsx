@@ -13,7 +13,7 @@ import { db } from "@/lib/firebase"
 import { collection, getDocs, addDoc, serverTimestamp } from "firebase/firestore"
 import toast from "react-hot-toast"
 import Navbar from "@/app/components/Navbar"
-import { Loader2, Save, Printer, X, Calculator } from "lucide-react"
+import { Loader2, Save, Printer, X, Calculator } from 'lucide-react'
 
 interface Pasador {
     id: string
@@ -47,6 +47,8 @@ const provinceAbbreviations: { [key: string]: string } = {
     CORRIE: "CR",
     CHACO: "CH",
     RIONEG: "RN",
+    SANTIA: "SG", // Agregado Santiago
+    TUCUMA: "TU", // Agregado Tucumán
 }
 
 // Número total de filas de jugadas
@@ -106,6 +108,8 @@ export default function CargarJugadas() {
         { id: "CORRIE", label: "Corrientes" },
         { id: "CHACO", label: "Chaco" },
         { id: "RIONEG", label: "Rio Negro" },
+        { id: "SANTIA", label: "Santiago" }, // Agregado Santiago
+        { id: "TUCUMA", label: "Tucumán" }, // Agregado Tucumán
     ]
 
     useEffect(() => {

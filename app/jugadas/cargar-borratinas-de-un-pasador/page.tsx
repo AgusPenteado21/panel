@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Plus, Trash2, Save, Printer, Share2, RefreshCw } from "lucide-react"
+import { Plus, Trash2, Save, Printer, Share2, RefreshCw } from 'lucide-react'
 import Navbar from "@/app/components/Navbar"
 import { db } from "@/lib/firebase"
 import { collection, getDocs, addDoc, serverTimestamp } from "firebase/firestore"
@@ -74,7 +74,7 @@ const lotteryAbbreviations: { [key: string]: string } = {
     NOCTURNA: "NOC",
 }
 
-// Agregar Río Negro a las provincias y abreviaturas
+// Agregar Santiago y Tucumán a las abreviaturas de provincias
 const provinceAbbreviations: { [key: string]: string } = {
     NACION: "NAC",
     PROVIN: "PRO",
@@ -86,9 +86,11 @@ const provinceAbbreviations: { [key: string]: string } = {
     CORRIE: "CRI",
     CHACO: "CHA",
     RIONEG: "RN",
+    SANTIA: "SG", // Agregado Santiago
+    TUCUMA: "TU", // Agregado Tucumán
 }
 
-// Agregar Río Negro a la lista de loterías
+// Agregar Santiago y Tucumán a la lista de loterías
 const loterias: Loteria[] = [
     { id: "NACION", label: "Nacional", color: "bg-blue-100 border-blue-500", habilitada: true },
     { id: "PROVIN", label: "Provincia", color: "bg-green-100 border-green-500", habilitada: true },
@@ -100,6 +102,8 @@ const loterias: Loteria[] = [
     { id: "CORRIE", label: "Corrientes", color: "bg-orange-100 border-orange-500", habilitada: true },
     { id: "CHACO", label: "Chaco", color: "bg-pink-100 border-pink-500", habilitada: true },
     { id: "RIONEG", label: "Río Negro", color: "bg-cyan-100 border-cyan-500", habilitada: true },
+    { id: "SANTIA", label: "Santiago", color: "bg-lime-100 border-lime-500", habilitada: true }, // Agregado Santiago
+    { id: "TUCUMA", label: "Tucumán", color: "bg-emerald-100 border-emerald-500", habilitada: true }, // Agregado Tucumán
 ]
 
 const formatDate = (date: Date): string => {

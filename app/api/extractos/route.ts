@@ -67,7 +67,9 @@ const URLS_PIZARRAS = {
     CORRIENTES: "https://vivitusuerte.com/pizarra/corrientes",
     CHACO: "https://vivitusuerte.com/pizarra/chaco",
     MONTEVIDEO: "https://vivitusuerte.com/pizarra/montevideo",
-    "RIO NEGRO": "https://vivitusuerte.com/pizarra/rio+negro", // Agregado Rio Negro
+    "RIO NEGRO": "https://vivitusuerte.com/pizarra/rio+negro",
+    SANTIAGO: "https://vivitusuerte.com/pizarra/santiago", // Agregado Santiago
+    TUCUMAN: "https://vivitusuerte.com/pizarra/tucuman", // Agregado Tucumán
 }
 
 const HORARIOS_SORTEOS = {
@@ -412,8 +414,11 @@ async function obtenerResultadosPizarra(provincia: string, turno: string): Promi
             console.log(`Sección encontrada para ${provincia} - ${turno}:`, $seccionTurno.length > 0)
 
             if ($seccionTurno.length > 0) {
-                console.log(`Contenido de la sección para ${provincia} - ${turno}:
-`, $seccionTurno.html() || "")
+                console.log(
+                    `Contenido de la sección para ${provincia} - ${turno}:
+`,
+                    $seccionTurno.html() || "",
+                )
 
                 const numerosEncontrados: string[] = []
                 let elementoActual = $seccionTurno
@@ -505,6 +510,12 @@ async function procesarSorteo(
         }
     }
 
+    // Verificar que Tucumán no procese el sorteo "Previa"
+    if (provincia === "TUCUMAN" && turno === "Previa") {
+        console.log(`Saltando ${turno} para Tucumán - no sortea en Previa`)
+        return
+    }
+
     if (esSorteoFinalizado(turno, fecha)) {
         console.log(`Procesando ${provincia} - ${turno}`)
         console.time(`obtenerResultadosPizarra-${provincia}-${turno}`)
@@ -589,7 +600,7 @@ async function obtenerResultados(fecha: Date) {
         for (const [provinciaKey, pizarraUrl] of Object.entries(URLS_PIZARRAS)) {
             console.log(`Procesando provincia: ${provinciaKey}`)
 
-            // Ahora procesamos también Montevideo
+            // Ahora procesamos también Santiago y Tucumán
             if (diaSemana >= 1 && diaSemana <= 6) {
                 for (const turno of sorteos) {
                     await procesarSorteo(
@@ -648,14 +659,11 @@ async function obtenerResultadosPizarraDirecto(): Promise<any[]> {
                 fecha: fechaDisplayActual,
                 dia: nombreDiaCapitalizado,
                 resultados: [],
-            }
+            },
         }
 
         // Para cada provincia y sorteo, obtener resultados
         for (const [provinciaKey, pizarraUrl] of Object.entries(URLS_PIZARRAS)) {
-            console.log(`Procesando provincia: ${provinciaKey}`)
-
-            // Procesar cada sort  {
             console.log(`Procesando provincia: ${provinciaKey}`)
 
             // Procesar cada sorteo
@@ -675,6 +683,12 @@ async function obtenerResultadosPizarraDirecto(): Promise<any[]> {
                     if (sorteo === "Nocturna" && diaSemana === 0) {
                         continue
                     }
+                }
+
+                // Saltear sorteo "Previa" para Tucumán
+                if (provinciaKey === "TUCUMAN" && sorteo === "Previa") {
+                    console.log(`Saltando ${sorteo} para Tucumán - no sortea en Previa`)
+                    continue
                 }
 
                 // Verificar si el sorteo ya finalizó
@@ -829,7 +843,6 @@ export async function GET(request: Request) {
             const extractosDia = data[fechaFormateada]
 
             if (extractosDia && extractosDia.resultados) {
-                // Ya no filtramos Nocturna de Montevideo
                 extractosFormateados = extractosDia.resultados.flatMap((resultado: Resultado) =>
                     Object.entries(resultado.sorteos).map(([sorteo, numeros]) => ({
                         id: `${resultado.provincia}-${sorteo}-${fechaDisplayActual}`, // Usar fechaDisplayActual
@@ -847,7 +860,6 @@ export async function GET(request: Request) {
             console.log("Extractos formateados:", JSON.stringify(extractosFormateados, null, 2))
         } else {
             console.log(`No se encontraron extractos en Firebase para la fecha: ${fechaKey}`)
-            // Si no hay datos en Firebase, obtener resultados en vivo siempree
         }
 
         if (extractosFormateados.length === 0) {
@@ -891,7 +903,6 @@ export async function POST(request: Request) {
         const { provincia, turno, fecha, numeros } = await request.json()
         console.log(`Actualizando manualmente: ${provincia} - ${turno} - ${fecha}`)
 
-        // Ya no rechazamos actualizaciones manuales de Nocturna de Montevideo
         if (!provincia || !turno || !fecha || !numeros || !Array.isArray(numeros) || numeros.length !== 20) {
             throw new Error("Datos incompletos o inválidos para la actualización manual")
         }
