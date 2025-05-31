@@ -44,10 +44,12 @@ interface Pasador {
     timestamp: string
     premioTotal: number
     comisionPorcentaje: number
+    modulo: number
+    posicionEnModulo: number
 }
 
 const ITEMS_POR_PAGINA = 15
-const PASADORES_POR_MODULO = 20
+const PASADORES_POR_MODULO = 40
 
 // Actualizar el componente BotonSelectorFecha para que tenga más color
 const BotonSelectorFecha = ({
@@ -215,6 +217,9 @@ const guardarSaldosDiarios = async (pasador: Pasador, fecha: Date) => {
                 total_pagos: pasador.pagado,
                 total_cobros: pasador.cobrado,
                 total_ganado: pasador.premioTotal,
+                modulo: pasador.modulo,
+                posicion_en_modulo: pasador.posicionEnModulo,
+                display_id: pasador.displayId,
             },
             { merge: true },
         )
@@ -230,7 +235,7 @@ const guardarSaldosDiarios = async (pasador: Pasador, fecha: Date) => {
 export default function ListadoDiario() {
     const [pasadores, setPasadores] = useState<Pasador[]>([])
     const [modulos, setModulos] = useState<string[]>([])
-    const [moduloSeleccionado, setModuloSeleccionado] = useState<string>("73")
+    const [moduloSeleccionado, setModuloSeleccionado] = useState<string>("70")
     const [paginaActual, setPaginaActual] = useState(1)
     const [estaCargando, setEstaCargando] = useState(true)
     const [fechaSeleccionada, setFechaSeleccionada] = useState<Date>(startOfDay(new Date()))
@@ -512,13 +517,11 @@ export default function ListadoDiario() {
             const listaPasadores: Pasador[] = []
             pasadoresSnapshot.forEach((doc) => {
                 const data = doc.data()
-                const index = listaPasadores.length
-                const numeroModulo = Math.floor(index / PASADORES_POR_MODULO) + 73
-                const indiceModulo = index % PASADORES_POR_MODULO
 
                 listaPasadores.push({
                     id: doc.id,
-                    displayId: `${numeroModulo}-${(indiceModulo + 1).toString().padStart(4, "0")}`,
+                    displayId:
+                        data.displayId || `${data.modulo || 70}-${(data.posicionEnModulo || 1).toString().padStart(4, "0")}`,
                     nombre: data.nombre || "Sin nombre",
                     saldoFinal: 0,
                     saldoAnterior: 0,
@@ -545,7 +548,17 @@ export default function ListadoDiario() {
                     timestamp: "",
                     premioTotal: 0,
                     comisionPorcentaje: 0,
+                    modulo: data.modulo || 70,
+                    posicionEnModulo: data.posicionEnModulo || 1,
                 })
+            })
+
+            // Ordenar por módulo y posición
+            listaPasadores.sort((a, b) => {
+                if (a.modulo !== b.modulo) {
+                    return a.modulo - b.modulo
+                }
+                return a.posicionEnModulo - b.posicionEnModulo
             })
 
             console.log("Pasadores procesados:", listaPasadores.length)
@@ -715,7 +728,10 @@ export default function ListadoDiario() {
 
             setPasadores(updatedListaPasadoresComision)
 
-            const modulosUnicos = Array.from(new Set(updatedListaPasadoresComision.map((p) => p.displayId.split("-")[0])))
+            // Obtener módulos únicos basados en la nueva estructura
+            const modulosUnicos = Array.from(new Set(updatedListaPasadoresComision.map((p) => p.modulo.toString()))).sort(
+                (a, b) => Number.parseInt(a) - Number.parseInt(b),
+            )
             console.log("Módulos únicos:", modulosUnicos)
             setModulos(modulosUnicos)
 
@@ -755,7 +771,7 @@ export default function ListadoDiario() {
         }).format(monto)
     }
 
-    const pasadoresFiltrados = pasadores.filter((p) => p.displayId.startsWith(moduloSeleccionado))
+    const pasadoresFiltrados = pasadores.filter((p) => p.modulo.toString() === moduloSeleccionado)
     const totalPaginas = Math.ceil(pasadoresFiltrados.length / ITEMS_POR_PAGINA)
     const pasadoresPaginados = pasadoresFiltrados.slice(
         (paginaActual - 1) * ITEMS_POR_PAGINA,
@@ -782,11 +798,14 @@ export default function ListadoDiario() {
                                     <SelectValue placeholder="Módulo" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {modulos.map((modulo) => (
-                                        <SelectItem key={modulo} value={modulo}>
-                                            {modulo}
-                                        </SelectItem>
-                                    ))}
+                                    {modulos.map((modulo) => {
+                                        const pasadoresEnModulo = pasadores.filter((p) => p.modulo.toString() === modulo).length
+                                        return (
+                                            <SelectItem key={modulo} value={modulo}>
+                                                Módulo {modulo} ({pasadoresEnModulo} pasadores)
+                                            </SelectItem>
+                                        )
+                                    })}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -930,7 +949,8 @@ export default function ListadoDiario() {
 
                                 <div className="flex items-center justify-between mt-6 bg-gray-50 p-3 rounded-lg shadow-sm border border-gray-200">
                                     <div className="text-sm text-blue-700 font-medium">
-                                        Página {paginaActual} de {totalPaginas}
+                                        Página {paginaActual} de {totalPaginas} - Módulo {moduloSeleccionado}: {pasadoresFiltrados.length}{" "}
+                                        pasadores
                                     </div>
                                     <div className="flex gap-2">
                                         <Button

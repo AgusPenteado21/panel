@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { PlusCircle, Download, Pencil, Trash2, ChevronLeft, ChevronRight, Loader2, Key, Lock } from "lucide-react"
 import Navbar from "@/app/components/Navbar"
 import { db } from "@/lib/firebase"
@@ -27,7 +28,7 @@ import * as XLSX from "xlsx"
 
 interface Pasador {
     id: string
-    displayId: number
+    displayId: string
     nombre: string
     nombreFantasia: string
     comision: number
@@ -37,9 +38,12 @@ interface Pasador {
     username: string
     password: string
     bloqueado: boolean
+    modulo: number
+    posicionEnModulo: number
 }
 
 const ITEMS_PER_PAGE = 15
+const PASADORES_POR_MODULO = 40
 
 export default function PasadoresClient() {
     const [currentPage, setCurrentPage] = useState(1)
@@ -51,24 +55,168 @@ export default function PasadoresClient() {
     const [editingComision, setEditingComision] = useState<number>(0)
     const [pasadores, setPasadores] = useState<Pasador[]>([])
     const [isLoading, setIsLoading] = useState(false)
+    const [modulosDisponibles, setModulosDisponibles] = useState<number[]>([])
+    const [moduloSeleccionado, setModuloSeleccionado] = useState<number>(70)
+    const [isCreateModuleDialogOpen, setIsCreateModuleDialogOpen] = useState(false)
     const { toast } = useToast()
 
     useEffect(() => {
         fetchPasadores()
     }, [])
 
+    const calcularModulosDisponibles = (pasadores: Pasador[]) => {
+        // Contar pasadores por módulo
+        const contadorPorModulo: { [key: number]: number } = {}
+
+        pasadores.forEach((pasador) => {
+            if (pasador.modulo >= 70) {
+                contadorPorModulo[pasador.modulo] = (contadorPorModulo[pasador.modulo] || 0) + 1
+            }
+        })
+
+        // Encontrar módulos disponibles (que no estén llenos)
+        const modulosDisponibles: number[] = []
+
+        // Verificar módulos existentes
+        Object.keys(contadorPorModulo).forEach((modulo) => {
+            const numeroModulo = Number.parseInt(modulo)
+            if (contadorPorModulo[numeroModulo] < PASADORES_POR_MODULO) {
+                modulosDisponibles.push(numeroModulo)
+            }
+        })
+
+        // Si no hay módulos disponibles o queremos agregar uno nuevo
+        const ultimoModulo = Math.max(...Object.keys(contadorPorModulo).map(Number), 69)
+        const siguienteModulo = ultimoModulo + 1
+
+        // Agregar el siguiente módulo si el último está lleno o si no hay módulos
+        if (
+            modulosDisponibles.length === 0 ||
+            !contadorPorModulo[ultimoModulo] ||
+            contadorPorModulo[ultimoModulo] >= PASADORES_POR_MODULO
+        ) {
+            modulosDisponibles.push(siguienteModulo)
+        }
+
+        // Asegurar que siempre tengamos al menos el módulo 70
+        if (modulosDisponibles.length === 0) {
+            modulosDisponibles.push(70)
+        }
+
+        return modulosDisponibles.sort((a, b) => a - b)
+    }
+
+    const handleCreateModule = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault()
+        setIsLoading(true)
+        const formData = new FormData(event.currentTarget)
+        const numeroModulo = Number.parseInt(formData.get("numeroModulo") as string)
+
+        // Validar que el número de módulo sea válido
+        if (numeroModulo < 70) {
+            toast({
+                title: "Error",
+                description: "El número de módulo debe ser 70 o mayor.",
+                variant: "destructive",
+            })
+            setIsLoading(false)
+            return
+        }
+
+        // Verificar si el módulo ya existe
+        const moduloExiste = pasadores.some((p) => p.modulo === numeroModulo)
+        if (moduloExiste) {
+            toast({
+                title: "Error",
+                description: `El módulo ${numeroModulo} ya existe.`,
+                variant: "destructive",
+            })
+            setIsLoading(false)
+            return
+        }
+
+        // Verificar si el módulo ya está en la lista de módulos disponibles
+        if (modulosDisponibles.includes(numeroModulo)) {
+            toast({
+                title: "Error",
+                description: `El módulo ${numeroModulo} ya está disponible.`,
+                variant: "destructive",
+            })
+            setIsLoading(false)
+            return
+        }
+
+        try {
+            // Agregar el módulo a la lista de módulos disponibles
+            const nuevosModulos = [...modulosDisponibles, numeroModulo].sort((a, b) => a - b)
+            setModulosDisponibles(nuevosModulos)
+
+            // Seleccionar el nuevo módulo
+            setModuloSeleccionado(numeroModulo)
+
+            toast({
+                title: "Éxito",
+                description: `Módulo ${numeroModulo} creado correctamente.`,
+            })
+            setIsCreateModuleDialogOpen(false)
+        } catch (error) {
+            console.error("Error al crear módulo:", error)
+            toast({
+                title: "Error",
+                description: "No se pudo crear el módulo.",
+                variant: "destructive",
+            })
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const obtenerSiguientePosicion = (pasadores: Pasador[], modulo: number) => {
+        const pasadoresEnModulo = pasadores.filter((p) => p.modulo === modulo)
+        return pasadoresEnModulo.length + 1
+    }
+
     const fetchPasadores = async () => {
         const pasadoresCollection = collection(db, "pasadores")
         const pasadoresSnapshot = await getDocs(pasadoresCollection)
-        const pasadoresList = pasadoresSnapshot.docs.map(
-            (doc, index) =>
-                ({
-                    id: doc.id,
-                    displayId: index + 1,
-                    ...doc.data(),
-                }) as Pasador,
-        )
+
+        const pasadoresList = pasadoresSnapshot.docs.map((doc) => {
+            const data = doc.data()
+            return {
+                id: doc.id,
+                displayId: data.displayId || `${data.modulo || 70}-${(data.posicionEnModulo || 1).toString().padStart(4, "0")}`,
+                nombre: data.nombre || "",
+                nombreFantasia: data.nombreFantasia || "",
+                comision: data.comision || 0,
+                deje: data.deje || false,
+                dejeComision: data.dejeComision || 0,
+                observaciones: data.observaciones || "",
+                username: data.username || "",
+                password: data.password || "",
+                bloqueado: data.bloqueado || false,
+                modulo: data.modulo || 70,
+                posicionEnModulo: data.posicionEnModulo || 1,
+            } as Pasador
+        })
+
+        // Ordenar por módulo y posición
+        pasadoresList.sort((a, b) => {
+            if (a.modulo !== b.modulo) {
+                return a.modulo - b.modulo
+            }
+            return a.posicionEnModulo - b.posicionEnModulo
+        })
+
         setPasadores(pasadoresList)
+
+        // Calcular módulos disponibles
+        const modulos = calcularModulosDisponibles(pasadoresList)
+        setModulosDisponibles(modulos)
+
+        // Si el módulo seleccionado no está disponible, seleccionar el primero disponible
+        if (!modulos.includes(moduloSeleccionado)) {
+            setModuloSeleccionado(modulos[0])
+        }
     }
 
     const totalPages = Math.ceil(pasadores.length / ITEMS_PER_PAGE)
@@ -81,6 +229,7 @@ export default function PasadoresClient() {
         const nombre = formData.get("nombre") as string
         const username = formData.get("username") as string
         const password = formData.get("password") as string
+        const moduloSeleccionadoForm = Number.parseInt(formData.get("modulo") as string)
 
         const nombreQuery = query(collection(db, "pasadores"), where("nombre", "==", nombre))
         const usernameQuery = query(collection(db, "pasadores"), where("username", "==", username))
@@ -106,7 +255,21 @@ export default function PasadoresClient() {
             return
         }
 
+        // Verificar que el módulo no esté lleno
+        const pasadoresEnModulo = pasadores.filter((p) => p.modulo === moduloSeleccionadoForm)
+        if (pasadoresEnModulo.length >= PASADORES_POR_MODULO) {
+            toast({
+                title: "Error",
+                description: `El módulo ${moduloSeleccionadoForm} está lleno (máximo ${PASADORES_POR_MODULO} pasadores).`,
+                variant: "destructive",
+            })
+            setIsLoading(false)
+            return
+        }
+
         const hashedPassword = await hash(password, 10)
+        const posicionEnModulo = obtenerSiguientePosicion(pasadores, moduloSeleccionadoForm)
+        const displayId = `${moduloSeleccionadoForm}-${posicionEnModulo.toString().padStart(4, "0")}`
 
         const newPasador = {
             nombre,
@@ -118,6 +281,9 @@ export default function PasadoresClient() {
             username,
             password: hashedPassword,
             bloqueado: false,
+            modulo: moduloSeleccionadoForm,
+            posicionEnModulo: posicionEnModulo,
+            displayId: displayId,
         }
 
         try {
@@ -125,7 +291,7 @@ export default function PasadoresClient() {
             await fetchPasadores()
             toast({
                 title: "Éxito",
-                description: "Pasador creado correctamente.",
+                description: `Pasador creado correctamente en el módulo ${moduloSeleccionadoForm}.`,
             })
             setIsNewDialogOpen(false)
         } catch (error) {
@@ -259,7 +425,9 @@ export default function PasadoresClient() {
     const handleExportToExcel = () => {
         const workbook = XLSX.utils.book_new()
         const worksheetData = pasadores.map((p) => ({
-            Nº: p.displayId,
+            ID: p.displayId,
+            Módulo: p.modulo,
+            Posición: p.posicionEnModulo,
             Nombre: p.nombre,
             "Nombre Fantasía": p.nombreFantasia,
             Comisión: `${p.comision.toFixed(2)}%`,
@@ -294,12 +462,33 @@ export default function PasadoresClient() {
                                     Nuevo Pasador
                                 </Button>
                             </DialogTrigger>
-                            <DialogContent className="bg-white border border-blue-200 shadow-xl">
+                            <DialogContent className="bg-white border border-blue-200 shadow-xl max-w-md">
                                 <DialogHeader>
                                     <DialogTitle className="text-blue-800">Nuevo Pasador</DialogTitle>
                                     <DialogDescription>Complete los datos del nuevo pasador</DialogDescription>
                                 </DialogHeader>
                                 <form className="grid gap-4 py-4" onSubmit={handleNewPasador}>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="modulo" className="text-blue-700">
+                                            Módulo
+                                        </Label>
+                                        <Select name="modulo" defaultValue={moduloSeleccionado.toString()}>
+                                            <SelectTrigger className="border-blue-200 focus:border-blue-500">
+                                                <SelectValue placeholder="Seleccionar módulo" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {modulosDisponibles.map((modulo) => {
+                                                    const pasadoresEnModulo = pasadores.filter((p) => p.modulo === modulo).length
+                                                    const espaciosDisponibles = PASADORES_POR_MODULO - pasadoresEnModulo
+                                                    return (
+                                                        <SelectItem key={modulo} value={modulo.toString()}>
+                                                            Módulo {modulo} ({espaciosDisponibles} espacios disponibles)
+                                                        </SelectItem>
+                                                    )
+                                                })}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
                                     <div className="grid gap-2">
                                         <Label htmlFor="nombre" className="text-blue-700">
                                             Nombre
@@ -371,6 +560,14 @@ export default function PasadoresClient() {
                             </DialogContent>
                         </Dialog>
                         <Button
+                            onClick={() => setIsCreateModuleDialogOpen(true)}
+                            variant="outline"
+                            className="border-green-300 text-green-700 hover:bg-green-50 hover:border-green-500"
+                        >
+                            <PlusCircle className="h-4 w-4 mr-2" />
+                            Crear Módulo
+                        </Button>
+                        <Button
                             variant="outline"
                             onClick={() =>
                                 selectedPasadores.length === 1 &&
@@ -436,7 +633,8 @@ export default function PasadoresClient() {
                         <TableHeader className="bg-gradient-to-r from-blue-600 to-indigo-700">
                             <TableRow>
                                 <TableHead className="w-[50px] text-white"></TableHead>
-                                <TableHead className="w-[100px] text-white font-bold">Nº</TableHead>
+                                <TableHead className="w-[120px] text-white font-bold">ID</TableHead>
+                                <TableHead className="w-[80px] text-white font-bold">Módulo</TableHead>
                                 <TableHead className="text-white font-bold">Nombre</TableHead>
                                 <TableHead className="text-white font-bold">Nombre Fantasía</TableHead>
                                 <TableHead className="text-right pr-8 text-white font-bold">Comisión</TableHead>
@@ -462,9 +660,8 @@ export default function PasadoresClient() {
                                             className="border-blue-400 text-blue-600"
                                         />
                                     </TableCell>
-                                    <TableCell className="font-medium text-blue-800">
-                                        {pasador.displayId.toString().padStart(4, "0")}
-                                    </TableCell>
+                                    <TableCell className="font-medium text-blue-800">{pasador.displayId}</TableCell>
+                                    <TableCell className="font-medium text-indigo-600">{pasador.modulo}</TableCell>
                                     <TableCell className="font-medium">
                                         <div className="flex items-center">
                                             <div className="h-8 w-8 rounded-full bg-blue-600 text-white flex items-center justify-center mr-2">
@@ -512,7 +709,7 @@ export default function PasadoresClient() {
 
                 <div className="flex items-center justify-between mt-6 bg-white p-3 rounded-lg shadow-md border border-blue-200">
                     <div className="text-sm text-blue-700 font-medium">
-                        Página {currentPage} de {totalPages}
+                        Página {currentPage} de {totalPages} - Total: {pasadores.length} pasadores
                     </div>
                     <div className="flex gap-2">
                         <Button
@@ -611,9 +808,49 @@ export default function PasadoresClient() {
                         </form>
                     </DialogContent>
                 </Dialog>
+                <Dialog open={isCreateModuleDialogOpen} onOpenChange={setIsCreateModuleDialogOpen}>
+                    <DialogContent className="bg-white border border-blue-200 shadow-xl max-w-md">
+                        <DialogHeader>
+                            <DialogTitle className="text-blue-800">Crear Nuevo Módulo</DialogTitle>
+                            <DialogDescription>Ingrese el número del módulo que desea crear</DialogDescription>
+                        </DialogHeader>
+                        <form className="grid gap-4 py-4" onSubmit={handleCreateModule}>
+                            <div className="grid gap-2">
+                                <Label htmlFor="numeroModulo" className="text-blue-700">
+                                    Número de Módulo
+                                </Label>
+                                <Input
+                                    id="numeroModulo"
+                                    name="numeroModulo"
+                                    type="number"
+                                    min="70"
+                                    required
+                                    placeholder="Ej: 75"
+                                    className="border-blue-200 focus:border-blue-500"
+                                />
+                                <p className="text-xs text-gray-500">
+                                    El número debe ser 70 o mayor. Cada módulo puede contener hasta 40 pasadores.
+                                </p>
+                            </div>
+                            <Button
+                                type="submit"
+                                disabled={isLoading}
+                                className="bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800 text-white"
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Creando...
+                                    </>
+                                ) : (
+                                    "Crear Módulo"
+                                )}
+                            </Button>
+                        </form>
+                    </DialogContent>
+                </Dialog>
                 <Toaster />
             </div>
         </div>
     )
 }
-
