@@ -117,74 +117,406 @@ const SelectorFecha = ({
     </div>
 )
 
-// Modificar la función fetchAciertosData para validar mejor los datos
-const fetchAciertosData = async (fecha: Date) => {
-    const aciertosRef = collection(db, "aciertos")
-    const fechaString = format(fecha, "yyyy-MM-dd")
-    console.log(`Obteniendo aciertos para la fecha: ${fechaString}`)
-
+// FUNCIÓN NUEVA: Calcular y guardar aciertos automáticamente
+const calcularYGuardarAciertosAutomaticamente = async () => {
     try {
-        // Obtener todos los documentos de aciertos
-        const querySnapshot = await getDocs(aciertosRef)
-        const aciertosData: { [key: string]: number } = {}
+        console.log("🔄 Calculando y guardando aciertos automáticamente...")
 
-        // Procesar cada documento de aciertos (uno por pasador)
-        querySnapshot.forEach((doc) => {
-            const data = doc.data()
-            if (data[fechaString] && data[fechaString].totalGanado !== undefined) {
-                // Validar que el valor sea un número válido
-                const totalGanado = Number(data[fechaString].totalGanado)
-                if (!isNaN(totalGanado)) {
-                    // Guardar el total ganado para este pasador
-                    aciertosData[doc.id] = totalGanado
-                    console.log(`Aciertos encontrados para ${doc.id}: ${totalGanado}`)
-                } else {
-                    console.log(`Valor inválido de aciertos para ${doc.id}: ${data[fechaString].totalGanado}`)
+        // 1. Obtener la fecha actual
+        const fechaActual = startOfDay(new Date())
+        const fechaString = format(fechaActual, "yyyy-MM-dd")
+        console.log(`📅 Fecha actual: ${fechaString}`)
+
+        // 2. Obtener el extracto para esta fecha
+        const extractosRef = doc(db, "extractos", fechaString)
+        const extractoSnapshot = await getDoc(extractosRef)
+
+        if (!extractoSnapshot.exists()) {
+            console.log(`❌ No se encontró extracto para la fecha: ${fechaString}`)
+            return
+        }
+
+        // 3. Obtener resultados del extracto
+        const extractoData = extractoSnapshot.data()
+        console.log("📄 Datos completos del extracto:", extractoData)
+
+        let resultados: any[] = []
+
+        // Buscar resultados en diferentes ubicaciones
+        if (extractoData.resultados) {
+            resultados = extractoData.resultados
+            console.log("✅ Resultados encontrados en extractoData.resultados")
+        } else {
+            // Buscar en todas las claves del extracto
+            Object.keys(extractoData).forEach((key) => {
+                console.log(`🔍 Revisando clave: ${key}`, extractoData[key])
+                if (extractoData[key] && extractoData[key].resultados) {
+                    resultados = extractoData[key].resultados
+                    console.log(`✅ Resultados encontrados en extractoData.${key}.resultados`)
                 }
-            } else {
-                console.log(`No se encontraron aciertos para ${doc.id} en la fecha ${fechaString}`)
-            }
+            })
+        }
+
+        if (resultados.length === 0) {
+            console.log(`❌ No se encontraron resultados en el extracto`)
+            console.log("📄 Estructura completa del extracto:", JSON.stringify(extractoData, null, 2))
+            return
+        }
+
+        console.log(`📈 Resultados encontrados: ${resultados.length}`)
+        console.log("🎰 Resultados completos:", JSON.stringify(resultados, null, 2))
+
+        // 4. Obtener todos los pasadores
+        const pasadoresRef = collection(db, "pasadores")
+        const pasadoresSnapshot = await getDocs(pasadoresRef)
+        const pasadores: any[] = []
+
+        pasadoresSnapshot.forEach((doc) => {
+            pasadores.push({
+                id: doc.id,
+                nombre: doc.data().nombre || "Sin nombre",
+            })
         })
 
-        // Si no hay aciertos en la colección "aciertos", buscar en "extractos"
-        if (Object.keys(aciertosData).length === 0) {
-            console.log("No se encontraron aciertos en la colección 'aciertos', buscando en 'extractos'...")
-            const extractosRef = doc(db, "extractos", fechaString)
-            const extractoSnapshot = await getDoc(extractosRef)
+        console.log(`👥 Pasadores encontrados: ${pasadores.length}`)
 
-            if (extractoSnapshot.exists()) {
-                const extractoData = extractoSnapshot.data()
-                if (extractoData && extractoData.aciertos) {
-                    // Agrupar aciertos por pasador
-                    const aciertos = extractoData.aciertos
+        // 5. Procesar cada pasador y buscar sus jugadas
+        const aciertosData: { [key: string]: number } = {}
 
-                    // Crear un mapa para acumular los premios por pasador
-                    const premiosPorPasador: { [key: string]: number } = {}
+        for (const pasador of pasadores) {
+            console.log(`\n🎯 Procesando pasador: ${pasador.nombre} (ID: ${pasador.id})`)
 
-                    // Procesar cada acierto
-                    aciertos.forEach((acierto: any) => {
-                        if (acierto.pasador && acierto.premio !== undefined) {
-                            const pasador = acierto.pasador
-                            const premio =
-                                typeof acierto.premio === "number" ? acierto.premio : Number.parseFloat(acierto.premio) || 0
+            try {
+                // Buscar en la colección específica del pasador
+                const jugadasRef = collection(db, `JUGADAS DE ${pasador.nombre}`)
+                console.log(`📋 Buscando en colección: JUGADAS DE ${pasador.nombre}`)
 
-                            // Acumular premio para este pasador
-                            premiosPorPasador[pasador] = (premiosPorPasador[pasador] || 0) + premio
-                        }
+                const jugadasSnapshot = await getDocs(jugadasRef)
+                console.log(`📊 Total de documentos en la colección: ${jugadasSnapshot.size}`)
+
+                const jugadasDelDia: any[] = []
+
+                // Filtrar jugadas del día actual
+                jugadasSnapshot.forEach((doc) => {
+                    const jugada = doc.data()
+                    console.log(`📝 Documento encontrado:`, {
+                        id: doc.id,
+                        fechaHora: jugada.fechaHora,
+                        numero: jugada.numero,
+                        monto: jugada.monto,
+                        totalMonto: jugada.totalMonto,
+                        tipo: jugada.tipo,
+                        loteria: jugada.loteria,
+                        provincias: jugada.provincias,
                     })
 
-                    // Transferir los premios acumulados al resultado
-                    Object.keys(premiosPorPasador).forEach((pasador) => {
-                        aciertosData[pasador] = premiosPorPasador[pasador]
-                        console.log(`Aciertos encontrados en extractos para ${pasador}: ${premiosPorPasador[pasador]}`)
+                    if (jugada.fechaHora && jugada.fechaHora.toDate) {
+                        const fechaJugada = format(jugada.fechaHora.toDate(), "yyyy-MM-dd")
+                        console.log(`📅 Fecha de la jugada: ${fechaJugada}, Fecha buscada: ${fechaString}`)
+
+                        if (fechaJugada === fechaString) {
+                            jugadasDelDia.push({
+                                id: doc.id,
+                                ...jugada,
+                            })
+                            console.log(`✅ Jugada agregada para el día actual`)
+                        } else {
+                            console.log(`❌ Jugada no es del día actual`)
+                        }
+                    } else {
+                        console.log(`❌ Jugada sin fecha válida`)
+                    }
+                })
+
+                console.log(`📋 Jugadas del día para ${pasador.nombre}: ${jugadasDelDia.length}`)
+
+                if (jugadasDelDia.length > 0) {
+                    console.log("🎲 Jugadas del día completas:", JSON.stringify(jugadasDelDia, null, 2))
+                }
+
+                // Procesar jugadas y verificar aciertos
+                let totalGanadoPasador = 0
+
+                for (const jugada of jugadasDelDia) {
+                    console.log(`\n🎲 Procesando jugada:`, jugada)
+
+                    const tipo = jugada.tipo || "NUEVA JUGADA"
+                    console.log(`📝 Tipo de jugada: ${tipo}`)
+
+                    if (tipo === "NUEVA JUGADA" || tipo === "Jugada con redoblona") {
+                        // Obtener datos de la jugada
+                        const loteria = (jugada.loteria || "").toString().toUpperCase()
+                        const provincias = jugada.provincias || []
+
+                        console.log(`🎰 Lotería: ${loteria}`)
+                        console.log(`🌍 Provincias: ${JSON.stringify(provincias)}`)
+
+                        // Obtener jugadas individuales
+                        let jugadasIndividuales = []
+                        if (jugada.jugadas && Array.isArray(jugada.jugadas) && jugada.jugadas.length > 0) {
+                            jugadasIndividuales = jugada.jugadas
+                            console.log(`📊 Usando array de jugadas: ${jugadasIndividuales.length} jugadas`)
+                        } else {
+                            // Crear jugada individual a partir de los datos principales
+                            jugadasIndividuales = [
+                                {
+                                    numero: jugada.numero || "",
+                                    posicion: jugada.posicion || "1",
+                                    monto: jugada.monto || jugada.totalMonto || 0,
+                                },
+                            ]
+                            console.log(`📊 Creando jugada individual desde datos principales`)
+                        }
+
+                        console.log(`🎯 Jugadas individuales:`, JSON.stringify(jugadasIndividuales, null, 2))
+
+                        // Procesar cada jugada individual
+                        for (const jugadaIndividual of jugadasIndividuales) {
+                            const numeroApostado = jugadaIndividual.numero?.toString() || ""
+                            const posicion = Number.parseInt(jugadaIndividual.posicion?.toString() || "1")
+                            const monto = Number.parseFloat(jugadaIndividual.monto?.toString() || "0")
+
+                            console.log(`\n🎯 Verificando número: ${numeroApostado}, posición: ${posicion}, monto: ${monto}`)
+
+                            if (!numeroApostado || monto <= 0) {
+                                console.log(`❌ Saltando jugada inválida`)
+                                continue
+                            }
+
+                            // Determinar rango de verificación según la posición
+                            const rangoVerificacion = posicion === 1 ? 1 : posicion === 5 ? 5 : posicion === 10 ? 10 : 20
+                            console.log(`📏 Rango de verificación: ${rangoVerificacion}`)
+
+                            // Procesar cada provincia apostada
+                            for (const provinciaApostada of provincias) {
+                                console.log(`\n🌍 Procesando provincia: ${provinciaApostada}`)
+
+                                // Buscar resultado para esta provincia
+                                const resultadoProvincia = resultados.find((resultado) => {
+                                    const provinciaResultado = resultado.provincia?.toString().toUpperCase() || ""
+                                    console.log(
+                                        `🔍 Comparando provincia apostada "${provinciaApostada.toUpperCase()}" con resultado "${provinciaResultado}"`,
+                                    )
+
+                                    const coincide =
+                                        provinciaResultado === provinciaApostada.toUpperCase() ||
+                                        provinciaResultado.includes(provinciaApostada.toUpperCase()) ||
+                                        provinciaApostada.toUpperCase().includes(provinciaResultado)
+
+                                    console.log(`${coincide ? "✅" : "❌"} Coincidencia de provincia: ${coincide}`)
+                                    return coincide
+                                })
+
+                                if (!resultadoProvincia) {
+                                    console.log(`❌ No se encontró resultado para provincia: ${provinciaApostada}`)
+                                    continue
+                                }
+
+                                console.log(`✅ Resultado encontrado para ${provinciaApostada}:`, resultadoProvincia)
+
+                                // Verificar lotería
+                                const loteriaResultado = resultadoProvincia.loteria?.toString().toUpperCase() || ""
+                                console.log(`🎰 Comparando lotería apostada "${loteria}" con resultado "${loteriaResultado}"`)
+
+                                // Verificación más flexible de lotería
+                                const loteriasCompatibles = [
+                                    "PREVIA",
+                                    "LAPREVIA",
+                                    "PRIMERA",
+                                    "MATUTINA",
+                                    "VESPERTINA",
+                                    "NOCTURNA",
+                                    "NACIONAL",
+                                    "NACION",
+                                    "PROVINCIAL",
+                                    "PROVIN",
+                                    "PROVINCE",
+                                    "PROVINCIA",
+                                ]
+
+                                const loteriaCoincide =
+                                    loteria === loteriaResultado ||
+                                    loteria === "TODAS" ||
+                                    loteria === "" ||
+                                    (loteriasCompatibles.includes(loteria) && loteriasCompatibles.includes(loteriaResultado))
+
+                                console.log(`${loteriaCoincide ? "✅" : "❌"} Coincidencia de lotería: ${loteriaCoincide}`)
+
+                                if (!loteriaCoincide) {
+                                    console.log(`❌ Lotería no coincide: ${loteria} vs ${loteriaResultado}`)
+                                    continue
+                                }
+
+                                const sorteos = resultadoProvincia.sorteos || {}
+                                console.log(`🎰 Sorteos disponibles:`, sorteos)
+
+                                // Buscar en todos los sorteos disponibles
+                                let numerosGanadores: any[] = []
+                                Object.keys(sorteos).forEach((sorteoKey) => {
+                                    const numeros = sorteos[sorteoKey]
+                                    console.log(`🔍 Revisando sorteo "${sorteoKey}":`, numeros)
+                                    if (Array.isArray(numeros)) {
+                                        numerosGanadores = numerosGanadores.concat(numeros)
+                                    }
+                                })
+
+                                console.log(`🎰 Números ganadores encontrados:`, numerosGanadores)
+
+                                if (numerosGanadores.length === 0) {
+                                    console.log(`❌ No hay números ganadores`)
+                                    continue
+                                }
+
+                                // Verificar coincidencias dentro del rango
+                                for (let i = 0; i < rangoVerificacion && i < numerosGanadores.length; i++) {
+                                    const numeroGanador = numerosGanadores[i].toString().padStart(4, "0")
+                                    console.log(`🔍 Comparando ${numeroApostado} con ${numeroGanador} (posición ${i + 1})`)
+
+                                    // Verificar coincidencia exacta
+                                    if (numeroApostado.length <= numeroGanador.length) {
+                                        const ultimasCifrasGanador = numeroGanador.substring(numeroGanador.length - numeroApostado.length)
+                                        console.log(`🔍 Últimas ${numeroApostado.length} cifras del ganador: ${ultimasCifrasGanador}`)
+
+                                        if (numeroApostado === ultimasCifrasGanador) {
+                                            const cifrasCoincidentes = numeroApostado.length
+
+                                            // Multiplicadores según las cifras y posición
+                                            const multiplicadores: { [key: number]: { [key: number]: number } } = {
+                                                2: { 1: 70, 5: 14, 10: 7, 20: 3.5 },
+                                                3: { 1: 600, 5: 120, 10: 60, 20: 30 },
+                                                4: { 1: 3500, 5: 700, 10: 350, 20: 175 },
+                                            }
+
+                                            const multiplicador = multiplicadores[cifrasCoincidentes]?.[posicion] || 0
+                                            const premio = monto * multiplicador
+
+                                            totalGanadoPasador += premio
+
+                                            console.log(
+                                                `🎉 ¡ACIERTO! para ${pasador.nombre}: ${numeroApostado} (${cifrasCoincidentes} cifras, pos ${posicion}) = $${premio} (${monto} x ${multiplicador})`,
+                                            )
+                                            break // Ya encontramos coincidencia, no seguir buscando
+                                        } else {
+                                            console.log(`❌ No coincide: ${numeroApostado} ≠ ${ultimasCifrasGanador}`)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (totalGanadoPasador > 0) {
+                    aciertosData[pasador.nombre] = totalGanadoPasador
+                    console.log(`💰 Total ganado para ${pasador.nombre}: $${totalGanadoPasador}`)
+
+                    // Guardar el acierto en la colección "aciertos"
+                    const aciertosRef = doc(db, "aciertos", pasador.id)
+                    await setDoc(
+                        aciertosRef,
+                        {
+                            [fechaString]: {
+                                totalGanado: totalGanadoPasador,
+                                fecha: fechaString,
+                                timestamp: format(new Date(), "dd/MM/yy HH:mm"),
+                            },
+                        },
+                        { merge: true },
+                    )
+                    console.log(`✅ Acierto guardado en Firestore para ${pasador.nombre}`)
+                } else {
+                    console.log(`😞 No se encontraron aciertos para ${pasador.nombre}`)
+                }
+            } catch (error) {
+                console.error(`❌ Error al procesar jugadas de ${pasador.nombre}:`, error)
+            }
+        }
+
+        // 6. Guardar los aciertos en el documento de extractos
+        if (Object.keys(aciertosData).length > 0) {
+            await setDoc(
+                extractosRef,
+                {
+                    aciertos: Object.entries(aciertosData).map(([pasador, premio]) => ({
+                        pasador,
+                        premio,
+                        fecha: fechaString,
+                    })),
+                },
+                { merge: true },
+            )
+
+            console.log("✅ Aciertos guardados en el documento de extractos")
+            console.log("🎯 Resumen de aciertos:", aciertosData)
+        } else {
+            console.log("😞 No se encontraron aciertos para ningún pasador")
+        }
+
+        return aciertosData
+    } catch (error) {
+        console.error("❌ Error al calcular y guardar aciertos:", error)
+        return {}
+    }
+}
+
+// FUNCIÓN MEJORADA: Buscar aciertos detallados con búsqueda automática en Firestore
+const fetchAciertosDetallados = async (fecha: Date) => {
+    const fechaString = format(fecha, "yyyy-MM-dd")
+    console.log(`🔍 Buscando aciertos para la fecha: ${fechaString}`)
+
+    try {
+        // 1. Primero buscar en la colección "aciertos"
+        const pasadoresRef = collection(db, "pasadores")
+        const pasadoresSnapshot = await getDocs(pasadoresRef)
+        const premiosPorPasador: { [key: string]: number } = {}
+
+        // Obtener aciertos para cada pasador
+        for (const pasadorDoc of pasadoresSnapshot.docs) {
+            const pasadorData = pasadorDoc.data()
+            const nombrePasador = pasadorData.nombre || "Sin nombre"
+
+            const aciertosRef = doc(db, "aciertos", pasadorDoc.id)
+            const aciertosDoc = await getDoc(aciertosRef)
+
+            if (aciertosDoc.exists()) {
+                const aciertosData = aciertosDoc.data()
+                if (aciertosData[fechaString] && aciertosData[fechaString].totalGanado !== undefined) {
+                    const premio = aciertosData[fechaString].totalGanado
+                    premiosPorPasador[nombrePasador] = premio
+                    console.log(`💰 Premio encontrado para ${nombrePasador}: $${premio}`)
+                }
+            }
+        }
+
+        // 2. Si no hay aciertos en la colección "aciertos", buscar en el documento de extractos
+        if (Object.keys(premiosPorPasador).length === 0) {
+            console.log("Buscando aciertos en el documento de extractos...")
+            const extractosRef = doc(db, "extractos", fechaString)
+            const extractoDoc = await getDoc(extractosRef)
+
+            if (extractoDoc.exists()) {
+                const extractoData = extractoDoc.data()
+                if (extractoData.aciertos && Array.isArray(extractoData.aciertos)) {
+                    extractoData.aciertos.forEach((acierto: any) => {
+                        if (acierto.pasador && acierto.premio !== undefined) {
+                            premiosPorPasador[acierto.pasador] = acierto.premio
+                            console.log(`💰 Premio encontrado en extractos para ${acierto.pasador}: $${acierto.premio}`)
+                        }
                     })
                 }
             }
         }
 
-        return aciertosData
+        // 3. Si todavía no hay aciertos, calcularlos ahora
+        if (Object.keys(premiosPorPasador).length === 0) {
+            console.log("No se encontraron aciertos guardados, calculando ahora...")
+            const aciertosCalculados = await calcularYGuardarAciertosAutomaticamente()
+            Object.assign(premiosPorPasador, aciertosCalculados)
+        }
+
+        return premiosPorPasador
     } catch (error) {
-        console.error("Error al obtener aciertos:", error)
+        console.error("❌ Error al obtener aciertos detallados:", error)
         return {}
     }
 }
@@ -232,6 +564,67 @@ const guardarSaldosDiarios = async (pasador: Pasador, fecha: Date) => {
     }
 }
 
+// Modificar la función actualizarAciertosAutomaticamente para mostrar más información
+// Reemplazar la función con esta versión mejorada:
+
+const actualizarAciertosAutomaticamente = async (
+    setEstaCargando: any,
+    fechaSeleccionada: Date,
+    setPasadores: any,
+    setUltimaActualizacion: any,
+) => {
+    try {
+        console.log("🔄 Actualizando aciertos automáticamente...")
+        setEstaCargando(true)
+
+        // Usar la nueva función que busca aciertos detallados
+        const aciertosData = await fetchAciertosDetallados(fechaSeleccionada)
+
+        console.log("📊 Datos de aciertos obtenidos:", aciertosData)
+
+        // Actualizar los premios totales de cada pasador
+        setPasadores((prevPasadores: any) =>
+            prevPasadores.map((pasador: any) => {
+                // Buscar aciertos por nombre del pasador (como en el código Dart)
+                const nuevoPremioPasador = aciertosData[pasador.nombre] || 0
+
+                if (nuevoPremioPasador !== pasador.premioTotal) {
+                    console.log(`💰 Actualizando premio para ${pasador.nombre}: ${pasador.premioTotal} → ${nuevoPremioPasador}`)
+                }
+
+                return {
+                    ...pasador,
+                    premioTotal: nuevoPremioPasador,
+                }
+            }),
+        )
+
+        // Mostrar resumen de aciertos encontrados
+        const totalPasadoresConAciertos = Object.keys(aciertosData).length
+        const totalPremios = Object.values(aciertosData).reduce((sum: number, premio: number) => sum + premio, 0)
+
+        if (totalPasadoresConAciertos > 0) {
+            toast.success(
+                `✅ Aciertos actualizados: ${totalPasadoresConAciertos} pasadores con premios (Total: $${totalPremios.toLocaleString()})`,
+                { duration: 5000 },
+            )
+            console.log(`🎯 Resumen: ${totalPasadoresConAciertos} pasadores con aciertos, total de premios: $${totalPremios}`)
+        } else {
+            toast("ℹ️ No se encontraron aciertos para la fecha seleccionada", {
+                icon: "ℹ️",
+                duration: 3000,
+            })
+        }
+
+        setUltimaActualizacion(new Date())
+        setEstaCargando(false)
+    } catch (error) {
+        console.error("❌ Error al actualizar aciertos automáticamente:", error)
+        toast.error("Error al actualizar aciertos")
+        setEstaCargando(false)
+    }
+}
+
 export default function ListadoDiario() {
     const [pasadores, setPasadores] = useState<Pasador[]>([])
     const [modulos, setModulos] = useState<string[]>([])
@@ -244,11 +637,19 @@ export default function ListadoDiario() {
     const [ultimaActualizacion, setUltimaActualizacion] = useState<Date>(new Date())
 
     useEffect(() => {
+        // Calcular aciertos automáticamente al cargar la página
+        calcularYGuardarAciertosAutomaticamente().then(() => {
+            // Una vez calculados los aciertos, actualizar la interfaz
+            manejarBusqueda()
+        })
+
         // Configurar intervalo para actualización automática (cada 5 minutos)
         const intervalo = setInterval(
             () => {
                 console.log("Ejecutando actualización automática de aciertos...")
-                actualizarAciertosAutomaticamente()
+                calcularYGuardarAciertosAutomaticamente().then(() => {
+                    actualizarAciertosAutomaticamente(setEstaCargando, fechaSeleccionada, setPasadores, setUltimaActualizacion)
+                })
             },
             5 * 60 * 1000,
         ) // 5 minutos
@@ -309,10 +710,6 @@ export default function ListadoDiario() {
             return nuevoPasadores
         })
     }
-
-    useEffect(() => {
-        manejarBusqueda()
-    }, [])
 
     useEffect(() => {
         console.log("Estado actual de pasadores:", pasadores)
@@ -445,63 +842,7 @@ export default function ListadoDiario() {
         }
     }
 
-    // Modificar la función actualizarAciertosAutomaticamente para validar los datos
-    const actualizarAciertosAutomaticamente = async () => {
-        try {
-            console.log("Actualizando aciertos automáticamente...")
-            const aciertosData = await fetchAciertosData(fechaSeleccionada)
-
-            // Actualizar solo los premios totales sin cambiar el resto de datos
-            setPasadores((prevPasadores) =>
-                prevPasadores.map((pasador) => {
-                    const nuevoPremioPasador = aciertosData[pasador.nombre] || 0
-
-                    // Si hay un premio pero no hay jugadas, no actualizar el saldo
-                    if (nuevoPremioPasador > 0 && pasador.jugado === 0) {
-                        console.log(`ADVERTENCIA: Premio sin jugadas para ${pasador.nombre}. Premio: ${nuevoPremioPasador}`)
-                        // Solo actualizar el premio, no el saldo
-                        return {
-                            ...pasador,
-                            premioTotal: nuevoPremioPasador,
-                            // Mantener los saldos como estaban
-                        }
-                    }
-
-                    return {
-                        ...pasador,
-                        premioTotal: nuevoPremioPasador,
-                    }
-                }),
-            )
-
-            // Recalcular saldos finales con los nuevos premios
-            pasadores.forEach((pasador) => {
-                const premioTotal = aciertosData[pasador.nombre] || pasador.premioTotal
-
-                // Solo actualizar si el premio cambió y hay jugadas
-                if (premioTotal !== pasador.premioTotal && pasador.jugado > 0) {
-                    console.log(`Actualizando premio para ${pasador.nombre}: ${pasador.premioTotal} -> ${premioTotal}`)
-
-                    // Recalcular saldo final con el nuevo premio
-                    const comisionCalculada = (pasador.comisionPorcentaje / 100) * pasador.jugado
-                    const comisionRedondeada = Math.round(comisionCalculada * 100) / 100
-
-                    const saldoFinal =
-                        pasador.saldoAnterior + pasador.jugado - comisionRedondeada - premioTotal - pasador.pagado + pasador.cobrado
-
-                    // Actualizar comisión y saldo final
-                    actualizarComisionYSaldoFinal(pasador.id, comisionRedondeada, saldoFinal)
-                }
-            })
-
-            toast.success("Aciertos actualizados automáticamente")
-            setUltimaActualizacion(new Date())
-        } catch (error) {
-            console.error("Error al actualizar aciertos automáticamente:", error)
-        }
-    }
-
-    // Modificar la función manejarBusqueda para validar mejor los datos
+    // Modificar la función manejarBusqueda para usar la nueva función de aciertos
     const manejarBusqueda = async () => {
         setEstaCargando(true)
         setError(null)
@@ -563,14 +904,14 @@ export default function ListadoDiario() {
 
             console.log("Pasadores procesados:", listaPasadores.length)
 
-            // Fetch aciertos data
-            const aciertosData = await fetchAciertosData(fechaSeleccionada)
+            // USAR LA NUEVA FUNCIÓN para obtener aciertos detallados
+            const aciertosData = await fetchAciertosDetallados(fechaSeleccionada)
             console.log("Aciertos data:", aciertosData)
 
             // Update listaPasadores with aciertos data
             const updatedListaPasadores = listaPasadores.map((pasador) => ({
                 ...pasador,
-                premioTotal: aciertosData[pasador.nombre] || 0, // Cambiado de pasador.id a pasador.nombre
+                premioTotal: aciertosData[pasador.nombre] || 0, // Buscar por nombre del pasador
             }))
 
             // Obtener la comisión de cada pasador
@@ -820,12 +1161,21 @@ export default function ListadoDiario() {
                 <div className="text-xs text-gray-500 mt-2">
                     Última actualización: {format(ultimaActualizacion, "dd/MM/yyyy HH:mm:ss", { locale: es })}
                     <Button
-                        onClick={actualizarAciertosAutomaticamente}
+                        onClick={() =>
+                            actualizarAciertosAutomaticamente(
+                                setEstaCargando,
+                                fechaSeleccionada,
+                                setPasadores,
+                                setUltimaActualizacion,
+                            )
+                        }
                         variant="ghost"
                         size="sm"
-                        className="ml-2 h-6 px-2 text-blue-600"
+                        className="ml-2 h-6 px-2 text-blue-600 hover:bg-blue-100"
+                        disabled={estaCargando}
                     >
-                        <Loader2 className="h-3 w-3 mr-1" /> Actualizar ahora
+                        {estaCargando ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Loader2 className="h-3 w-3 mr-1" />}
+                        Actualizar ahora
                     </Button>
                 </div>
 
@@ -938,7 +1288,9 @@ export default function ListadoDiario() {
                                                     <TableCell className="text-right text-orange-600">
                                                         {formatearMoneda(pasador.comisionPasador)}
                                                     </TableCell>
-                                                    <TableCell className="text-right text-teal-600">
+                                                    <TableCell
+                                                        className={`text-right font-bold ${pasador.premioTotal > 0 ? "text-green-600" : "text-gray-400"}`}
+                                                    >
                                                         {formatearMoneda(pasador.premioTotal)}
                                                     </TableCell>
                                                 </TableRow>
