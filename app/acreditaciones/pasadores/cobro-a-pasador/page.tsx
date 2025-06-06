@@ -231,7 +231,7 @@ export default function CobrosAPasadorPage() {
                         {loading && (
                             <div className="mb-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg shadow-sm flex items-center">
                                 <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                                <span>Cargando cobros...</span>
+                                <span>Cargando los cobros...</span>
                             </div>
                         )}
 
