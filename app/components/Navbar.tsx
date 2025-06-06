@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ChevronDown, ChevronRight, User, LogOut, Loader2 } from "lucide-react"
+import { ChevronDown, ChevronRight, User, LogOut, Loader2 } from 'lucide-react'
 import { useState } from "react"
 import { useAuth } from "@/contexts/AuthContext"
 
@@ -61,6 +61,7 @@ const elementosMenu: MenuItem[] = [
         submenu: [
             "cargar jugadas de un pasador",
             "cargar borratinas de un pasador",
+            "cargar redoblonas de un pasador",
             "panel de control",
             {
                 titulo: "listado de jugadas",
@@ -199,6 +200,11 @@ const ElementoSubmenu: React.FC<{ item: MenuItem | string; tituloParent: string 
         }, [])
 
         const getHref = (item: MenuItem | string, tituloParent: string): string => {
+            // Caso especial para cargar redoblonas de un pasador
+            if (typeof item === "string" && item === "cargar redoblonas de un pasador" && tituloParent === "jugadas") {
+                return "/jugadas/cargar-redoblonas-pasador"
+            }
+
             if (typeof item === "string") {
                 return `/${tituloParent.toLowerCase()}/${item.toLowerCase().replace(/ /g, "-")}`
             }
@@ -304,4 +310,3 @@ export default function Navbar() {
         </nav>
     )
 }
-

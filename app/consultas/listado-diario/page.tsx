@@ -51,7 +51,7 @@ interface Pasador {
 const ITEMS_POR_PAGINA = 15
 const PASADORES_POR_MODULO = 40
 
-// Actualizar el componente BotonSelectorFecha para que tenga más color
+// Componente BotonSelectorFecha
 const BotonSelectorFecha = ({
     fecha,
     onChange,
@@ -83,7 +83,7 @@ const BotonSelectorFecha = ({
     </Popover>
 )
 
-// Actualizar el componente SelectorFecha para que tenga más color
+// Componente SelectorFecha
 const SelectorFecha = ({
     fechaSeleccionada,
     onCambioFecha,
@@ -117,26 +117,24 @@ const SelectorFecha = ({
     </div>
 )
 
-// FUNCIÓN NUEVA: Calcular y guardar aciertos automáticamente
+// FUNCIÓN MEJORADA: Calcular y guardar aciertos automáticamente
 const calcularYGuardarAciertosAutomaticamente = async () => {
     try {
         console.log("🔄 Calculando y guardando aciertos automáticamente...")
 
-        // 1. Obtener la fecha actual
         const fechaActual = startOfDay(new Date())
         const fechaString = format(fechaActual, "yyyy-MM-dd")
         console.log(`📅 Fecha actual: ${fechaString}`)
 
-        // 2. Obtener el extracto para esta fecha
+        // Obtener el extracto para esta fecha
         const extractosRef = doc(db, "extractos", fechaString)
         const extractoSnapshot = await getDoc(extractosRef)
 
         if (!extractoSnapshot.exists()) {
             console.log(`❌ No se encontró extracto para la fecha: ${fechaString}`)
-            return
+            return {}
         }
 
-        // 3. Obtener resultados del extracto
         const extractoData = extractoSnapshot.data()
         console.log("📄 Datos completos del extracto:", extractoData)
 
@@ -159,14 +157,12 @@ const calcularYGuardarAciertosAutomaticamente = async () => {
 
         if (resultados.length === 0) {
             console.log(`❌ No se encontraron resultados en el extracto`)
-            console.log("📄 Estructura completa del extracto:", JSON.stringify(extractoData, null, 2))
-            return
+            return {}
         }
 
         console.log(`📈 Resultados encontrados: ${resultados.length}`)
-        console.log("🎰 Resultados completos:", JSON.stringify(resultados, null, 2))
 
-        // 4. Obtener todos los pasadores
+        // Obtener todos los pasadores
         const pasadoresRef = collection(db, "pasadores")
         const pasadoresSnapshot = await getDocs(pasadoresRef)
         const pasadores: any[] = []
@@ -180,84 +176,48 @@ const calcularYGuardarAciertosAutomaticamente = async () => {
 
         console.log(`👥 Pasadores encontrados: ${pasadores.length}`)
 
-        // 5. Procesar cada pasador y buscar sus jugadas
         const aciertosData: { [key: string]: number } = {}
 
+        // Procesar cada pasador
         for (const pasador of pasadores) {
             console.log(`\n🎯 Procesando pasador: ${pasador.nombre} (ID: ${pasador.id})`)
 
             try {
-                // Buscar en la colección específica del pasador
                 const jugadasRef = collection(db, `JUGADAS DE ${pasador.nombre}`)
-                console.log(`📋 Buscando en colección: JUGADAS DE ${pasador.nombre}`)
-
                 const jugadasSnapshot = await getDocs(jugadasRef)
-                console.log(`📊 Total de documentos en la colección: ${jugadasSnapshot.size}`)
 
                 const jugadasDelDia: any[] = []
 
                 // Filtrar jugadas del día actual
                 jugadasSnapshot.forEach((doc) => {
                     const jugada = doc.data()
-                    console.log(`📝 Documento encontrado:`, {
-                        id: doc.id,
-                        fechaHora: jugada.fechaHora,
-                        numero: jugada.numero,
-                        monto: jugada.monto,
-                        totalMonto: jugada.totalMonto,
-                        tipo: jugada.tipo,
-                        loteria: jugada.loteria,
-                        provincias: jugada.provincias,
-                    })
-
                     if (jugada.fechaHora && jugada.fechaHora.toDate) {
                         const fechaJugada = format(jugada.fechaHora.toDate(), "yyyy-MM-dd")
-                        console.log(`📅 Fecha de la jugada: ${fechaJugada}, Fecha buscada: ${fechaString}`)
-
                         if (fechaJugada === fechaString) {
                             jugadasDelDia.push({
                                 id: doc.id,
                                 ...jugada,
                             })
-                            console.log(`✅ Jugada agregada para el día actual`)
-                        } else {
-                            console.log(`❌ Jugada no es del día actual`)
                         }
-                    } else {
-                        console.log(`❌ Jugada sin fecha válida`)
                     }
                 })
 
                 console.log(`📋 Jugadas del día para ${pasador.nombre}: ${jugadasDelDia.length}`)
 
-                if (jugadasDelDia.length > 0) {
-                    console.log("🎲 Jugadas del día completas:", JSON.stringify(jugadasDelDia, null, 2))
-                }
-
-                // Procesar jugadas y verificar aciertos
                 let totalGanadoPasador = 0
 
+                // Procesar jugadas y verificar aciertos
                 for (const jugada of jugadasDelDia) {
-                    console.log(`\n🎲 Procesando jugada:`, jugada)
-
                     const tipo = jugada.tipo || "NUEVA JUGADA"
-                    console.log(`📝 Tipo de jugada: ${tipo}`)
 
                     if (tipo === "NUEVA JUGADA" || tipo === "Jugada con redoblona") {
-                        // Obtener datos de la jugada
                         const loteria = (jugada.loteria || "").toString().toUpperCase()
                         const provincias = jugada.provincias || []
 
-                        console.log(`🎰 Lotería: ${loteria}`)
-                        console.log(`🌍 Provincias: ${JSON.stringify(provincias)}`)
-
-                        // Obtener jugadas individuales
                         let jugadasIndividuales = []
                         if (jugada.jugadas && Array.isArray(jugada.jugadas) && jugada.jugadas.length > 0) {
                             jugadasIndividuales = jugada.jugadas
-                            console.log(`📊 Usando array de jugadas: ${jugadasIndividuales.length} jugadas`)
                         } else {
-                            // Crear jugada individual a partir de los datos principales
                             jugadasIndividuales = [
                                 {
                                     numero: jugada.numero || "",
@@ -265,10 +225,7 @@ const calcularYGuardarAciertosAutomaticamente = async () => {
                                     monto: jugada.monto || jugada.totalMonto || 0,
                                 },
                             ]
-                            console.log(`📊 Creando jugada individual desde datos principales`)
                         }
-
-                        console.log(`🎯 Jugadas individuales:`, JSON.stringify(jugadasIndividuales, null, 2))
 
                         // Procesar cada jugada individual
                         for (const jugadaIndividual of jugadasIndividuales) {
@@ -276,111 +233,44 @@ const calcularYGuardarAciertosAutomaticamente = async () => {
                             const posicion = Number.parseInt(jugadaIndividual.posicion?.toString() || "1")
                             const monto = Number.parseFloat(jugadaIndividual.monto?.toString() || "0")
 
-                            console.log(`\n🎯 Verificando número: ${numeroApostado}, posición: ${posicion}, monto: ${monto}`)
+                            if (!numeroApostado || monto <= 0) continue
 
-                            if (!numeroApostado || monto <= 0) {
-                                console.log(`❌ Saltando jugada inválida`)
-                                continue
-                            }
-
-                            // Determinar rango de verificación según la posición
                             const rangoVerificacion = posicion === 1 ? 1 : posicion === 5 ? 5 : posicion === 10 ? 10 : 20
-                            console.log(`📏 Rango de verificación: ${rangoVerificacion}`)
 
                             // Procesar cada provincia apostada
                             for (const provinciaApostada of provincias) {
-                                console.log(`\n🌍 Procesando provincia: ${provinciaApostada}`)
-
-                                // Buscar resultado para esta provincia
                                 const resultadoProvincia = resultados.find((resultado) => {
                                     const provinciaResultado = resultado.provincia?.toString().toUpperCase() || ""
-                                    console.log(
-                                        `🔍 Comparando provincia apostada "${provinciaApostada.toUpperCase()}" con resultado "${provinciaResultado}"`,
-                                    )
-
-                                    const coincide =
+                                    return (
                                         provinciaResultado === provinciaApostada.toUpperCase() ||
                                         provinciaResultado.includes(provinciaApostada.toUpperCase()) ||
                                         provinciaApostada.toUpperCase().includes(provinciaResultado)
-
-                                    console.log(`${coincide ? "✅" : "❌"} Coincidencia de provincia: ${coincide}`)
-                                    return coincide
+                                    )
                                 })
 
-                                if (!resultadoProvincia) {
-                                    console.log(`❌ No se encontró resultado para provincia: ${provinciaApostada}`)
-                                    continue
-                                }
-
-                                console.log(`✅ Resultado encontrado para ${provinciaApostada}:`, resultadoProvincia)
-
-                                // Verificar lotería
-                                const loteriaResultado = resultadoProvincia.loteria?.toString().toUpperCase() || ""
-                                console.log(`🎰 Comparando lotería apostada "${loteria}" con resultado "${loteriaResultado}"`)
-
-                                // Verificación más flexible de lotería
-                                const loteriasCompatibles = [
-                                    "PREVIA",
-                                    "LAPREVIA",
-                                    "PRIMERA",
-                                    "MATUTINA",
-                                    "VESPERTINA",
-                                    "NOCTURNA",
-                                    "NACIONAL",
-                                    "NACION",
-                                    "PROVINCIAL",
-                                    "PROVIN",
-                                    "PROVINCE",
-                                    "PROVINCIA",
-                                ]
-
-                                const loteriaCoincide =
-                                    loteria === loteriaResultado ||
-                                    loteria === "TODAS" ||
-                                    loteria === "" ||
-                                    (loteriasCompatibles.includes(loteria) && loteriasCompatibles.includes(loteriaResultado))
-
-                                console.log(`${loteriaCoincide ? "✅" : "❌"} Coincidencia de lotería: ${loteriaCoincide}`)
-
-                                if (!loteriaCoincide) {
-                                    console.log(`❌ Lotería no coincide: ${loteria} vs ${loteriaResultado}`)
-                                    continue
-                                }
+                                if (!resultadoProvincia) continue
 
                                 const sorteos = resultadoProvincia.sorteos || {}
-                                console.log(`🎰 Sorteos disponibles:`, sorteos)
-
-                                // Buscar en todos los sorteos disponibles
                                 let numerosGanadores: any[] = []
                                 Object.keys(sorteos).forEach((sorteoKey) => {
                                     const numeros = sorteos[sorteoKey]
-                                    console.log(`🔍 Revisando sorteo "${sorteoKey}":`, numeros)
                                     if (Array.isArray(numeros)) {
                                         numerosGanadores = numerosGanadores.concat(numeros)
                                     }
                                 })
 
-                                console.log(`🎰 Números ganadores encontrados:`, numerosGanadores)
-
-                                if (numerosGanadores.length === 0) {
-                                    console.log(`❌ No hay números ganadores`)
-                                    continue
-                                }
+                                if (numerosGanadores.length === 0) continue
 
                                 // Verificar coincidencias dentro del rango
                                 for (let i = 0; i < rangoVerificacion && i < numerosGanadores.length; i++) {
                                     const numeroGanador = numerosGanadores[i].toString().padStart(4, "0")
-                                    console.log(`🔍 Comparando ${numeroApostado} con ${numeroGanador} (posición ${i + 1})`)
 
-                                    // Verificar coincidencia exacta
                                     if (numeroApostado.length <= numeroGanador.length) {
                                         const ultimasCifrasGanador = numeroGanador.substring(numeroGanador.length - numeroApostado.length)
-                                        console.log(`🔍 Últimas ${numeroApostado.length} cifras del ganador: ${ultimasCifrasGanador}`)
 
                                         if (numeroApostado === ultimasCifrasGanador) {
                                             const cifrasCoincidentes = numeroApostado.length
 
-                                            // Multiplicadores según las cifras y posición
                                             const multiplicadores: { [key: number]: { [key: number]: number } } = {
                                                 2: { 1: 70, 5: 14, 10: 7, 20: 3.5 },
                                                 3: { 1: 600, 5: 120, 10: 60, 20: 30 },
@@ -393,11 +283,9 @@ const calcularYGuardarAciertosAutomaticamente = async () => {
                                             totalGanadoPasador += premio
 
                                             console.log(
-                                                `🎉 ¡ACIERTO! para ${pasador.nombre}: ${numeroApostado} (${cifrasCoincidentes} cifras, pos ${posicion}) = $${premio} (${monto} x ${multiplicador})`,
+                                                `🎉 ¡ACIERTO! para ${pasador.nombre}: ${numeroApostado} (${cifrasCoincidentes} cifras, pos ${posicion}) = $${premio}`,
                                             )
-                                            break // Ya encontramos coincidencia, no seguir buscando
-                                        } else {
-                                            console.log(`❌ No coincide: ${numeroApostado} ≠ ${ultimasCifrasGanador}`)
+                                            break
                                         }
                                     }
                                 }
@@ -423,16 +311,13 @@ const calcularYGuardarAciertosAutomaticamente = async () => {
                         },
                         { merge: true },
                     )
-                    console.log(`✅ Acierto guardado en Firestore para ${pasador.nombre}`)
-                } else {
-                    console.log(`😞 No se encontraron aciertos para ${pasador.nombre}`)
                 }
             } catch (error) {
                 console.error(`❌ Error al procesar jugadas de ${pasador.nombre}:`, error)
             }
         }
 
-        // 6. Guardar los aciertos en el documento de extractos
+        // Guardar los aciertos en el documento de extractos
         if (Object.keys(aciertosData).length > 0) {
             await setDoc(
                 extractosRef,
@@ -447,9 +332,6 @@ const calcularYGuardarAciertosAutomaticamente = async () => {
             )
 
             console.log("✅ Aciertos guardados en el documento de extractos")
-            console.log("🎯 Resumen de aciertos:", aciertosData)
-        } else {
-            console.log("😞 No se encontraron aciertos para ningún pasador")
         }
 
         return aciertosData
@@ -459,13 +341,12 @@ const calcularYGuardarAciertosAutomaticamente = async () => {
     }
 }
 
-// FUNCIÓN MEJORADA: Buscar aciertos detallados con búsqueda automática en Firestore
+// FUNCIÓN MEJORADA: Buscar aciertos detallados
 const fetchAciertosDetallados = async (fecha: Date) => {
     const fechaString = format(fecha, "yyyy-MM-dd")
     console.log(`🔍 Buscando aciertos para la fecha: ${fechaString}`)
 
     try {
-        // 1. Primero buscar en la colección "aciertos"
         const pasadoresRef = collection(db, "pasadores")
         const pasadoresSnapshot = await getDocs(pasadoresRef)
         const premiosPorPasador: { [key: string]: number } = {}
@@ -488,7 +369,7 @@ const fetchAciertosDetallados = async (fecha: Date) => {
             }
         }
 
-        // 2. Si no hay aciertos en la colección "aciertos", buscar en el documento de extractos
+        // Si no hay aciertos, buscar en el documento de extractos
         if (Object.keys(premiosPorPasador).length === 0) {
             console.log("Buscando aciertos en el documento de extractos...")
             const extractosRef = doc(db, "extractos", fechaString)
@@ -507,7 +388,7 @@ const fetchAciertosDetallados = async (fecha: Date) => {
             }
         }
 
-        // 3. Si todavía no hay aciertos, calcularlos ahora
+        // Si todavía no hay aciertos, calcularlos ahora
         if (Object.keys(premiosPorPasador).length === 0) {
             console.log("No se encontraron aciertos guardados, calculando ahora...")
             const aciertosCalculados = await calcularYGuardarAciertosAutomaticamente()
@@ -527,13 +408,6 @@ const guardarSaldosDiarios = async (pasador: Pasador, fecha: Date) => {
         const fechaStr = format(fecha, "yyyy-MM-dd")
         const docId = `${pasador.id}_${fechaStr}`
 
-        console.log(`Guardando saldos diarios para ${pasador.nombre} en fecha ${fechaStr}`)
-        console.log(`ID del documento: ${docId}`)
-        console.log(`Saldo anterior: ${pasador.saldoAnterior}`)
-        console.log(`Saldo final: ${pasador.saldoFinal}`)
-        console.log(`Saldo total: ${pasador.saldoTotal}`)
-
-        // Crear o actualizar el documento de saldos diarios
         await setDoc(
             doc(db, "saldos_diarios", docId),
             {
@@ -556,17 +430,15 @@ const guardarSaldosDiarios = async (pasador: Pasador, fecha: Date) => {
             { merge: true },
         )
 
-        console.log(`Saldos diarios guardados correctamente para ${pasador.nombre}`)
+        console.log(`✅ Saldos diarios guardados para ${pasador.nombre}`)
         return true
     } catch (error) {
-        console.error(`Error al guardar saldos diarios para ${pasador.nombre}:`, error)
+        console.error(`❌ Error al guardar saldos diarios para ${pasador.nombre}:`, error)
         return false
     }
 }
 
-// Modificar la función actualizarAciertosAutomaticamente para mostrar más información
-// Reemplazar la función con esta versión mejorada:
-
+// Función para actualizar aciertos automáticamente
 const actualizarAciertosAutomaticamente = async (
     setEstaCargando: any,
     fechaSeleccionada: Date,
@@ -577,21 +449,11 @@ const actualizarAciertosAutomaticamente = async (
         console.log("🔄 Actualizando aciertos automáticamente...")
         setEstaCargando(true)
 
-        // Usar la nueva función que busca aciertos detallados
         const aciertosData = await fetchAciertosDetallados(fechaSeleccionada)
 
-        console.log("📊 Datos de aciertos obtenidos:", aciertosData)
-
-        // Actualizar los premios totales de cada pasador
         setPasadores((prevPasadores: any) =>
             prevPasadores.map((pasador: any) => {
-                // Buscar aciertos por nombre del pasador (como en el código Dart)
                 const nuevoPremioPasador = aciertosData[pasador.nombre] || 0
-
-                if (nuevoPremioPasador !== pasador.premioTotal) {
-                    console.log(`💰 Actualizando premio para ${pasador.nombre}: ${pasador.premioTotal} → ${nuevoPremioPasador}`)
-                }
-
                 return {
                     ...pasador,
                     premioTotal: nuevoPremioPasador,
@@ -599,7 +461,6 @@ const actualizarAciertosAutomaticamente = async (
             }),
         )
 
-        // Mostrar resumen de aciertos encontrados
         const totalPasadoresConAciertos = Object.keys(aciertosData).length
         const totalPremios = Object.values(aciertosData).reduce((sum: number, premio: number) => sum + premio, 0)
 
@@ -608,7 +469,6 @@ const actualizarAciertosAutomaticamente = async (
                 `✅ Aciertos actualizados: ${totalPasadoresConAciertos} pasadores con premios (Total: $${totalPremios.toLocaleString()})`,
                 { duration: 5000 },
             )
-            console.log(`🎯 Resumen: ${totalPasadoresConAciertos} pasadores con aciertos, total de premios: $${totalPremios}`)
         } else {
             toast("ℹ️ No se encontraron aciertos para la fecha seleccionada", {
                 icon: "ℹ️",
@@ -636,229 +496,21 @@ export default function ListadoDiario() {
     const [intervaloActualizacion, setIntervaloActualizacion] = useState<NodeJS.Timeout | null>(null)
     const [ultimaActualizacion, setUltimaActualizacion] = useState<Date>(new Date())
 
-    useEffect(() => {
-        // Calcular aciertos automáticamente al cargar la página
-        calcularYGuardarAciertosAutomaticamente().then(() => {
-            // Una vez calculados los aciertos, actualizar la interfaz
-            manejarBusqueda()
-        })
-
-        // Configurar intervalo para actualización automática (cada 5 minutos)
-        const intervalo = setInterval(
-            () => {
-                console.log("Ejecutando actualización automática de aciertos...")
-                calcularYGuardarAciertosAutomaticamente().then(() => {
-                    actualizarAciertosAutomaticamente(setEstaCargando, fechaSeleccionada, setPasadores, setUltimaActualizacion)
-                })
-            },
-            5 * 60 * 1000,
-        ) // 5 minutos
-
-        setIntervaloActualizacion(intervalo)
-
-        // Limpiar intervalo al desmontar
-        return () => {
-            if (intervaloActualizacion) {
-                clearInterval(intervaloActualizacion)
-            }
-        }
-    }, [])
-
-    const actualizarMontoJugadoPagosCobros = (pasadorId: string, monto: number, pagos: number, cobros: number) => {
-        setPasadores((prevPasadores: Pasador[]) => {
-            return prevPasadores.map((p: Pasador) => {
-                if (p.id === pasadorId) {
-                    return { ...p, jugado: monto, pagado: pagos, cobrado: cobros }
-                }
-                return p
-            })
-        })
-    }
-
-    // Modificar la función actualizarComisionYSaldoFinal para validar los datos
-    const actualizarComisionYSaldoFinal = (pasadorId: string, comision: number, saldoFinal: number) => {
-        setPasadores((prevPasadores: Pasador[]) => {
-            const nuevoPasadores = prevPasadores.map((p: Pasador) => {
-                if (p.id === pasadorId) {
-                    // Validar que el saldo final sea un número razonable
-                    let saldoFinalValidado = saldoFinal
-
-                    // Si hay un premio pero no hay jugadas, pagos ni cobros, el saldo no debería cambiar
-                    if (p.premioTotal > 0 && p.jugado === 0 && p.pagado === 0 && p.cobrado === 0) {
-                        console.log(`ADVERTENCIA: Premio sin jugadas para ${p.nombre}. Premio: ${p.premioTotal}`)
-                        // Mantener el saldo anterior en este caso
-                        saldoFinalValidado = p.saldoAnterior
-                    }
-
-                    // Ahora el saldo total es igual al saldo final
-                    const pasadorActualizado = {
-                        ...p,
-                        comisionPasador: comision,
-                        saldoFinal: saldoFinalValidado,
-                        saldoTotal: saldoFinalValidado, // Saldo total = Saldo final
-                    }
-
-                    // Guardar los datos en Firestore después de actualizar el estado
-                    setTimeout(() => {
-                        guardarSaldosDiarios(pasadorActualizado, fechaSeleccionada)
-                    }, 0)
-
-                    return pasadorActualizado
-                }
-                return p
-            })
-            return nuevoPasadores
-        })
-    }
-
-    useEffect(() => {
-        console.log("Estado actual de pasadores:", pasadores)
-    }, [pasadores])
-
-    // Modificar la función obtenerMontoJugadoPagosCobros para incluir el saldo anterior en los cálculos
-    const obtenerMontoJugadoPagosCobros = (
-        pasadorId: string,
-        pasadorNombre: string,
-        fecha: Date,
-        comisionPorcentaje: number,
-        saldoAnterior: number,
-        premioTotal: number,
-    ) => {
-        const jugadasRef = collection(db, `JUGADAS DE ${pasadorNombre}`)
-        const pagosRef = collection(db, "pagos")
-        const cobrosRef = collection(db, "cobros")
-        const fechaString = format(fecha, "yyyy-MM-dd")
-
-        const jugadasQuery = query(
-            jugadasRef,
-            where("fechaHora", ">=", startOfDay(fecha)),
-            where("fechaHora", "<=", endOfDay(fecha)),
-        )
-        const pagosQuery = query(pagosRef, where("pasadorId", "==", pasadorId), where("fecha", "==", fechaString))
-        const cobrosQuery = query(cobrosRef, where("pasadorId", "==", pasadorId), where("fecha", "==", fechaString))
-
-        const unsubscribeJugadas = onSnapshot(jugadasQuery, (jugadasSnapshot) => {
-            let ventasOnlineAcumuladas = 0
-            let anulacionVentaOnline = 0
-
-            jugadasSnapshot.forEach((doc) => {
-                const jugada = doc.data()
-                if (jugada.anulada !== true) {
-                    ventasOnlineAcumuladas += Number(jugada.totalMonto) || 0
-                } else {
-                    anulacionVentaOnline += Number(jugada.totalMonto) || 0
-                }
-            })
-
-            // Obtener pagos y cobros por separado para depurar
-            getDocs(pagosQuery).then((pagosSnapshot) => {
-                let totalPagos = 0
-
-                // Depurar cada documento de pago
-                pagosSnapshot.forEach((doc) => {
-                    const pagoData = doc.data()
-                    // Asegurarse de que el monto del pago sea un valor positivo
-                    const montoPago = Math.abs(pagoData.monto || 0)
-                    console.log(`Pago encontrado para ${pasadorNombre}: ID=${doc.id}, Monto=${montoPago}`)
-                    totalPagos += montoPago
-                })
-
-                console.log(`Total de pagos para ${pasadorNombre}: ${totalPagos}`)
-
-                // Obtener cobros después de procesar pagos
-                getDocs(cobrosQuery).then((cobrosSnapshot) => {
-                    let totalCobros = 0
-
-                    // Depurar cada documento de cobro
-                    cobrosSnapshot.forEach((doc) => {
-                        const cobroData = doc.data()
-                        // Asegurarse de que el monto del cobro sea un valor positivo
-                        const montoCobro = Math.abs(cobroData.monto || 0)
-                        console.log(`Cobro encontrado para ${pasadorNombre}: ID=${doc.id}, Monto=${montoCobro}`)
-                        totalCobros += montoCobro
-                    })
-
-                    console.log(`Total de cobros para ${pasadorNombre}: ${totalCobros}`)
-
-                    console.log(`Monto jugado para ${pasadorNombre}: ${ventasOnlineAcumuladas}`)
-                    console.log(`Pagos para ${pasadorNombre}: ${totalPagos}`)
-                    console.log(`Cobros para ${pasadorNombre}: ${totalCobros}`)
-                    console.log(`Premio total para ${pasadorNombre}: ${premioTotal}`)
-                    console.log(`Saldo anterior para ${pasadorNombre}: ${saldoAnterior}`)
-
-                    const comisionCalculada = (comisionPorcentaje / 100) * ventasOnlineAcumuladas
-                    const comisionRedondeada = Math.round(comisionCalculada * 100) / 100
-
-                    // Validar si hay premio pero no hay jugadas
-                    if (premioTotal > 0 && ventasOnlineAcumuladas === 0 && totalPagos === 0 && totalCobros === 0) {
-                        console.log(`ADVERTENCIA: Premio sin jugadas para ${pasadorNombre}. Premio: ${premioTotal}`)
-
-                        // Actualizar solo el monto jugado, pagos y cobros, pero no el saldo
-                        actualizarMontoJugadoPagosCobros(
-                            pasadorId,
-                            ventasOnlineAcumuladas,
-                            Math.abs(totalPagos),
-                            Math.abs(totalCobros),
-                        )
-
-                        // No actualizar el saldo en este caso
-                        return
-                    }
-
-                    // Cálculo del saldo final con signos explícitos para mayor claridad
-                    // Asegurarse de que los pagos se resten y los cobros se sumen
-                    const saldoFinal =
-                        saldoAnterior +
-                        ventasOnlineAcumuladas -
-                        comisionRedondeada -
-                        premioTotal -
-                        Math.abs(totalPagos) +
-                        Math.abs(totalCobros)
-
-                    console.log(`Cálculo de saldo final para ${pasadorNombre}:`)
-                    console.log(`Saldo anterior: ${saldoAnterior}`)
-                    console.log(`+ Ventas online: ${ventasOnlineAcumuladas}`)
-                    console.log(`- Comisión (${comisionPorcentaje}%): ${comisionRedondeada}`)
-                    console.log(`- Premio total: ${premioTotal}`)
-                    console.log(`- Total pagos: ${Math.abs(totalPagos)}`)
-                    console.log(`+ Total cobros: ${Math.abs(totalCobros)}`)
-                    console.log(`= Saldo final: ${saldoFinal}`)
-
-                    // Actualizar el estado con los valores calculados
-                    // Asegurarse de que los valores se almacenen como positivos para mostrarlos correctamente en la UI
-                    actualizarMontoJugadoPagosCobros(
-                        pasadorId,
-                        ventasOnlineAcumuladas,
-                        Math.abs(totalPagos),
-                        Math.abs(totalCobros),
-                    )
-                    actualizarComisionYSaldoFinal(pasadorId, comisionRedondeada, saldoFinal)
-                })
-            })
-        })
-
-        return () => {
-            unsubscribeJugadas()
-        }
-    }
-
-    // Modificar la función manejarBusqueda para usar la nueva función de aciertos
+    // FUNCIÓN PRINCIPAL SIMPLIFICADA
     const manejarBusqueda = async () => {
         setEstaCargando(true)
         setError(null)
 
         try {
-            console.log("Iniciando búsqueda de datos...")
-            console.log("Fecha seleccionada:", format(fechaSeleccionada, "yyyy-MM-dd"))
+            console.log("🚀 Iniciando búsqueda simplificada...")
 
-            // Obtener pasadores
+            // 1. Obtener pasadores básicos
             const pasadoresRef = collection(db, "pasadores")
             const pasadoresSnapshot = await getDocs(pasadoresRef)
 
             const listaPasadores: Pasador[] = []
             pasadoresSnapshot.forEach((doc) => {
                 const data = doc.data()
-
                 listaPasadores.push({
                     id: doc.id,
                     displayId:
@@ -888,221 +540,205 @@ export default function ListadoDiario() {
                     fecha: "",
                     timestamp: "",
                     premioTotal: 0,
-                    comisionPorcentaje: 0,
+                    comisionPorcentaje: data.comision || 0,
                     modulo: data.modulo || 70,
                     posicionEnModulo: data.posicionEnModulo || 1,
                 })
             })
 
-            // Ordenar por módulo y posición
+            // 2. Ordenar por módulo y posición
             listaPasadores.sort((a, b) => {
-                if (a.modulo !== b.modulo) {
-                    return a.modulo - b.modulo
-                }
+                if (a.modulo !== b.modulo) return a.modulo - b.modulo
                 return a.posicionEnModulo - b.posicionEnModulo
             })
 
-            console.log("Pasadores procesados:", listaPasadores.length)
+            console.log(`✅ ${listaPasadores.length} pasadores cargados`)
 
-            // USAR LA NUEVA FUNCIÓN para obtener aciertos detallados
+            // 3. Obtener aciertos
             const aciertosData = await fetchAciertosDetallados(fechaSeleccionada)
-            console.log("Aciertos data:", aciertosData)
 
-            // Update listaPasadores with aciertos data
-            const updatedListaPasadores = listaPasadores.map((pasador) => ({
+            // 4. Actualizar pasadores con aciertos
+            const pasadoresConAciertos = listaPasadores.map((pasador) => ({
                 ...pasador,
-                premioTotal: aciertosData[pasador.nombre] || 0, // Buscar por nombre del pasador
+                premioTotal: aciertosData[pasador.nombre] || 0,
             }))
 
-            // Obtener la comisión de cada pasador
-            const pasadoresComisionRef = collection(db, "pasadores")
-            const pasadoresComisionSnapshot = await getDocs(pasadoresComisionRef)
-            const comisionesPasadores: { [key: string]: number } = {}
-
-            pasadoresComisionSnapshot.forEach((doc) => {
-                const data = doc.data()
-                comisionesPasadores[doc.id] = data.comision || 0
-            })
-
-            // Actualizar listaPasadores con la comisión
-            const updatedListaPasadoresComision = updatedListaPasadores.map((pasador) => ({
-                ...pasador,
-                comisionPorcentaje: comisionesPasadores[pasador.id] || 0,
-            }))
-
-            // Obtener saldo anterior (saldo total del día anterior)
+            // 5. Obtener saldos del día anterior
             const fechaAnterior = new Date(fechaSeleccionada)
             fechaAnterior.setDate(fechaAnterior.getDate() - 1)
             const fechaAnteriorStr = format(fechaAnterior, "yyyy-MM-dd")
-            console.log(`Buscando saldos del día anterior: ${fechaAnteriorStr}`)
 
-            // Primero, obtener los saldos diarios del día anterior para cada pasador
             const saldosAnteriores: { [key: string]: number } = {}
-
-            // Obtener todos los documentos de saldos_diarios que corresponden al día anterior
             const saldosDiariosRef = collection(db, "saldos_diarios")
             const saldosDiariosSnapshot = await getDocs(saldosDiariosRef)
 
-            // Filtrar los documentos que corresponden al día anterior
             saldosDiariosSnapshot.forEach((docSnapshot) => {
                 const docId = docSnapshot.id
-                // Los IDs tienen el formato "pasadorId_fecha"
                 if (docId.endsWith(fechaAnteriorStr)) {
                     const pasadorId = docId.split("_")[0]
                     const data = docSnapshot.data()
-
-                    // SOLO usar saldo_total del día anterior como saldo anterior
                     if (data.saldo_total !== undefined) {
                         saldosAnteriores[pasadorId] = data.saldo_total
-                        console.log(
-                            `Encontrado saldo_total para pasador ${pasadorId} en fecha ${fechaAnteriorStr}: ${data.saldo_total}`,
-                        )
                     }
                 }
             })
 
-            // Actualizar cada pasador con el saldo total del día anterior como saldo anterior
-            updatedListaPasadoresComision.forEach((pasador, index) => {
-                if (saldosAnteriores[pasador.id] !== undefined) {
-                    updatedListaPasadoresComision[index].saldoAnterior = saldosAnteriores[pasador.id]
-                    console.log(`Asignado saldo anterior para ${pasador.nombre}: ${saldosAnteriores[pasador.id]}`)
-                } else {
-                    console.log(`No se encontró saldo anterior para ${pasador.nombre} en fecha ${fechaAnteriorStr}`)
+            // 6. Actualizar con saldos anteriores
+            const pasadoresFinales = pasadoresConAciertos.map((pasador) => ({
+                ...pasador,
+                saldoAnterior: saldosAnteriores[pasador.id] || 0,
+                saldoFinal: saldosAnteriores[pasador.id] || 0, // Inicializar igual al anterior
+                saldoTotal: saldosAnteriores[pasador.id] || 0,
+            }))
 
-                    // Si no hay datos del día anterior, intentar obtener el saldo del pasador directamente
-                    const pasadorDoc = pasadoresSnapshot.docs.find((doc) => doc.id === pasador.id)
-                    if (pasadorDoc) {
-                        const pasadorData = pasadorDoc.data()
-                        // Intentar usar saldoTotal si existe, de lo contrario usar saldoFinal
-                        const saldoPasador = pasadorData.saldoTotal || pasadorData.saldoFinal || 0
-                        updatedListaPasadoresComision[index].saldoAnterior = saldoPasador
-                        console.log(`Usando saldo del pasador como saldo anterior: ${saldoPasador}`)
-                    } else {
-                        console.log(`No se encontró documento del pasador ${pasador.nombre}`)
-                        updatedListaPasadoresComision[index].saldoAnterior = 0
-                    }
-                }
-            })
+            setPasadores(pasadoresFinales)
 
-            // Ejecutar todas las consultas de saldos diarios en paralelo para el día actual
-            const promesasSaldosDiarios = updatedListaPasadoresComision.map((pasador) => {
-                // Preparar la consulta para los saldos diarios de este pasador
-                const saldoDiarioRef = doc(db, "saldos_diarios", `${pasador.id}_${format(fechaSeleccionada, "yyyy-MM-dd")}`)
-                return getDoc(saldoDiarioRef)
-            })
-            const snapshotsSaldosDiarios = await Promise.all(promesasSaldosDiarios)
+            // 7. Configurar módulos
+            const modulosUnicos = Array.from(new Set(pasadoresFinales.map((p) => p.modulo.toString()))).sort(
+                (a, b) => Number.parseInt(a) - Number.parseInt(b),
+            )
+            setModulos(modulosUnicos)
 
-            // Procesar los resultados de los saldos diarios del día actual
-            snapshotsSaldosDiarios.forEach((snapshot, index) => {
-                // Obtener el saldo anterior y el saldo final del día seleccionado
-                if (snapshot.exists()) {
-                    const datosSaldoDiario = snapshot.data()
-                    // Mantener el saldo anterior que ya obtuvimos del día anterior
-                    const saldoAnterior = updatedListaPasadoresComision[index].saldoAnterior
-                    const saldoFinal = datosSaldoDiario.saldo_final || 0
+            if (modulosUnicos.length > 0 && !modulosUnicos.includes(moduloSeleccionado)) {
+                setModuloSeleccionado(modulosUnicos[0])
+            }
 
-                    updatedListaPasadoresComision[index] = {
-                        ...updatedListaPasadoresComision[index],
-                        // Mantener el saldo anterior que ya obtuvimos
-                        saldoAnterior: saldoAnterior,
-                        saldoFinal: saldoFinal,
-                        saldoTotal: saldoFinal, // Saldo total = Saldo final
-                        jugado: datosSaldoDiario.ventas_online || 0,
-                        aciertos: datosSaldoDiario.aciertos || [],
-                        aciertosBorratinas: datosSaldoDiario.aciertos_borratinas || [],
-                        acreditacionComision: datosSaldoDiario.acreditacion_comision || 0,
-                        anulacionVentaOnline: datosSaldoDiario.anulacion_venta_online || 0,
-                        borratinaOnline: datosSaldoDiario.borratina_online || 0,
-                        cobroAlCliente: datosSaldoDiario.cobro_al_cliente || 0,
-                        comisionPasador: datosSaldoDiario.comision_pasador || 0,
-                        pagoACliente: datosSaldoDiario.pago_a_cliente || 0,
-                        pagoAciertosBorras: datosSaldoDiario.pago_aciertos_borras || 0,
-                        pagoPremioBorratina: datosSaldoDiario.pago_premio_borratina || 0,
-                        pagoPremioBorratinas: datosSaldoDiario.pago_premio_borratinas || 0,
-                        pagoQuiniela: datosSaldoDiario.pago_premio_quiniela || 0,
-                        quintinaOnline: datosSaldoDiario.quintina_online || 0,
-                        triplonaOnline: datosSaldoDiario.triplona_online || 0,
-                        ventasOnline: datosSaldoDiario.ventas_online || 0,
-                        fecha: datosSaldoDiario.fecha || "",
-                        timestamp: datosSaldoDiario.timestamp || "",
-                    }
-                } else {
-                    console.log(
-                        `No se encontraron datos de saldo diario para ${updatedListaPasadoresComision[index].nombre} en la fecha ${format(fechaSeleccionada, "yyyy-MM-dd")}`,
-                    )
-                }
-
-                console.log(
-                    `Saldo anterior para ${updatedListaPasadoresComision[index].nombre}: ${updatedListaPasadoresComision[index].saldoAnterior}`,
-                )
-                console.log(
-                    `Saldo final para ${updatedListaPasadoresComision[index].nombre}: ${updatedListaPasadoresComision[index].saldoFinal}`,
-                )
-                console.log(
-                    `Saldo total para ${updatedListaPasadoresComision[index].nombre}: ${updatedListaPasadoresComision[index].saldoTotal}`,
-                )
-            })
-
-            // Validar los premios totales antes de actualizar los pasadores
-            updatedListaPasadoresComision.forEach((pasador, index) => {
-                // Si hay un premio pero no hay jugadas, no afectar el saldo
-                if (pasador.premioTotal > 0 && pasador.jugado === 0) {
-                    console.log(`ADVERTENCIA: Premio sin jugadas para ${pasador.nombre}. Premio: ${pasador.premioTotal}`)
-
-                    // Establecer el saldo final igual al saldo anterior en este caso
-                    updatedListaPasadoresComision[index].saldoFinal = pasador.saldoAnterior
-                    updatedListaPasadoresComision[index].saldoTotal = pasador.saldoAnterior
-                }
-            })
-
-            // Suscribirse a las actualizaciones de jugado, pagos y cobros para cada pasador
-            updatedListaPasadoresComision.forEach((pasador) => {
+            // 8. Configurar listeners para datos en tiempo real (simplificado)
+            pasadoresFinales.forEach((pasador) => {
                 obtenerMontoJugadoPagosCobros(
                     pasador.id,
                     pasador.nombre,
                     fechaSeleccionada,
                     pasador.comisionPorcentaje,
-                    pasador.saldoAnterior, // Pasar el saldo anterior actualizado
+                    pasador.saldoAnterior,
                     pasador.premioTotal,
                 )
             })
 
-            setPasadores(updatedListaPasadoresComision)
-
-            // Obtener módulos únicos basados en la nueva estructura
-            const modulosUnicos = Array.from(new Set(updatedListaPasadoresComision.map((p) => p.modulo.toString()))).sort(
-                (a, b) => Number.parseInt(a) - Number.parseInt(b),
-            )
-            console.log("Módulos únicos:", modulosUnicos)
-            setModulos(modulosUnicos)
-
-            if (modulosUnicos.length > 0 && !modulosUnicos.includes(moduloSeleccionado)) {
-                console.log("Actualizando módulo seleccionado a:", modulosUnicos[0])
-                setModuloSeleccionado(modulosUnicos[0])
-            }
-
-            // Guardar automáticamente los saldos diarios al consultar
-            console.log("Guardando saldos diarios para la fecha:", format(fechaSeleccionada, "yyyy-MM-dd"))
-            try {
-                const resultadosGuardado = await Promise.all(
-                    updatedListaPasadoresComision.map((pasador) => guardarSaldosDiarios(pasador, fechaSeleccionada)),
-                )
-                const exitosos = resultadosGuardado.filter((r) => r).length
-                toast.success(`Saldos diarios actualizados: ${exitosos} de ${updatedListaPasadoresComision.length}`)
-            } catch (error) {
-                console.error("Error al guardar saldos diarios:", error)
-                toast.error("Error al guardar los saldos diarios")
-            }
-
-            console.log("Búsqueda completada")
             setUltimaActualizacion(new Date())
+            console.log("✅ Búsqueda completada exitosamente")
         } catch (err) {
-            console.error("Error en manejarBusqueda:", err)
-            setError(`Hubo un error al buscar los datos: ${err instanceof Error ? err.message : String(err)}`)
+            console.error("❌ Error en manejarBusqueda:", err)
+            setError(`Error al cargar los datos: ${err instanceof Error ? err.message : String(err)}`)
         } finally {
             setEstaCargando(false)
         }
     }
+
+    // Función simplificada para obtener datos en tiempo real
+    const obtenerMontoJugadoPagosCobros = (
+        pasadorId: string,
+        pasadorNombre: string,
+        fecha: Date,
+        comisionPorcentaje: number,
+        saldoAnterior: number,
+        premioTotal: number,
+    ) => {
+        const jugadasRef = collection(db, `JUGADAS DE ${pasadorNombre}`)
+        const pagosRef = collection(db, "pagos")
+        const cobrosRef = collection(db, "cobros")
+        const fechaString = format(fecha, "yyyy-MM-dd")
+
+        const jugadasQuery = query(
+            jugadasRef,
+            where("fechaHora", ">=", startOfDay(fecha)),
+            where("fechaHora", "<=", endOfDay(fecha)),
+        )
+        const pagosQuery = query(pagosRef, where("pasadorId", "==", pasadorId), where("fecha", "==", fechaString))
+        const cobrosQuery = query(cobrosRef, where("pasadorId", "==", pasadorId), where("fecha", "==", fechaString))
+
+        // Listener para jugadas
+        const unsubscribeJugadas = onSnapshot(jugadasQuery, async (jugadasSnapshot) => {
+            let ventasOnlineAcumuladas = 0
+
+            jugadasSnapshot.forEach((doc) => {
+                const jugada = doc.data()
+                if (jugada.anulada !== true) {
+                    ventasOnlineAcumuladas += Number(jugada.totalMonto) || 0
+                }
+            })
+
+            // Obtener pagos y cobros
+            try {
+                const [pagosSnapshot, cobrosSnapshot] = await Promise.all([getDocs(pagosQuery), getDocs(cobrosQuery)])
+
+                let totalPagos = 0
+                let totalCobros = 0
+
+                pagosSnapshot.forEach((doc) => {
+                    const pagoData = doc.data()
+                    totalPagos += Math.abs(pagoData.monto || 0)
+                })
+
+                cobrosSnapshot.forEach((doc) => {
+                    const cobroData = doc.data()
+                    totalCobros += Math.abs(cobroData.monto || 0)
+                })
+
+                const comisionCalculada = (comisionPorcentaje / 100) * ventasOnlineAcumuladas
+                const saldoFinal =
+                    saldoAnterior + ventasOnlineAcumuladas - comisionCalculada - premioTotal - totalPagos + totalCobros
+
+                // Actualizar estado
+                setPasadores((prevPasadores) =>
+                    prevPasadores.map((p) => {
+                        if (p.id === pasadorId) {
+                            const pasadorActualizado = {
+                                ...p,
+                                jugado: ventasOnlineAcumuladas,
+                                pagado: totalPagos,
+                                cobrado: totalCobros,
+                                comisionPasador: comisionCalculada,
+                                saldoFinal: saldoFinal,
+                                saldoTotal: saldoFinal,
+                            }
+
+                            // Guardar en Firebase de forma asíncrona
+                            setTimeout(() => guardarSaldosDiarios(pasadorActualizado, fecha), 0)
+
+                            return pasadorActualizado
+                        }
+                        return p
+                    }),
+                )
+            } catch (error) {
+                console.error(`Error al obtener pagos/cobros para ${pasadorNombre}:`, error)
+            }
+        })
+
+        return () => unsubscribeJugadas()
+    }
+
+    // useEffect simplificado
+    useEffect(() => {
+        // Ejecutar búsqueda inicial
+        manejarBusqueda()
+
+        // Configurar intervalo de actualización (cada 5 minutos)
+        const intervalo = setInterval(
+            () => {
+                console.log("🔄 Actualización automática...")
+                actualizarAciertosAutomaticamente(setEstaCargando, fechaSeleccionada, setPasadores, setUltimaActualizacion)
+            },
+            5 * 60 * 1000,
+        )
+
+        setIntervaloActualizacion(intervalo)
+
+        // Cleanup
+        return () => {
+            if (intervalo) clearInterval(intervalo)
+        }
+    }, [fechaSeleccionada]) // Dependencia de fecha
+
+    // Cleanup del intervalo
+    useEffect(() => {
+        return () => {
+            if (intervaloActualizacion) {
+                clearInterval(intervaloActualizacion)
+            }
+        }
+    }, [intervaloActualizacion])
 
     const formatearMoneda = (monto: number): string => {
         return new Intl.NumberFormat("es-AR", {
@@ -1118,11 +754,6 @@ export default function ListadoDiario() {
         (paginaActual - 1) * ITEMS_POR_PAGINA,
         paginaActual * ITEMS_POR_PAGINA,
     )
-
-    console.log("Renderizando componente, pasadores:", pasadores)
-    console.log("Módulo seleccionado:", moduloSeleccionado)
-    console.log("Pasadores filtrados:", pasadoresFiltrados)
-    console.log("Pasadores paginados:", pasadoresPaginados)
 
     return (
         <div className="flex flex-col min-h-screen bg-gray-100">
@@ -1158,6 +789,7 @@ export default function ListadoDiario() {
                         />
                     </div>
                 </div>
+
                 <div className="text-xs text-gray-500 mt-2">
                     Última actualización: {format(ultimaActualizacion, "dd/MM/yyyy HH:mm:ss", { locale: es })}
                     <Button
