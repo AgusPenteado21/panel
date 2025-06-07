@@ -46,7 +46,7 @@
     "react-datepicker": "^7.6.0",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.0.0",
-    "react-hot-toast": "^2.5.1",
+    "react-hot-toast": "^2.5.2",
     "resend": "^4.0.1",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
