@@ -101,19 +101,6 @@ export default function CargarRedoblonas() {
     // Crear un array para almacenar las referencias a los inputs
     const inputRefs = useRef<HTMLInputElement[][]>([])
 
-    // Inicializar el array de referencias
-    useEffect(() => {
-        // Asegurarse de que tenemos filas de jugadas
-        if (jugadas.length < TOTAL_FILAS) {
-            setJugadas(createEmptyJugadas())
-        }
-
-        // Inicializar las referencias
-        inputRefs.current = Array(TOTAL_FILAS)
-            .fill(0)
-            .map(() => Array(3).fill(null))
-    }, [jugadas.length])
-
     const horarios = [
         { id: "LAPREVIA", label: "La Previa (10:15)" },
         { id: "PRIMERA", label: "Primera (12:00)" },
@@ -137,12 +124,7 @@ export default function CargarRedoblonas() {
         { id: "TUCUMA", label: "Tucumán" },
     ]
 
-    useEffect(() => {
-        fetchPasadores()
-        loadSecuenciaCounter()
-    }, [])
-
-    const fetchPasadores = async () => {
+    const fetchPasadores = useCallback(async () => {
         try {
             const pasadoresCollection = collection(db, "pasadores")
             const pasadoresSnapshot = await getDocs(pasadoresCollection)
@@ -157,9 +139,9 @@ export default function CargarRedoblonas() {
             console.error("Error fetching pasadores:", error)
             toast.error("Error al cargar los pasadores")
         }
-    }
+    }, [])
 
-    const loadSecuenciaCounter = () => {
+    const loadSecuenciaCounter = useCallback(() => {
         const storedCounter = localStorage.getItem("secuenciaCounter")
         if (storedCounter) {
             setSecuenciaCounter(Number.parseInt(storedCounter))
@@ -167,7 +149,7 @@ export default function CargarRedoblonas() {
             // Inicializar con un número más grande para tener 13 dígitos
             setSecuenciaCounter(1000000000000) // 13 dígitos
         }
-    }
+    }, [])
 
     const incrementSecuenciaCounter = useCallback(() => {
         setSecuenciaCounter((prevCounter) => {
@@ -184,6 +166,39 @@ export default function CargarRedoblonas() {
         }, 0)
         setTotalMonto(total)
     }, [jugadasCompletas])
+
+    const generarSecuenciaUnicaRapida = useCallback((): string => {
+        // Usar timestamp + contador + número aleatorio para garantizar unicidad
+        const timestamp = Date.now().toString().slice(-8) // Últimos 8 dígitos del timestamp
+        const contador = secuenciaCounter.toString().padStart(3, "0")
+        const aleatorio = Math.floor(Math.random() * 100)
+            .toString()
+            .padStart(2, "0")
+
+        const secuencia = `${timestamp}${contador}${aleatorio}`.padStart(13, "0")
+        incrementSecuenciaCounter()
+
+        console.log(`⚡ Secuencia generada instantáneamente: ${secuencia}`)
+        return secuencia
+    }, [secuenciaCounter, incrementSecuenciaCounter])
+
+    // Inicializar el array de referencias
+    useEffect(() => {
+        // Asegurarse de que tenemos filas de jugadas
+        if (jugadas.length < TOTAL_FILAS) {
+            setJugadas(createEmptyJugadas())
+        }
+
+        // Inicializar las referencias
+        inputRefs.current = Array(TOTAL_FILAS)
+            .fill(0)
+            .map(() => Array(3).fill(null))
+    }, [jugadas.length])
+
+    useEffect(() => {
+        fetchPasadores()
+        loadSecuenciaCounter()
+    }, [fetchPasadores, loadSecuenciaCounter])
 
     useEffect(() => {
         calcularTotalMonto()
@@ -210,22 +225,7 @@ export default function CargarRedoblonas() {
         })
     }
 
-    const generarSecuenciaUnicaRapida = useCallback((): string => {
-        // Usar timestamp + contador + número aleatorio para garantizar unicidad
-        const timestamp = Date.now().toString().slice(-8) // Últimos 8 dígitos del timestamp
-        const contador = secuenciaCounter.toString().padStart(3, "0")
-        const aleatorio = Math.floor(Math.random() * 100)
-            .toString()
-            .padStart(2, "0")
-
-        const secuencia = `${timestamp}${contador}${aleatorio}`.padStart(13, "0")
-        incrementSecuenciaCounter()
-
-        console.log(`⚡ Secuencia generada instantáneamente: ${secuencia}`)
-        return secuencia
-    }, [secuenciaCounter, incrementSecuenciaCounter])
-
-    const generarTicket = (jugadasParaTicket: JugadaCompleta[]) => {
+    const generarTicketConMultiplesSecuencias = (jugadasParaTicket: JugadaCompleta[], secuencias: string[]) => {
         const pasadorSeleccionado = pasadores.find((p) => p.id === selectedPasador)
         if (!pasadorSeleccionado) {
             toast.error("Pasador no encontrado")
@@ -235,7 +235,6 @@ export default function CargarRedoblonas() {
         let ticketContent = ""
         const fechaHora = formatDate(new Date())
         const terminal = "72-0005"
-        const secuencia = secuenciaCounter.toString().padStart(13, "0") // Usar secuenciaCounter directamente
 
         ticketContent += "TICKET\n"
         ticketContent += `FECHA/HORA ${fechaHora}\n`
@@ -245,59 +244,75 @@ export default function CargarRedoblonas() {
         ticketContent += "-".repeat(32) + "\n"
 
         const loteriaAbreviada = lotteryAbbreviations[selectedSorteo] || selectedSorteo
-        ticketContent += `${loteriaAbreviada}\n`
-        ticketContent += `SECUENCIA  ${secuencia}\n`
 
-        // Agrupar jugadas por provincias
-        const jugadasPorProvincias: { [key: string]: JugadaCompleta[] } = {}
+        let secuenciaIndex = 0
+        let totalGeneral = 0
 
-        jugadasParaTicket.forEach((jugada) => {
-            const provinciasKey = jugada.provincias.join(",")
-            if (!jugadasPorProvincias[provinciasKey]) {
-                jugadasPorProvincias[provinciasKey] = []
-            }
-            jugadasPorProvincias[provinciasKey].push(jugada)
-        })
+        // Procesar cada jugada principal con su primera redoblona
+        for (let i = 0; i < jugadasCompletas.length; i++) {
+            const jugada = jugadasCompletas[i]
+            const importe = Number.parseFloat(jugada.importe) || 0
+            const subtotal = importe * jugada.provincias.length
+            totalGeneral += subtotal
 
-        // Procesar cada grupo de provincias
-        for (const [provinciasKey, jugadasDeProvincias] of Object.entries(jugadasPorProvincias)) {
-            const provincias = provinciasKey.split(",")
-            const provinciasSet = new Set(provincias.map((p) => provinceAbbreviations[p] || p))
+            // Secuencia para la jugada principal + primera redoblona
+            const secuenciaPrincipal = secuencias[secuenciaIndex++]
 
+            // Mostrar encabezado de la lotería y secuencia
+            ticketContent += `${loteriaAbreviada}\n`
+            ticketContent += `SECUENCIA  ${secuenciaPrincipal}\n`
+
+            // Mostrar loterías seleccionadas
+            const provinciasSet = new Set(jugada.provincias.map((p) => provinceAbbreviations[p] || p))
             ticketContent += `LOTERIAS: ${Array.from(provinciasSet).join(" ")}\n`
             ticketContent += "NUMERO UBIC   IMPORTE\n"
 
-            let subtotal = 0
+            // Mostrar la jugada principal
+            const numero = jugada.numero.padStart(4, " ")
+            const posicion = jugada.posicion.padStart(2, " ")
+            ticketContent += `${numero}  ${posicion}   $${importe.toFixed(2)}\n`
 
-            jugadasDeProvincias.forEach((jugada) => {
-                const numero = jugada.numero.padStart(4, " ")
-                const posicion = jugada.posicion.padStart(2, " ")
-                const importe = Number.parseFloat(jugada.importe) || 0
-                subtotal += importe * jugada.provincias.length
+            // Mostrar la primera redoblona (si existe)
+            if (jugada.redoblonas && jugada.redoblonas.length > 0) {
+                const primeraRedoblona = jugada.redoblonas[0]
+                const redoblonaNumero = primeraRedoblona.numero.padStart(4, " ")
+                const redoblonaPosicion = primeraRedoblona.posicion.padStart(2, " ")
+                ticketContent += `${redoblonaNumero}  ${redoblonaPosicion}   XXX\n`
+            }
 
-                ticketContent += `${numero}  ${posicion}   $${importe.toFixed(2)}\n`
-
-                // Agregar redoblonas si existen
-                if (jugada.redoblonas && jugada.redoblonas.length > 0) {
-                    jugada.redoblonas.forEach((redoblona) => {
-                        const redoblonaNumero = redoblona.numero.padStart(4, " ")
-                        const redoblonaPosicion = redoblona.posicion.padStart(2, " ")
-                        ticketContent += `${redoblonaNumero}  ${redoblonaPosicion}   XXX\n`
-                    })
-                }
-            })
-
+            // Agregar separador después de cada jugada principal
             ticketContent += "-".repeat(32) + "\n"
-            ticketContent += `SUBTOTAL: $${subtotal.toFixed(2)}\n\n`
+
+            // Procesar redoblonas adicionales (cada una con su propia secuencia)
+            for (let j = 1; j < jugada.redoblonas.length; j++) {
+                const redoblonaAdicional = jugada.redoblonas[j]
+                const secuenciaAdicional = secuencias[secuenciaIndex++]
+
+                // Mostrar encabezado para la redoblona adicional
+                ticketContent += `${loteriaAbreviada}\n`
+                ticketContent += `SECUENCIA  ${secuenciaAdicional}\n`
+                ticketContent += `LOTERIAS: ${Array.from(provinciasSet).join(" ")}\n`
+                ticketContent += "NUMERO UBIC   IMPORTE\n"
+
+                // Mostrar la redoblona adicional
+                const redoblonaNumeroAdicional = redoblonaAdicional.numero.padStart(4, " ")
+                const redoblonaPosicionAdicional = redoblonaAdicional.posicion.padStart(2, " ")
+                ticketContent += `${redoblonaNumeroAdicional}  ${redoblonaPosicionAdicional}   $${importe.toFixed(2)}\n`
+
+                // Agregar separador después de cada redoblona adicional
+                ticketContent += "-".repeat(32) + "\n"
+            }
         }
 
+        // Mostrar el subtotal al final
+        ticketContent += `SUBTOTAL: $${totalGeneral.toFixed(2)}\n\n`
+
+        // Mostrar el total general
         ticketContent += "=".repeat(32) + "\n"
-        ticketContent += `TOTAL: $${totalMonto.toFixed(2)}`.padStart(32) + "\n"
+        ticketContent += `TOTAL: $${totalGeneral.toFixed(2)}`.padStart(32) + "\n"
 
         setTicketContent(ticketContent)
         setIsTicketDialogOpen(true)
-
-        return secuencia
     }
 
     const guardarJugadas = async () => {
@@ -670,168 +685,6 @@ export default function CargarRedoblonas() {
         ))
     }
 
-    const generarTicketConSecuencia = (jugadasParaTicket: JugadaCompleta[], secuenciaUnica: string) => {
-        const pasadorSeleccionado = pasadores.find((p) => p.id === selectedPasador)
-        if (!pasadorSeleccionado) {
-            toast.error("Pasador no encontrado")
-            return
-        }
-
-        let ticketContent = ""
-        const fechaHora = formatDate(new Date())
-        const terminal = "72-0005"
-
-        ticketContent += "TICKET\n"
-        ticketContent += `FECHA/HORA ${fechaHora}\n`
-        ticketContent += `TERMINAL   ${terminal}\n`
-        ticketContent += `PASADOR    ${pasadorSeleccionado.nombre}\n`
-        ticketContent += `SORTEO     ${selectedSorteo}\n`
-        ticketContent += "-".repeat(32) + "\n"
-
-        const loteriaAbreviada = lotteryAbbreviations[selectedSorteo] || selectedSorteo
-        ticketContent += `${loteriaAbreviada}\n`
-        ticketContent += `SECUENCIA  ${secuenciaUnica}\n`
-
-        // Agrupar jugadas por provincias
-        const jugadasPorProvincias: { [key: string]: JugadaCompleta[] } = {}
-
-        jugadasParaTicket.forEach((jugada) => {
-            const provinciasKey = jugada.provincias.join(",")
-            if (!jugadasPorProvincias[provinciasKey]) {
-                jugadasPorProvincias[provinciasKey] = []
-            }
-            jugadasPorProvincias[provinciasKey].push(jugada)
-        })
-
-        // Procesar cada grupo de provincias
-        for (const [provinciasKey, jugadasDeProvincias] of Object.entries(jugadasPorProvincias)) {
-            const provincias = provinciasKey.split(",")
-            const provinciasSet = new Set(provincias.map((p) => provinceAbbreviations[p] || p))
-
-            ticketContent += `LOTERIAS: ${Array.from(provinciasSet).join(" ")}\n`
-            ticketContent += "NUMERO UBIC   IMPORTE\n"
-
-            let subtotal = 0
-
-            jugadasDeProvincias.forEach((jugada) => {
-                const numero = jugada.numero.padStart(4, " ")
-                const posicion = jugada.posicion.padStart(2, " ")
-                const importe = Number.parseFloat(jugada.importe) || 0
-                subtotal += importe * jugada.provincias.length
-
-                ticketContent += `${numero}  ${posicion}   $${importe.toFixed(2)}\n`
-
-                // Agregar redoblonas si existen
-                if (jugada.redoblonas && jugada.redoblonas.length > 0) {
-                    jugada.redoblonas.forEach((redoblona) => {
-                        const redoblonaNumero = redoblona.numero.padStart(4, " ")
-                        const redoblonaPosicion = redoblona.posicion.padStart(2, " ")
-                        ticketContent += `${redoblonaNumero}  ${redoblonaPosicion}   XXX\n`
-                    })
-                }
-            })
-
-            ticketContent += "-".repeat(32) + "\n"
-            ticketContent += `SUBTOTAL: $${subtotal.toFixed(2)}\n\n`
-        }
-
-        ticketContent += "=".repeat(32) + "\n"
-        ticketContent += `TOTAL: $${totalMonto.toFixed(2)}`.padStart(32) + "\n"
-
-        setTicketContent(ticketContent)
-        setIsTicketDialogOpen(true)
-    }
-
-    const generarTicketConMultiplesSecuencias = (jugadasParaTicket: JugadaCompleta[], secuencias: string[]) => {
-        const pasadorSeleccionado = pasadores.find((p) => p.id === selectedPasador)
-        if (!pasadorSeleccionado) {
-            toast.error("Pasador no encontrado")
-            return
-        }
-
-        let ticketContent = ""
-        const fechaHora = formatDate(new Date())
-        const terminal = "72-0005"
-
-        ticketContent += "TICKET\n"
-        ticketContent += `FECHA/HORA ${fechaHora}\n`
-        ticketContent += `TERMINAL   ${terminal}\n`
-        ticketContent += `PASADOR    ${pasadorSeleccionado.nombre}\n`
-        ticketContent += `SORTEO     ${selectedSorteo}\n`
-        ticketContent += "-".repeat(32) + "\n"
-
-        const loteriaAbreviada = lotteryAbbreviations[selectedSorteo] || selectedSorteo
-
-        let secuenciaIndex = 0
-        let totalGeneral = 0
-
-        // Procesar cada jugada principal con su primera redoblona
-        for (let i = 0; i < jugadasCompletas.length; i++) {
-            const jugada = jugadasCompletas[i]
-            const importe = Number.parseFloat(jugada.importe) || 0
-            const subtotal = importe * jugada.provincias.length
-            totalGeneral += subtotal
-
-            // Secuencia para la jugada principal + primera redoblona
-            const secuenciaPrincipal = secuencias[secuenciaIndex++]
-
-            // Mostrar encabezado de la lotería y secuencia
-            ticketContent += `${loteriaAbreviada}\n`
-            ticketContent += `SECUENCIA  ${secuenciaPrincipal}\n`
-
-            // Mostrar loterías seleccionadas
-            const provinciasSet = new Set(jugada.provincias.map((p) => provinceAbbreviations[p] || p))
-            ticketContent += `LOTERIAS: ${Array.from(provinciasSet).join(" ")}\n`
-            ticketContent += "NUMERO UBIC   IMPORTE\n"
-
-            // Mostrar la jugada principal
-            const numero = jugada.numero.padStart(4, " ")
-            const posicion = jugada.posicion.padStart(2, " ")
-            ticketContent += `${numero}  ${posicion}   $${importe.toFixed(2)}\n`
-
-            // Mostrar la primera redoblona (si existe)
-            if (jugada.redoblonas && jugada.redoblonas.length > 0) {
-                const primeraRedoblona = jugada.redoblonas[0]
-                const redoblonaNumero = primeraRedoblona.numero.padStart(4, " ")
-                const redoblonaPosicion = primeraRedoblona.posicion.padStart(2, " ")
-                ticketContent += `${redoblonaNumero}  ${redoblonaPosicion}   XXX\n`
-            }
-
-            // Agregar separador después de cada jugada principal
-            ticketContent += "-".repeat(32) + "\n"
-
-            // Procesar redoblonas adicionales (cada una con su propia secuencia)
-            for (let j = 1; j < jugada.redoblonas.length; j++) {
-                const redoblonaAdicional = jugada.redoblonas[j]
-                const secuenciaAdicional = secuencias[secuenciaIndex++]
-
-                // Mostrar encabezado para la redoblona adicional
-                ticketContent += `${loteriaAbreviada}\n`
-                ticketContent += `SECUENCIA  ${secuenciaAdicional}\n`
-                ticketContent += `LOTERIAS: ${Array.from(provinciasSet).join(" ")}\n`
-                ticketContent += "NUMERO UBIC   IMPORTE\n"
-
-                // Mostrar la redoblona adicional
-                const redoblonaNumeroAdicional = redoblonaAdicional.numero.padStart(4, " ")
-                const redoblonaPosicionAdicional = redoblonaAdicional.posicion.padStart(2, " ")
-                ticketContent += `${redoblonaNumeroAdicional}  ${redoblonaPosicionAdicional}   $${importe.toFixed(2)}\n`
-
-                // Agregar separador después de cada redoblona adicional
-                ticketContent += "-".repeat(32) + "\n"
-            }
-        }
-
-        // Mostrar el subtotal al final
-        ticketContent += `SUBTOTAL: $${totalGeneral.toFixed(2)}\n\n`
-
-        // Mostrar el total general
-        ticketContent += "=".repeat(32) + "\n"
-        ticketContent += `TOTAL: $${totalGeneral.toFixed(2)}`.padStart(32) + "\n"
-
-        setTicketContent(ticketContent)
-        setIsTicketDialogOpen(true)
-    }
-
     return (
         <div className="min-h-screen bg-gradient-to-b from-blue-50 to-indigo-50">
             <Navbar />
@@ -1082,8 +935,8 @@ export default function CargarRedoblonas() {
                             {/* Panel de debug */}
                             <div className="bg-gray-100 p-2 rounded text-xs">
                                 <p>Debug: Índice actual: {currentJugadaIndex}</p>
-                                <p>Debug: Número: "{redoblonaNumero}"</p>
-                                <p>Debug: Posición: "{redoblonaPosicion}"</p>
+                                <p>Debug: Número: &quot;{redoblonaNumero}&quot;</p>
+                                <p>Debug: Posición: &quot;{redoblonaPosicion}&quot;</p>
                             </div>
 
                             {currentJugadaIndex !== null && jugadasCompletas[currentJugadaIndex] && (
