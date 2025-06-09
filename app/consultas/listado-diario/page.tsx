@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { format, startOfDay, endOfDay } from "date-fns"
 import { es } from "date-fns/locale"
-import { CalendarIcon, Loader2 } from 'lucide-react'
+import { CalendarIcon, Loader2, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Navbar from "@/app/components/Navbar"
 import { Button } from "@/components/ui/button"
@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { db } from "@/lib/firebase"
-import { collection, getDocs, getDoc, doc, query, where, onSnapshot, setDoc } from "firebase/firestore"
+import { collection, getDocs, doc, query, where, onSnapshot, setDoc } from "firebase/firestore"
 import toast from "react-hot-toast"
 
 interface Pasador {
@@ -49,14 +49,17 @@ interface Pasador {
 }
 
 const ITEMS_POR_PAGINA = 15
-const PASADORES_POR_MODULO = 40
 
-// Componente BotonSelectorFecha optimizado
+// Componente BotonSelectorFecha
 const BotonSelectorFecha = ({
     fecha,
     onChange,
     etiqueta,
-}: { fecha: Date; onChange: (fecha: Date) => void; etiqueta: string }) => (
+}: {
+    fecha: Date | undefined
+    onChange: (fecha: Date) => void
+    etiqueta: string
+}) => (
     <Popover>
         <PopoverTrigger asChild>
             <Button
@@ -83,237 +86,93 @@ const BotonSelectorFecha = ({
     </Popover>
 )
 
-// Componente SelectorFecha optimizado
+// Componente SelectorFecha
 const SelectorFecha = ({
     fechaSeleccionada,
     onCambioFecha,
     onBuscar,
     estaCargando,
+    onActualizarAciertos,
+    estaCargandoAciertos,
 }: {
     fechaSeleccionada: Date
     onCambioFecha: (fecha: Date) => void
     onBuscar: () => void
     estaCargando: boolean
+    onActualizarAciertos: () => void
+    estaCargandoAciertos: boolean
 }) => (
     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 text-xs">
         <div className="flex items-center gap-1">
             <span className="font-medium text-blue-700">Fecha:</span>
             <BotonSelectorFecha fecha={fechaSeleccionada} onChange={onCambioFecha} etiqueta="Seleccionar" />
         </div>
-        <Button
-            onClick={onBuscar}
-            className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white hover:from-blue-700 hover:to-indigo-800 h-8 px-4 text-xs rounded-md shadow-md transition-all duration-200 transform hover:scale-105"
-            disabled={estaCargando}
-        >
-            {estaCargando ? (
-                <>
-                    <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                    Cargando...
-                </>
-            ) : (
-                "Consultar"
-            )}
-        </Button>
+        <div className="flex gap-2">
+            <Button
+                onClick={onBuscar}
+                className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white hover:from-blue-700 hover:to-indigo-800 h-8 px-4 text-xs rounded-md shadow-md transition-all duration-200 transform hover:scale-105"
+                disabled={estaCargando}
+            >
+                {estaCargando ? (
+                    <>
+                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                        Cargando...
+                    </>
+                ) : (
+                    "Consultar"
+                )}
+            </Button>
+            <Button
+                onClick={onActualizarAciertos}
+                variant="outline"
+                className="h-8 px-3 text-xs border-green-300 text-green-700 hover:bg-green-50"
+                disabled={estaCargando || estaCargandoAciertos}
+            >
+                <RefreshCw className={`mr-1 h-3 w-3 ${estaCargandoAciertos ? "animate-spin" : ""}`} />
+                Aciertos
+            </Button>
+        </div>
     </div>
 )
 
-// FUNCIÓN OPTIMIZADA: Calcular aciertos de manera más eficiente
-const calcularAciertosOptimizado = async (fechaSeleccionada: Date) => {
+// FUNCIÓN CORREGIDA: Obtener aciertos desde la base de datos
+const obtenerAciertosDesdeDB = async (fechaSeleccionada: Date): Promise<Record<string, number>> => {
     try {
-        console.log("🔄 Calculando aciertos optimizado...")
+        console.log("🔄 Obteniendo aciertos desde la base de datos...")
         const fechaString = format(fechaSeleccionada, "yyyy-MM-dd")
 
-        // 1. Obtener extracto
-        const extractosRef = doc(db, "extractos", fechaString)
-        const extractoSnapshot = await getDoc(extractosRef)
+        // Obtener todos los documentos de la colección aciertos
+        const aciertosRef = collection(db, "aciertos")
+        const aciertosSnapshot = await getDocs(aciertosRef)
 
-        if (!extractoSnapshot.exists()) {
-            console.log(`❌ No se encontró extracto para la fecha: ${fechaString}`)
-            return {}
-        }
+        const aciertosData: Record<string, number> = {}
 
-        const extractoData = extractoSnapshot.data()
-        let resultados: any[] = []
+        // Procesar cada documento de aciertos (cada documento es un pasador)
+        aciertosSnapshot.forEach((doc) => {
+            const data = doc.data()
 
-        // Buscar resultados en el extracto
-        if (extractoData.resultados) {
-            resultados = extractoData.resultados
-        } else {
-            // Buscar en las claves del extracto
-            const fechaDisplay = format(fechaSeleccionada, "dd/MM/yyyy", { locale: es })
-            if (extractoData[fechaDisplay] && extractoData[fechaDisplay].resultados) {
-                resultados = extractoData[fechaDisplay].resultados
+            // Verificar si hay datos para la fecha seleccionada
+            if (data[fechaString]) {
+                const pasadorNombre = data[fechaString].aciertos?.[0]?.pasador || ""
+                const totalGanado = data[fechaString].totalGanado || 0
+
+                if (pasadorNombre && totalGanado > 0) {
+                    console.log(`💰 Aciertos encontrados para ${pasadorNombre}: $${totalGanado}`)
+                    aciertosData[pasadorNombre.toLowerCase()] = totalGanado
+                }
             }
-        }
-
-        if (resultados.length === 0) {
-            console.log(`❌ No se encontraron resultados`)
-            return {}
-        }
-
-        // 2. Obtener pasadores
-        const pasadoresRef = collection(db, "pasadores")
-        const pasadoresSnapshot = await getDocs(pasadoresRef)
-        const pasadores: any[] = []
-
-        pasadoresSnapshot.forEach((doc) => {
-            pasadores.push({
-                id: doc.id,
-                nombre: doc.data().nombre || "Sin nombre",
-            })
         })
 
-        const aciertosData: { [key: string]: number } = {}
-
-        // 3. Procesar cada pasador de manera más eficiente
-        for (const pasador of pasadores) {
-            try {
-                // Buscar primero en la colección de aciertos
-                const aciertosRef = doc(db, "aciertos", pasador.id)
-                const aciertosDoc = await getDoc(aciertosRef)
-
-                if (aciertosDoc.exists()) {
-                    const aciertosDocData = aciertosDoc.data()
-                    if (aciertosDocData[fechaString] && aciertosDocData[fechaString].totalGanado !== undefined) {
-                        const premio = aciertosDocData[fechaString].totalGanado
-                        if (premio > 0) {
-                            aciertosData[pasador.nombre] = premio
-                            console.log(`💰 Premio encontrado en cache para ${pasador.nombre}: $${premio}`)
-                        }
-                        continue // Saltar al siguiente pasador si ya tenemos el dato
-                    }
-                }
-
-                // Si no está en cache, calcular
-                const jugadasRef = collection(db, `JUGADAS DE ${pasador.nombre}`)
-                const jugadasQuery = query(
-                    jugadasRef,
-                    where("fechaHora", ">=", startOfDay(fechaSeleccionada)),
-                    where("fechaHora", "<=", endOfDay(fechaSeleccionada))
-                )
-                const jugadasSnapshot = await getDocs(jugadasQuery)
-
-                let totalGanadoPasador = 0
-
-                jugadasSnapshot.forEach((doc) => {
-                    const jugada = doc.data()
-                    if (jugada.anulada === true) return
-
-                    const tipo = jugada.tipo || "NUEVA JUGADA"
-
-                    if (tipo === "NUEVA JUGADA") {
-                        const loteria = (jugada.loteria || "").toString().toUpperCase()
-                        const provincias = jugada.provincias || []
-
-                        let jugadasIndividuales = []
-                        if (jugada.jugadas && Array.isArray(jugada.jugadas) && jugada.jugadas.length > 0) {
-                            jugadasIndividuales = jugada.jugadas
-                        } else {
-                            jugadasIndividuales = [{
-                                numero: jugada.numero || "",
-                                posicion: jugada.posicion || "1",
-                                monto: jugada.monto || jugada.totalMonto || 0,
-                            }]
-                        }
-
-                        // Procesar cada jugada individual
-                        for (const jugadaIndividual of jugadasIndividuales) {
-                            const numeroApostado = jugadaIndividual.numero?.toString() || ""
-                            const posicion = parseInt(jugadaIndividual.posicion?.toString() || "1")
-                            const monto = parseFloat(jugadaIndividual.monto?.toString() || "0")
-
-                            if (!numeroApostado || monto <= 0) continue
-
-                            const rangoVerificacion = posicion === 1 ? 1 : posicion === 5 ? 5 : posicion === 10 ? 10 : 20
-
-                            // Procesar cada provincia apostada
-                            for (const provinciaApostada of provincias) {
-                                const resultadoProvincia = resultados.find((resultado) => {
-                                    const provinciaResultado = resultado.provincia?.toString().toUpperCase() || ""
-                                    return provinciaResultado === provinciaApostada.toUpperCase() ||
-                                        provinciaResultado.includes(provinciaApostada.toUpperCase()) ||
-                                        provinciaApostada.toUpperCase().includes(provinciaResultado)
-                                })
-
-                                if (!resultadoProvincia) continue
-
-                                const sorteos = resultadoProvincia.sorteos || {}
-
-                                // Buscar en el sorteo específico según la lotería
-                                const mapeoLoterias: { [key: string]: string } = {
-                                    'LAPREVIA': 'Previa',
-                                    'PREVIA': 'Previa',
-                                    'PRIMERA': 'Primera',
-                                    'MATUTINA': 'Matutina',
-                                    'VESPERTINA': 'Vespertina',
-                                    'NOCTURNA': 'Nocturna',
-                                }
-
-                                const sorteoKey = mapeoLoterias[loteria] || loteria
-                                const numerosGanadores = sorteos[sorteoKey] || []
-
-                                if (!Array.isArray(numerosGanadores) || numerosGanadores.length === 0) continue
-
-                                // Verificar coincidencias dentro del rango
-                                for (let i = 0; i < rangoVerificacion && i < numerosGanadores.length; i++) {
-                                    const numeroGanador = numerosGanadores[i].toString().padStart(4, "0")
-
-                                    if (numeroApostado.length <= numeroGanador.length) {
-                                        const ultimasCifrasGanador = numeroGanador.substring(numeroGanador.length - numeroApostado.length)
-
-                                        if (numeroApostado === ultimasCifrasGanador) {
-                                            const cifrasCoincidentes = numeroApostado.length
-
-                                            const multiplicadores: { [key: number]: { [key: number]: number } } = {
-                                                2: { 1: 70, 5: 14, 10: 7, 20: 3.5 },
-                                                3: { 1: 600, 5: 120, 10: 60, 20: 30 },
-                                                4: { 1: 3500, 5: 700, 10: 350, 20: 175 },
-                                            }
-
-                                            const multiplicador = multiplicadores[cifrasCoincidentes]?.[posicion] || 0
-                                            const premio = monto * multiplicador
-
-                                            totalGanadoPasador += premio
-                                            console.log(`🎉 ACIERTO para ${pasador.nombre}: ${numeroApostado} = $${premio}`)
-                                            break
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                })
-
-                if (totalGanadoPasador > 0) {
-                    aciertosData[pasador.nombre] = totalGanadoPasador
-
-                    // Guardar en cache para futuras consultas
-                    await setDoc(
-                        aciertosRef,
-                        {
-                            [fechaString]: {
-                                totalGanado: totalGanadoPasador,
-                                fecha: fechaString,
-                                timestamp: format(new Date(), "dd/MM/yy HH:mm"),
-                            },
-                        },
-                        { merge: true }
-                    )
-                }
-            } catch (error) {
-                console.error(`❌ Error al procesar ${pasador.nombre}:`, error)
-            }
-        }
-
+        console.log(`✅ Aciertos obtenidos: ${Object.keys(aciertosData).length} pasadores con premios`)
         return aciertosData
     } catch (error) {
-        console.error("❌ Error al calcular aciertos:", error)
+        console.error("❌ Error al obtener aciertos desde DB:", error)
         return {}
     }
 }
 
 // Función para guardar los saldos diarios en Firestore
-const guardarSaldosDiarios = async (pasador: Pasador, fecha: Date) => {
+const guardarSaldosDiarios = async (pasador: Pasador, fecha: Date): Promise<boolean> => {
     try {
         const fechaStr = format(fecha, "yyyy-MM-dd")
         const docId = `${pasador.id}_${fechaStr}`
@@ -337,7 +196,7 @@ const guardarSaldosDiarios = async (pasador: Pasador, fecha: Date) => {
                 posicion_en_modulo: pasador.posicionEnModulo,
                 display_id: pasador.displayId,
             },
-            { merge: true }
+            { merge: true },
         )
 
         return true
@@ -353,14 +212,23 @@ export default function ListadoDiario() {
     const [moduloSeleccionado, setModuloSeleccionado] = useState<string>("70")
     const [paginaActual, setPaginaActual] = useState(1)
     const [estaCargando, setEstaCargando] = useState(false)
+    const [estaCargandoAciertos, setEstaCargandoAciertos] = useState(false)
     const [fechaSeleccionada, setFechaSeleccionada] = useState<Date>(startOfDay(new Date()))
     const [error, setError] = useState<string | null>(null)
     const [ultimaActualizacion, setUltimaActualizacion] = useState<Date>(new Date())
+
+    // Referencias para cleanup
+    const unsubscribersRef = useRef<(() => void)[]>([])
+    const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
     // FUNCIÓN PRINCIPAL OPTIMIZADA
     const manejarBusqueda = useCallback(async () => {
         setEstaCargando(true)
         setError(null)
+
+        // Limpiar listeners anteriores
+        unsubscribersRef.current.forEach((unsubscribe) => unsubscribe())
+        unsubscribersRef.current = []
 
         try {
             console.log("🚀 Iniciando búsqueda optimizada...")
@@ -370,11 +238,12 @@ export default function ListadoDiario() {
             const pasadoresSnapshot = await getDocs(pasadoresRef)
 
             const listaPasadores: Pasador[] = []
-            pasadoresSnapshot.forEach((doc) => {
-                const data = doc.data()
+            pasadoresSnapshot.forEach((docSnapshot) => {
+                const data = docSnapshot.data()
                 listaPasadores.push({
-                    id: doc.id,
-                    displayId: data.displayId || `${data.modulo || 70}-${(data.posicionEnModulo || 1).toString().padStart(4, "0")}`,
+                    id: docSnapshot.id,
+                    displayId:
+                        data.displayId || `${data.modulo || 70}-${(data.posicionEnModulo || 1).toString().padStart(4, "0")}`,
                     nombre: data.nombre || "Sin nombre",
                     saldoFinal: 0,
                     saldoAnterior: 0,
@@ -414,15 +283,15 @@ export default function ListadoDiario() {
 
             console.log(`✅ ${listaPasadores.length} pasadores cargados`)
 
-            // 3. Obtener aciertos de manera optimizada
-            const aciertosData = await calcularAciertosOptimizado(fechaSeleccionada)
+            // 3. Obtener aciertos desde la base de datos
+            const aciertosData = await obtenerAciertosDesdeDB(fechaSeleccionada)
 
             // 4. Obtener saldos del día anterior
             const fechaAnterior = new Date(fechaSeleccionada)
             fechaAnterior.setDate(fechaAnterior.getDate() - 1)
             const fechaAnteriorStr = format(fechaAnterior, "yyyy-MM-dd")
 
-            const saldosAnteriores: { [key: string]: number } = {}
+            const saldosAnteriores: Record<string, number> = {}
             const saldosDiariosRef = collection(db, "saldos_diarios")
             const saldosDiariosSnapshot = await getDocs(saldosDiariosRef)
 
@@ -431,26 +300,31 @@ export default function ListadoDiario() {
                 if (docId.endsWith(fechaAnteriorStr)) {
                     const pasadorId = docId.split("_")[0]
                     const data = docSnapshot.data()
-                    if (data.saldo_total !== undefined) {
+                    if (typeof data.saldo_total === "number") {
                         saldosAnteriores[pasadorId] = data.saldo_total
                     }
                 }
             })
 
             // 5. Actualizar pasadores con aciertos y saldos anteriores
-            const pasadoresFinales = listaPasadores.map((pasador) => ({
-                ...pasador,
-                premioTotal: aciertosData[pasador.nombre] || 0,
-                saldoAnterior: saldosAnteriores[pasador.id] || 0,
-                saldoFinal: saldosAnteriores[pasador.id] || 0,
-                saldoTotal: saldosAnteriores[pasador.id] || 0,
-            }))
+            const pasadoresFinales = listaPasadores.map((pasador) => {
+                // Buscar aciertos por nombre de pasador (case insensitive)
+                const premioTotal = aciertosData[pasador.nombre.toLowerCase()] || 0
+
+                return {
+                    ...pasador,
+                    premioTotal: premioTotal,
+                    saldoAnterior: saldosAnteriores[pasador.id] || 0,
+                    saldoFinal: saldosAnteriores[pasador.id] || 0,
+                    saldoTotal: saldosAnteriores[pasador.id] || 0,
+                }
+            })
 
             setPasadores(pasadoresFinales)
 
             // 6. Configurar módulos
             const modulosUnicos = Array.from(new Set(pasadoresFinales.map((p) => p.modulo.toString()))).sort(
-                (a, b) => parseInt(a) - parseInt(b)
+                (a, b) => Number.parseInt(a) - Number.parseInt(b),
             )
             setModulos(modulosUnicos)
 
@@ -458,22 +332,28 @@ export default function ListadoDiario() {
                 setModuloSeleccionado(modulosUnicos[0])
             }
 
-            // 7. Configurar listeners para datos en tiempo real
+            // 7. Configurar listeners para datos en tiempo real (SIN recálculo de aciertos)
             pasadoresFinales.forEach((pasador) => {
-                obtenerDatosEnTiempoReal(pasador)
+                const unsubscribe = obtenerDatosEnTiempoReal(pasador)
+                unsubscribersRef.current.push(unsubscribe)
             })
+
+            // 8. Configurar listener para aciertos en tiempo real
+            const unsubscribeAciertos = configurarListenerAciertos()
+            unsubscribersRef.current.push(unsubscribeAciertos)
 
             setUltimaActualizacion(new Date())
             console.log("✅ Búsqueda completada exitosamente")
 
             // Mostrar resumen de aciertos
             const totalAciertos = Object.keys(aciertosData).length
-            const totalPremios = Object.values(aciertosData).reduce((sum, premio) => sum + premio, 0)
+            const totalPremios = Object.values(aciertosData).reduce((sum: number, premio: number) => sum + premio, 0)
 
             if (totalAciertos > 0) {
-                toast.success(`✅ ${totalAciertos} pasadores con aciertos (Total: $${totalPremios.toLocaleString()})`, { duration: 5000 })
+                toast.success(`✅ ${totalAciertos} pasadores con aciertos (Total: $${totalPremios.toLocaleString()})`, {
+                    duration: 5000,
+                })
             }
-
         } catch (err) {
             console.error("❌ Error en manejarBusqueda:", err)
             setError(`Error al cargar los datos: ${err instanceof Error ? err.message : String(err)}`)
@@ -483,105 +363,192 @@ export default function ListadoDiario() {
         }
     }, [fechaSeleccionada, moduloSeleccionado])
 
-    // Función optimizada para obtener datos en tiempo real
-    const obtenerDatosEnTiempoReal = useCallback((pasador: Pasador) => {
-        const jugadasRef = collection(db, `JUGADAS DE ${pasador.nombre}`)
-        const pagosRef = collection(db, "pagos")
-        const cobrosRef = collection(db, "cobros")
+    // Función para configurar listener de aciertos en tiempo real
+    const configurarListenerAciertos = useCallback(() => {
+        const aciertosRef = collection(db, "aciertos")
         const fechaString = format(fechaSeleccionada, "yyyy-MM-dd")
 
-        const jugadasQuery = query(
-            jugadasRef,
-            where("fechaHora", ">=", startOfDay(fechaSeleccionada)),
-            where("fechaHora", "<=", endOfDay(fechaSeleccionada))
-        )
-        const pagosQuery = query(pagosRef, where("pasadorId", "==", pasador.id), where("fecha", "==", fechaString))
-        const cobrosQuery = query(cobrosRef, where("pasadorId", "==", pasador.id), where("fecha", "==", fechaString))
+        const unsubscribeAciertos = onSnapshot(aciertosRef, async (aciertosSnapshot) => {
+            console.log("🔄 Detectado cambio en aciertos, actualizando...")
 
-        // Listener para jugadas
-        const unsubscribeJugadas = onSnapshot(jugadasQuery, async (jugadasSnapshot) => {
-            let ventasOnlineAcumuladas = 0
-
-            jugadasSnapshot.forEach((doc) => {
-                const jugada = doc.data()
-                if (jugada.anulada !== true) {
-                    ventasOnlineAcumuladas += Number(jugada.totalMonto) || 0
-                }
-            })
-
-            // Obtener pagos y cobros
             try {
-                const [pagosSnapshot, cobrosSnapshot] = await Promise.all([
-                    getDocs(pagosQuery),
-                    getDocs(cobrosQuery)
-                ])
+                const aciertosData: Record<string, number> = {}
 
-                let totalPagos = 0
-                let totalCobros = 0
+                // Procesar cambios en aciertos
+                aciertosSnapshot.forEach((doc) => {
+                    const data = doc.data()
 
-                pagosSnapshot.forEach((doc) => {
-                    const pagoData = doc.data()
-                    totalPagos += Math.abs(pagoData.monto || 0)
-                })
+                    // Verificar si hay datos para la fecha seleccionada
+                    if (data[fechaString]) {
+                        const pasadorNombre = data[fechaString].aciertos?.[0]?.pasador || ""
+                        const totalGanado = data[fechaString].totalGanado || 0
 
-                cobrosSnapshot.forEach((doc) => {
-                    const cobroData = doc.data()
-                    totalCobros += Math.abs(cobroData.monto || 0)
-                })
-
-                const comisionCalculada = (pasador.comisionPorcentaje / 100) * ventasOnlineAcumuladas
-                const saldoFinal = pasador.saldoAnterior + ventasOnlineAcumuladas - comisionCalculada - pasador.premioTotal - totalPagos + totalCobros
-
-                // Actualizar estado
-                setPasadores((prevPasadores) =>
-                    prevPasadores.map((p) => {
-                        if (p.id === pasador.id) {
-                            const pasadorActualizado = {
-                                ...p,
-                                jugado: ventasOnlineAcumuladas,
-                                pagado: totalPagos,
-                                cobrado: totalCobros,
-                                comisionPasador: comisionCalculada,
-                                saldoFinal: saldoFinal,
-                                saldoTotal: saldoFinal,
-                            }
-
-                            // Guardar en Firebase de forma asíncrona
-                            setTimeout(() => guardarSaldosDiarios(pasadorActualizado, fechaSeleccionada), 0)
-
-                            return pasadorActualizado
+                        if (pasadorNombre && totalGanado > 0) {
+                            console.log(`💰 Aciertos actualizados en tiempo real para ${pasadorNombre}: $${totalGanado}`)
+                            aciertosData[pasadorNombre.toLowerCase()] = totalGanado
                         }
-                        return p
-                    })
+                    }
+                })
+
+                // Actualizar estado con nuevos aciertos
+                setPasadores((prevPasadores) =>
+                    prevPasadores.map((pasador) => {
+                        const nuevosAciertos = aciertosData[pasador.nombre.toLowerCase()] || 0
+                        const saldoActualizado =
+                            pasador.saldoAnterior +
+                            pasador.jugado -
+                            pasador.comisionPasador -
+                            nuevosAciertos -
+                            pasador.pagado +
+                            pasador.cobrado
+
+                        return {
+                            ...pasador,
+                            premioTotal: nuevosAciertos,
+                            saldoFinal: saldoActualizado,
+                            saldoTotal: saldoActualizado,
+                        }
+                    }),
                 )
+
+                setUltimaActualizacion(new Date())
             } catch (error) {
-                console.error(`Error al obtener pagos/cobros para ${pasador.nombre}:`, error)
+                console.error("❌ Error al actualizar aciertos en tiempo real:", error)
             }
         })
 
-        return () => unsubscribeJugadas()
+        return unsubscribeAciertos
     }, [fechaSeleccionada])
+
+    // Función optimizada para obtener datos en tiempo real (SIN aciertos)
+    const obtenerDatosEnTiempoReal = useCallback(
+        (pasador: Pasador) => {
+            const jugadasRef = collection(db, `JUGADAS DE ${pasador.nombre}`)
+            const pagosRef = collection(db, "pagos")
+            const cobrosRef = collection(db, "cobros")
+            const fechaString = format(fechaSeleccionada, "yyyy-MM-dd")
+
+            const jugadasQuery = query(
+                jugadasRef,
+                where("fechaHora", ">=", startOfDay(fechaSeleccionada)),
+                where("fechaHora", "<=", endOfDay(fechaSeleccionada)),
+            )
+            const pagosQuery = query(pagosRef, where("pasadorId", "==", pasador.id), where("fecha", "==", fechaString))
+            const cobrosQuery = query(cobrosRef, where("pasadorId", "==", pasador.id), where("fecha", "==", fechaString))
+
+            // Listener para jugadas (SIN recálculo de aciertos)
+            const unsubscribeJugadas = onSnapshot(jugadasQuery, async (jugadasSnapshot) => {
+                let ventasOnlineAcumuladas = 0
+
+                jugadasSnapshot.forEach((docSnapshot) => {
+                    const jugada = docSnapshot.data()
+                    if (jugada.anulada !== true) {
+                        ventasOnlineAcumuladas += Number(jugada.totalMonto) || 0
+                    }
+                })
+
+                // Obtener pagos y cobros
+                try {
+                    const [pagosSnapshot, cobrosSnapshot] = await Promise.all([getDocs(pagosQuery), getDocs(cobrosQuery)])
+
+                    let totalPagos = 0
+                    let totalCobros = 0
+
+                    pagosSnapshot.forEach((docSnapshot) => {
+                        const pagoData = docSnapshot.data()
+                        totalPagos += Math.abs(pagoData.monto || 0)
+                    })
+
+                    cobrosSnapshot.forEach((docSnapshot) => {
+                        const cobroData = docSnapshot.data()
+                        totalCobros += Math.abs(cobroData.monto || 0)
+                    })
+
+                    const comisionCalculada = (pasador.comisionPorcentaje / 100) * ventasOnlineAcumuladas
+                    const saldoFinal =
+                        pasador.saldoAnterior +
+                        ventasOnlineAcumuladas -
+                        comisionCalculada -
+                        pasador.premioTotal -
+                        totalPagos +
+                        totalCobros
+
+                    // Actualizar estado (manteniendo premioTotal actual)
+                    setPasadores((prevPasadores) =>
+                        prevPasadores.map((p) => {
+                            if (p.id === pasador.id) {
+                                const pasadorActualizado = {
+                                    ...p,
+                                    jugado: ventasOnlineAcumuladas,
+                                    pagado: totalPagos,
+                                    cobrado: totalCobros,
+                                    comisionPasador: comisionCalculada,
+                                    saldoFinal: saldoFinal,
+                                    saldoTotal: saldoFinal,
+                                }
+
+                                // Guardar en Firebase de forma asíncrona
+                                setTimeout(() => guardarSaldosDiarios(pasadorActualizado, fechaSeleccionada), 0)
+
+                                return pasadorActualizado
+                            }
+                            return p
+                        }),
+                    )
+                } catch (error) {
+                    console.error(`Error al obtener pagos/cobros para ${pasador.nombre}:`, error)
+                }
+            })
+
+            return () => unsubscribeJugadas()
+        },
+        [fechaSeleccionada],
+    )
 
     // useEffect optimizado
     useEffect(() => {
         manejarBusqueda()
+
+        // Cleanup al desmontar
+        return () => {
+            unsubscribersRef.current.forEach((unsubscribe) => unsubscribe())
+            unsubscribersRef.current = []
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current)
+            }
+        }
     }, [manejarBusqueda])
 
     // Función para actualizar aciertos manualmente
     const actualizarAciertos = useCallback(async () => {
-        setEstaCargando(true)
+        setEstaCargandoAciertos(true)
         try {
-            const aciertosData = await calcularAciertosOptimizado(fechaSeleccionada)
+            console.log("🔄 Actualizando aciertos desde base de datos...")
+
+            const aciertosData = await obtenerAciertosDesdeDB(fechaSeleccionada)
 
             setPasadores((prevPasadores) =>
-                prevPasadores.map((pasador) => ({
-                    ...pasador,
-                    premioTotal: aciertosData[pasador.nombre] || 0,
-                }))
+                prevPasadores.map((pasador) => {
+                    const nuevosPremios = aciertosData[pasador.nombre.toLowerCase()] || 0
+                    const saldoActualizado =
+                        pasador.saldoAnterior +
+                        pasador.jugado -
+                        pasador.comisionPasador -
+                        nuevosPremios -
+                        pasador.pagado +
+                        pasador.cobrado
+
+                    return {
+                        ...pasador,
+                        premioTotal: nuevosPremios,
+                        saldoFinal: saldoActualizado,
+                        saldoTotal: saldoActualizado,
+                    }
+                }),
             )
 
             const totalAciertos = Object.keys(aciertosData).length
-            const totalPremios = Object.values(aciertosData).reduce((sum, premio) => sum + premio, 0)
+            const totalPremios = Object.values(aciertosData).reduce((sum: number, premio: number) => sum + premio, 0)
 
             if (totalAciertos > 0) {
                 toast.success(`✅ Aciertos actualizados: ${totalAciertos} pasadores (Total: $${totalPremios.toLocaleString()})`)
@@ -594,7 +561,7 @@ export default function ListadoDiario() {
             console.error("Error al actualizar aciertos:", error)
             toast.error("Error al actualizar aciertos")
         } finally {
-            setEstaCargando(false)
+            setEstaCargandoAciertos(false)
         }
     }, [fechaSeleccionada])
 
@@ -607,41 +574,41 @@ export default function ListadoDiario() {
     }, [])
 
     // Memoizar cálculos pesados
-    const pasadoresFiltrados = useMemo(() =>
-        pasadores.filter((p) => p.modulo.toString() === moduloSeleccionado),
-        [pasadores, moduloSeleccionado]
+    const pasadoresFiltrados = useMemo(
+        () => pasadores.filter((p) => p.modulo.toString() === moduloSeleccionado),
+        [pasadores, moduloSeleccionado],
     )
 
-    const totalPaginas = useMemo(() =>
-        Math.ceil(pasadoresFiltrados.length / ITEMS_POR_PAGINA),
-        [pasadoresFiltrados.length]
+    const totalPaginas = useMemo(
+        () => Math.ceil(pasadoresFiltrados.length / ITEMS_POR_PAGINA),
+        [pasadoresFiltrados.length],
     )
 
-    const pasadoresPaginados = useMemo(() =>
-        pasadoresFiltrados.slice(
-            (paginaActual - 1) * ITEMS_POR_PAGINA,
-            paginaActual * ITEMS_POR_PAGINA
-        ),
-        [pasadoresFiltrados, paginaActual]
+    const pasadoresPaginados = useMemo(
+        () => pasadoresFiltrados.slice((paginaActual - 1) * ITEMS_POR_PAGINA, paginaActual * ITEMS_POR_PAGINA),
+        [pasadoresFiltrados, paginaActual],
     )
 
     // Calcular totales del módulo actual
     const totalesModulo = useMemo(() => {
-        return pasadoresFiltrados.reduce((acc, pasador) => ({
-            saldoTotal: acc.saldoTotal + pasador.saldoTotal,
-            jugado: acc.jugado + pasador.jugado,
-            cobrado: acc.cobrado + pasador.cobrado,
-            pagado: acc.pagado + pasador.pagado,
-            comision: acc.comision + pasador.comisionPasador,
-            premios: acc.premios + pasador.premioTotal,
-        }), {
-            saldoTotal: 0,
-            jugado: 0,
-            cobrado: 0,
-            pagado: 0,
-            comision: 0,
-            premios: 0,
-        })
+        return pasadoresFiltrados.reduce(
+            (acc, pasador) => ({
+                saldoTotal: acc.saldoTotal + pasador.saldoTotal,
+                jugado: acc.jugado + pasador.jugado,
+                cobrado: acc.cobrado + pasador.cobrado,
+                pagado: acc.pagado + pasador.pagado,
+                comision: acc.comision + pasador.comisionPasador,
+                premios: acc.premios + pasador.premioTotal,
+            }),
+            {
+                saldoTotal: 0,
+                jugado: 0,
+                cobrado: 0,
+                pagado: 0,
+                comision: 0,
+                premios: 0,
+            },
+        )
     }, [pasadoresFiltrados])
 
     return (
@@ -649,7 +616,7 @@ export default function ListadoDiario() {
             <Navbar />
             <main className="container mx-auto p-4">
                 <h1 className="text-2xl font-bold text-blue-800 mb-4 border-b-2 border-blue-500 pb-2">
-                    Listado Diario
+                    Listado Diario - Aciertos desde DB
                 </h1>
 
                 <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-md p-4 mb-4 border border-blue-200">
@@ -677,6 +644,8 @@ export default function ListadoDiario() {
                             onCambioFecha={setFechaSeleccionada}
                             onBuscar={manejarBusqueda}
                             estaCargando={estaCargando}
+                            onActualizarAciertos={actualizarAciertos}
+                            estaCargandoAciertos={estaCargandoAciertos}
                         />
                     </div>
 
@@ -684,39 +653,29 @@ export default function ListadoDiario() {
                     <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mt-4 p-3 bg-white rounded-lg border border-blue-200">
                         <div className="text-center">
                             <div className="text-xs text-gray-600">Saldo Total</div>
-                            <div className={`font-bold text-sm ${totalesModulo.saldoTotal >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            <div className={`font-bold text-sm ${totalesModulo.saldoTotal >= 0 ? "text-green-600" : "text-red-600"}`}>
                                 {formatearMoneda(totalesModulo.saldoTotal)}
                             </div>
                         </div>
                         <div className="text-center">
                             <div className="text-xs text-gray-600">Jugado</div>
-                            <div className="font-bold text-sm text-indigo-600">
-                                {formatearMoneda(totalesModulo.jugado)}
-                            </div>
+                            <div className="font-bold text-sm text-indigo-600">{formatearMoneda(totalesModulo.jugado)}</div>
                         </div>
                         <div className="text-center">
                             <div className="text-xs text-gray-600">Cobrado</div>
-                            <div className="font-bold text-sm text-blue-600">
-                                {formatearMoneda(totalesModulo.cobrado)}
-                            </div>
+                            <div className="font-bold text-sm text-blue-600">{formatearMoneda(totalesModulo.cobrado)}</div>
                         </div>
                         <div className="text-center">
                             <div className="text-xs text-gray-600">Pagado</div>
-                            <div className="font-bold text-sm text-purple-600">
-                                {formatearMoneda(totalesModulo.pagado)}
-                            </div>
+                            <div className="font-bold text-sm text-purple-600">{formatearMoneda(totalesModulo.pagado)}</div>
                         </div>
                         <div className="text-center">
                             <div className="text-xs text-gray-600">Comisión</div>
-                            <div className="font-bold text-sm text-orange-600">
-                                {formatearMoneda(totalesModulo.comision)}
-                            </div>
+                            <div className="font-bold text-sm text-orange-600">{formatearMoneda(totalesModulo.comision)}</div>
                         </div>
                         <div className="text-center">
                             <div className="text-xs text-gray-600">Total Ganado</div>
-                            <div className="font-bold text-sm text-green-600">
-                                {formatearMoneda(totalesModulo.premios)}
-                            </div>
+                            <div className="font-bold text-sm text-green-600">{formatearMoneda(totalesModulo.premios)}</div>
                         </div>
                     </div>
                 </div>
@@ -724,28 +683,28 @@ export default function ListadoDiario() {
                 <div className="text-xs text-gray-500 mt-2 flex justify-between items-center">
                     <span>
                         Última actualización: {format(ultimaActualizacion, "dd/MM/yyyy HH:mm:ss", { locale: es })}
-                    </span>
-                    <Button
-                        onClick={actualizarAciertos}
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-2 text-blue-600 hover:bg-blue-100"
-                        disabled={estaCargando}
-                    >
-                        {estaCargando ? (
-                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                        ) : (
-                            <Loader2 className="h-3 w-3 mr-1" />
+                        {estaCargandoAciertos && (
+                            <span className="ml-2 text-green-600 animate-pulse">• Actualizando aciertos...</span>
                         )}
-                        Actualizar aciertos
-                    </Button>
+                    </span>
+                    <div className="flex items-center gap-2">
+                        <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
+                        <span className="text-green-600">Aciertos desde DB en tiempo real</span>
+                    </div>
                 </div>
 
                 {error && (
-                    <div className="bg-red-100 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded mb-4 shadow-md" role="alert">
+                    <div
+                        className="bg-red-100 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded mb-4 shadow-md"
+                        role="alert"
+                    >
                         <div className="flex">
                             <div className="py-1">
-                                <svg className="fill-current h-6 w-6 text-red-500 mr-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                <svg
+                                    className="fill-current h-6 w-6 text-red-500 mr-4"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    viewBox="0 0 20 20"
+                                >
                                     <path d="M2.93 17.07A10 10 0 1 1 17.07 2.93 10 10 0 0 1 2.93 17.07zm12.73-1.41A8 8 0 1 0 4.34 4.34a8 8 0 0 0 11.32 11.32zM9 11V9h2v6H9v-4zm0-6h2v2H9V5z" />
                                 </svg>
                             </div>
@@ -759,15 +718,25 @@ export default function ListadoDiario() {
 
                 {estaCargando ? (
                     <div className="flex justify-center p-8">
-                        <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
+                        <div className="text-center">
+                            <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+                            <p className="text-blue-600 font-medium">Cargando datos desde base de datos...</p>
+                        </div>
                     </div>
                 ) : (
                     <>
                         {pasadoresFiltrados.length === 0 ? (
-                            <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded mb-4 shadow-md" role="alert">
+                            <div
+                                className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded mb-4 shadow-md"
+                                role="alert"
+                            >
                                 <div className="flex">
                                     <div className="py-1">
-                                        <svg className="fill-current h-6 w-6 text-yellow-500 mr-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                        <svg
+                                            className="fill-current h-6 w-6 text-yellow-500 mr-4"
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            viewBox="0 0 20 20"
+                                        >
                                             <path d="M2.93 17.07A10 10 0 1 1 17.07 2.93 10 10 0 0 1 2.93 17.07zm12.73-1.41A8 8 0 1 0 4.34 4.34a8 8 0 0 0 11.32 11.32zM9 11V9h2v6H9v-4zm0-6h2v2H9V5z" />
                                         </svg>
                                     </div>
@@ -811,18 +780,22 @@ export default function ListadoDiario() {
                                                             </div>
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell className={`text-right font-semibold ${pasador.saldoFinal >= 0 ? "text-green-600" : "text-red-600"}`}>
+                                                    <TableCell
+                                                        className={`text-right font-semibold ${pasador.saldoFinal >= 0 ? "text-green-600" : "text-red-600"}`}
+                                                    >
                                                         {formatearMoneda(pasador.saldoFinal)}
                                                     </TableCell>
-                                                    <TableCell className={`text-right ${pasador.saldoAnterior >= 0 ? "text-green-600" : "text-red-600"}`}>
+                                                    <TableCell
+                                                        className={`text-right ${pasador.saldoAnterior >= 0 ? "text-green-600" : "text-red-600"}`}
+                                                    >
                                                         {formatearMoneda(pasador.saldoAnterior)}
                                                     </TableCell>
-                                                    <TableCell className={`text-right font-semibold ${pasador.saldoTotal >= 0 ? "text-green-600" : "text-red-600"}`}>
+                                                    <TableCell
+                                                        className={`text-right font-semibold ${pasador.saldoTotal >= 0 ? "text-green-600" : "text-red-600"}`}
+                                                    >
                                                         {formatearMoneda(pasador.saldoTotal)}
                                                     </TableCell>
-                                                    <TableCell className="text-right text-blue-600">
-                                                        {formatearMoneda(pasador.cobrado)}
-                                                    </TableCell>
+                                                    <TableCell className="text-right text-blue-600">{formatearMoneda(pasador.cobrado)}</TableCell>
                                                     <TableCell className="text-right text-purple-600">
                                                         {formatearMoneda(pasador.pagado)}
                                                     </TableCell>
@@ -832,8 +805,15 @@ export default function ListadoDiario() {
                                                     <TableCell className="text-right text-orange-600">
                                                         {formatearMoneda(pasador.comisionPasador)}
                                                     </TableCell>
-                                                    <TableCell className={`text-right font-bold ${pasador.premioTotal > 0 ? "text-green-600" : "text-gray-400"}`}>
+                                                    <TableCell
+                                                        className={`text-right font-bold ${pasador.premioTotal > 0 ? "text-green-600" : "text-gray-400"}`}
+                                                    >
                                                         {formatearMoneda(pasador.premioTotal)}
+                                                        {pasador.premioTotal > 0 && (
+                                                            <div className="inline-block ml-1">
+                                                                <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
+                                                            </div>
+                                                        )}
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
@@ -843,7 +823,8 @@ export default function ListadoDiario() {
 
                                 <div className="flex items-center justify-between mt-6 bg-gray-50 p-3 rounded-lg shadow-sm border border-gray-200">
                                     <div className="text-sm text-blue-700 font-medium">
-                                        Página {paginaActual} de {totalPaginas} - Módulo {moduloSeleccionado}: {pasadoresFiltrados.length} pasadores
+                                        Página {paginaActual} de {totalPaginas} - Módulo {moduloSeleccionado}: {pasadoresFiltrados.length}{" "}
+                                        pasadores
                                     </div>
                                     <div className="flex gap-2">
                                         <Button
