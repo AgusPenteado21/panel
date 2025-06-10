@@ -458,12 +458,13 @@ async function obtenerResultadosConfiables(): Promise<any[]> {
     if (resultadosParaFirebase.resultados.length > 0) {
         try {
             const docRef = doc(db, "extractos", fechaKeyFirebase)
-            // CORREGIDO: Guardar con estructura consistente
-            await setDoc(docRef, {
-                resultados: resultadosParaFirebase.resultados,
-                fecha: fechaDisplay,
-                dia: resultadosParaFirebase.dia
-            }, { merge: true })
+
+            // 🔥 ESTRUCTURA CORREGIDA: Guardar anidado por fecha como espera el Dart
+            const dataParaGuardar = {
+                [fechaDisplay]: resultadosParaFirebase,
+            }
+
+            await setDoc(docRef, dataParaGuardar, { merge: true })
             console.log(`💾 Guardado en Firebase: ${resultadosApi.length} resultados CONFIABLES`)
         } catch (error) {
             console.error("❌ Error Firebase:", error)
@@ -512,7 +513,7 @@ export async function GET(request: Request) {
             return NextResponse.json(resultados, { headers: corsHeaders })
         }
 
-        // CORREGIDO: Consultar Firebase para fechas pasadas con estructura mejorada
+        // 🔥 CONSULTA CORREGIDA: Buscar en la estructura anidada por fecha
         console.log(`📂 Consultando Firebase: ${fechaKeyFirebase}`)
         const docRef = doc(db, "extractos", fechaKeyFirebase)
         const docSnap = await getDoc(docRef)
@@ -523,26 +524,17 @@ export async function GET(request: Request) {
             const data = docSnap.data()
             console.log(`📋 Datos encontrados en Firebase para ${fechaKeyFirebase}:`, Object.keys(data))
 
-            // CORREGIDO: Buscar datos con múltiples estructuras posibles
-            let resultadosData: any = null
+            // 🔥 BUSCAR EN LA ESTRUCTURA ANIDADA POR FECHA
+            let resultadosData: ResultadoDia | null = null
 
-            // Estructura nueva (directa)
-            if (data.resultados && Array.isArray(data.resultados)) {
-                resultadosData = {
-                    fecha: data.fecha || fechaDisplayConsulta,
-                    dia: data.dia || format(fechaConsulta, "EEEE", { locale: es }).replace(/^\w/, (c) => c.toUpperCase()),
-                    resultados: data.resultados
-                }
-                console.log(`✅ Usando estructura directa`)
-            }
-            // Estructura antigua (anidada por fecha)
-            else if (data[fechaDisplayConsulta]) {
+            // Buscar por fecha exacta
+            if (data[fechaDisplayConsulta]) {
                 resultadosData = data[fechaDisplayConsulta] as ResultadoDia
-                console.log(`✅ Usando estructura anidada por fecha`)
+                console.log(`✅ Encontrado con fecha exacta: ${fechaDisplayConsulta}`)
             }
-            // Buscar cualquier fecha en el documento
+            // Buscar cualquier fecha en formato dd/MM/yyyy
             else {
-                const fechasEncontradas = Object.keys(data).filter(key => key.includes('/'))
+                const fechasEncontradas = Object.keys(data).filter((key) => key.includes("/"))
                 if (fechasEncontradas.length > 0) {
                     const primeraFecha = fechasEncontradas[0]
                     resultadosData = data[primeraFecha] as ResultadoDia
@@ -622,22 +614,15 @@ export async function POST(request: Request) {
 
         let datosDia: ResultadoDia
 
-        // CORREGIDO: Manejar múltiples estructuras al leer
+        // 🔥 LECTURA CORREGIDA: Buscar en estructura anidada
         if (docSnap.exists()) {
             const data = docSnap.data()
 
-            if (data.resultados && Array.isArray(data.resultados)) {
-                // Estructura nueva
-                datosDia = {
-                    fecha: data.fecha || fecha,
-                    dia: data.dia || nombreDia,
-                    resultados: data.resultados
-                }
-            } else if (data[fecha]) {
-                // Estructura antigua
+            if (data[fecha]) {
+                // Estructura anidada por fecha
                 datosDia = data[fecha] as ResultadoDia
             } else {
-                // Crear nueva
+                // Crear nueva estructura
                 datosDia = {
                     fecha: fecha,
                     dia: nombreDia,
@@ -663,12 +648,12 @@ export async function POST(request: Request) {
         }
         provinciaResultado.sorteos[turno] = numeros
 
-        // CORREGIDO: Guardar con estructura consistente
-        await setDoc(docRef, {
-            resultados: datosDia.resultados,
-            fecha: datosDia.fecha,
-            dia: datosDia.dia
-        }, { merge: true })
+        // 🔥 GUARDADO CORREGIDO: Mantener estructura anidada por fecha
+        const dataParaGuardar = {
+            [fecha]: datosDia,
+        }
+
+        await setDoc(docRef, dataParaGuardar, { merge: true })
 
         console.log(`✅ Manual: ${provincia} - ${turno}`)
         return NextResponse.json({ success: true, message: "Actualizado manualmente" }, { headers: corsHeaders })
