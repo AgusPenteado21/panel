@@ -458,7 +458,12 @@ async function obtenerResultadosConfiables(): Promise<any[]> {
     if (resultadosParaFirebase.resultados.length > 0) {
         try {
             const docRef = doc(db, "extractos", fechaKeyFirebase)
-            await setDoc(docRef, { [fechaDisplay]: resultadosParaFirebase }, { merge: true })
+            // CORREGIDO: Guardar con estructura consistente
+            await setDoc(docRef, {
+                resultados: resultadosParaFirebase.resultados,
+                fecha: fechaDisplay,
+                dia: resultadosParaFirebase.dia
+            }, { merge: true })
             console.log(`💾 Guardado en Firebase: ${resultadosApi.length} resultados CONFIABLES`)
         } catch (error) {
             console.error("❌ Error Firebase:", error)
@@ -507,7 +512,7 @@ export async function GET(request: Request) {
             return NextResponse.json(resultados, { headers: corsHeaders })
         }
 
-        // Consultar Firebase para fechas pasadas
+        // CORREGIDO: Consultar Firebase para fechas pasadas con estructura mejorada
         console.log(`📂 Consultando Firebase: ${fechaKeyFirebase}`)
         const docRef = doc(db, "extractos", fechaKeyFirebase)
         const docSnap = await getDoc(docRef)
@@ -516,14 +521,46 @@ export async function GET(request: Request) {
 
         if (docSnap.exists()) {
             const data = docSnap.data()
-            const extractosDia = data[fechaDisplayConsulta] as ResultadoDia
+            console.log(`📋 Datos encontrados en Firebase para ${fechaKeyFirebase}:`, Object.keys(data))
 
-            if (extractosDia && extractosDia.resultados) {
-                extractosFormateados = extractosDia.resultados.flatMap((resultado) =>
-                    Object.entries(resultado.sorteos).map(([turno, numeros]) => ({
-                        id: `${resultado.provincia}-${turno}-${extractosDia.fecha}`,
-                        fecha: extractosDia.fecha,
-                        dia: extractosDia.dia,
+            // CORREGIDO: Buscar datos con múltiples estructuras posibles
+            let resultadosData: any = null
+
+            // Estructura nueva (directa)
+            if (data.resultados && Array.isArray(data.resultados)) {
+                resultadosData = {
+                    fecha: data.fecha || fechaDisplayConsulta,
+                    dia: data.dia || format(fechaConsulta, "EEEE", { locale: es }).replace(/^\w/, (c) => c.toUpperCase()),
+                    resultados: data.resultados
+                }
+                console.log(`✅ Usando estructura directa`)
+            }
+            // Estructura antigua (anidada por fecha)
+            else if (data[fechaDisplayConsulta]) {
+                resultadosData = data[fechaDisplayConsulta] as ResultadoDia
+                console.log(`✅ Usando estructura anidada por fecha`)
+            }
+            // Buscar cualquier fecha en el documento
+            else {
+                const fechasEncontradas = Object.keys(data).filter(key => key.includes('/'))
+                if (fechasEncontradas.length > 0) {
+                    const primeraFecha = fechasEncontradas[0]
+                    resultadosData = data[primeraFecha] as ResultadoDia
+                    console.log(`✅ Usando primera fecha encontrada: ${primeraFecha}`)
+                }
+            }
+
+            if (resultadosData && resultadosData.resultados) {
+                console.log(`📊 Procesando ${resultadosData.resultados.length} provincias`)
+
+                extractosFormateados = resultadosData.resultados.flatMap((resultado: any) => {
+                    const sorteos = Object.entries(resultado.sorteos || {})
+                    console.log(`🏛️ ${resultado.provincia}: ${sorteos.length} sorteos`)
+
+                    return sorteos.map(([turno, numeros]) => ({
+                        id: `${resultado.provincia}-${turno}-${resultadosData.fecha}`,
+                        fecha: resultadosData.fecha,
+                        dia: resultadosData.dia,
                         sorteo: turno,
                         loteria: resultado.loteria,
                         provincia: resultado.provincia,
@@ -531,9 +568,15 @@ export async function GET(request: Request) {
                         pizarraLink: URLS_PIZARRAS[resultado.provincia as keyof typeof URLS_PIZARRAS] || "",
                         necesita: "No",
                         confirmado: "No",
-                    })),
-                )
+                    }))
+                })
+
+                console.log(`✅ ${extractosFormateados.length} resultados formateados`)
+            } else {
+                console.log(`❌ No se encontraron resultados válidos en la estructura`)
             }
+        } else {
+            console.log(`❌ No existe documento para ${fechaKeyFirebase}`)
         }
 
         // IMPORTANTE: Devolver directamente el array de resultados, sin envolverlo en un objeto
@@ -579,8 +622,28 @@ export async function POST(request: Request) {
 
         let datosDia: ResultadoDia
 
-        if (docSnap.exists() && docSnap.data()[fecha]) {
-            datosDia = docSnap.data()[fecha] as ResultadoDia
+        // CORREGIDO: Manejar múltiples estructuras al leer
+        if (docSnap.exists()) {
+            const data = docSnap.data()
+
+            if (data.resultados && Array.isArray(data.resultados)) {
+                // Estructura nueva
+                datosDia = {
+                    fecha: data.fecha || fecha,
+                    dia: data.dia || nombreDia,
+                    resultados: data.resultados
+                }
+            } else if (data[fecha]) {
+                // Estructura antigua
+                datosDia = data[fecha] as ResultadoDia
+            } else {
+                // Crear nueva
+                datosDia = {
+                    fecha: fecha,
+                    dia: nombreDia,
+                    resultados: [],
+                }
+            }
         } else {
             datosDia = {
                 fecha: fecha,
@@ -600,7 +663,12 @@ export async function POST(request: Request) {
         }
         provinciaResultado.sorteos[turno] = numeros
 
-        await setDoc(docRef, { [fecha]: datosDia }, { merge: true })
+        // CORREGIDO: Guardar con estructura consistente
+        await setDoc(docRef, {
+            resultados: datosDia.resultados,
+            fecha: datosDia.fecha,
+            dia: datosDia.dia
+        }, { merge: true })
 
         console.log(`✅ Manual: ${provincia} - ${turno}`)
         return NextResponse.json({ success: true, message: "Actualizado manualmente" }, { headers: corsHeaders })
