@@ -61,6 +61,9 @@ const URLS_PIZARRAS = {
     "RIO NEGRO": "https://vivitusuerte.com/pizarra/rio+negro",
     SANTIAGO: "https://vivitusuerte.com/pizarra/santiago",
     TUCUMAN: "https://vivitusuerte.com/pizarra/tucuman",
+    // 🆕 NUEVAS PROVINCIAS AGREGADAS
+    NEUQUEN: "https://vivitusuerte.com/pizarra/neuquen",
+    MISIONES: "https://vivitusuerte.com/pizarra/misiones",
 }
 
 const HORARIOS_SORTEOS = {
@@ -127,6 +130,131 @@ function esSorteoFinalizado(turno: string, fecha: Date): boolean {
 
     // Considerar finalizado 30 minutos después de la hora del sorteo para mayor seguridad
     return tiempoActual > tiempoSorteo + 30
+}
+
+// 🆕 FUNCIÓN ESPECÍFICA PARA NEUQUÉN
+function extraerNumerosNeuquen($: cheerio.CheerioAPI, turno: string): string[] {
+    console.log(`🏔️ EXTRACCIÓN ESPECÍFICA NEUQUÉN: ${turno}`)
+
+    // Neuquén puede tener estructura HTML diferente
+    // Estrategia 1: Buscar por clases específicas de Neuquén
+    const selectoresNeuquen = [
+        `.neuquen-${turno.toLowerCase()}`,
+        `.sorteo-${turno.toLowerCase()}`,
+        `[data-sorteo="${turno}"]`,
+        `.resultado-${turno.toLowerCase()}`,
+    ]
+
+    for (const selector of selectoresNeuquen) {
+        const elemento = $(selector)
+        if (elemento.length > 0) {
+            const numeros = elemento.text().match(/\b\d{4}\b/g) || []
+            if (numeros.length >= 18) {
+                console.log(`✅ NEUQUÉN: Encontrado con selector ${selector}`)
+                return numeros.slice(0, 20)
+            }
+        }
+    }
+
+    // Estrategia 2: Buscar en tablas específicas de Neuquén
+    const tablasNeuquen = $("table").toArray()
+    for (const tabla of tablasNeuquen) {
+        const $tabla = $(tabla)
+        const textoTabla = $tabla.text().toLowerCase()
+
+        // Verificar si contiene "neuquén" y el turno
+        if (textoTabla.includes("neuqu") && textoTabla.includes(turno.toLowerCase())) {
+            const numeros: string[] = []
+            $tabla.find("td, th").each((_, celda) => {
+                const texto = $(celda).text().trim()
+                if (/^\d{4}$/.test(texto)) {
+                    numeros.push(texto)
+                }
+            })
+
+            if (numeros.length >= 18) {
+                console.log(`✅ NEUQUÉN: Encontrado en tabla específica`)
+                return numeros.slice(0, 20)
+            }
+        }
+    }
+
+    // Estrategia 3: Usar la función ultra específica general
+    return extraerNumerosUltraEspecificos($, turno, "NEUQUEN")
+}
+
+// 🆕 FUNCIÓN ESPECÍFICA PARA MISIONES
+function extraerNumerosMisiones($: cheerio.CheerioAPI, turno: string): string[] {
+    console.log(`🌿 EXTRACCIÓN ESPECÍFICA MISIONES: ${turno}`)
+
+    // Misiones puede tener estructura HTML diferente
+    // Estrategia 1: Buscar por clases específicas de Misiones
+    const selectoresMisiones = [
+        `.misiones-${turno.toLowerCase()}`,
+        `.sorteo-${turno.toLowerCase()}`,
+        `[data-provincia="misiones"][data-turno="${turno}"]`,
+        `.resultado-misiones-${turno.toLowerCase()}`,
+    ]
+
+    for (const selector of selectoresMisiones) {
+        const elemento = $(selector)
+        if (elemento.length > 0) {
+            const numeros = elemento.text().match(/\b\d{4}\b/g) || []
+            if (numeros.length >= 18) {
+                console.log(`✅ MISIONES: Encontrado con selector ${selector}`)
+                return numeros.slice(0, 20)
+            }
+        }
+    }
+
+    // Estrategia 2: Buscar en divs con ID específicos de Misiones
+    const idsMisiones = [
+        `#misiones-${turno.toLowerCase()}`,
+        `#sorteo-misiones-${turno.toLowerCase()}`,
+        `#resultado-${turno.toLowerCase()}-misiones`,
+    ]
+
+    for (const id of idsMisiones) {
+        const elemento = $(id)
+        if (elemento.length > 0) {
+            const numeros = elemento.text().match(/\b\d{4}\b/g) || []
+            if (numeros.length >= 18) {
+                console.log(`✅ MISIONES: Encontrado con ID ${id}`)
+                return numeros.slice(0, 20)
+            }
+        }
+    }
+
+    // Estrategia 3: Buscar en secciones que contengan "Misiones"
+    const seccionesMisiones = $("div, section, article").toArray()
+    for (const seccion of seccionesMisiones) {
+        const $seccion = $(seccion)
+        const textoSeccion = $seccion.text().toLowerCase()
+
+        if (textoSeccion.includes("misiones") && textoSeccion.includes(turno.toLowerCase())) {
+            // Verificar que no contenga otros turnos
+            const otrosTurnos = ["previa", "primera", "matutina", "vespertina", "nocturna"].filter(
+                (t) => t !== turno.toLowerCase(),
+            )
+
+            const contieneOtroTurno = otrosTurnos.some(
+                (otroTurno) =>
+                    textoSeccion.includes(otroTurno) &&
+                    textoSeccion.indexOf(otroTurno) !== textoSeccion.indexOf(turno.toLowerCase()),
+            )
+
+            if (!contieneOtroTurno) {
+                const numeros = textoSeccion.match(/\b\d{4}\b/g) || []
+                if (numeros.length >= 18) {
+                    console.log(`✅ MISIONES: Encontrado en sección específica`)
+                    return numeros.slice(0, 20)
+                }
+            }
+        }
+    }
+
+    // Estrategia 4: Usar la función ultra específica general
+    return extraerNumerosUltraEspecificos($, turno, "MISIONES")
 }
 
 // FUNCIÓN ULTRA ESPECÍFICA - Solo extrae si encuentra EXACTAMENTE el turno solicitado
@@ -316,7 +444,7 @@ function reordenarNumeros(numeros: string[]): string[] {
     return numerosOrdenados
 }
 
-// Función principal para obtener resultados de UNA provincia y turno específico
+// 🆕 FUNCIÓN PRINCIPAL MEJORADA - Incluye lógica específica para nuevas provincias
 async function obtenerResultadoEspecifico(provincia: string, turno: string): Promise<string[] | null> {
     try {
         const url = URLS_PIZARRAS[provincia as keyof typeof URLS_PIZARRAS]
@@ -337,8 +465,17 @@ async function obtenerResultadoEspecifico(provincia: string, turno: string): Pro
         const contenidoPizarra = await pizarraHtml.text()
         const $ = cheerio.load(contenidoPizarra)
 
-        // Usar extracción ULTRA específica
-        const numeros = extraerNumerosUltraEspecificos($, turno, provincia)
+        let numeros: string[] = []
+
+        // 🆕 USAR FUNCIONES ESPECÍFICAS PARA NUEVAS PROVINCIAS
+        if (provincia === "NEUQUEN") {
+            numeros = extraerNumerosNeuquen($, turno)
+        } else if (provincia === "MISIONES") {
+            numeros = extraerNumerosMisiones($, turno)
+        } else {
+            // Usar extracción ULTRA específica para provincias existentes
+            numeros = extraerNumerosUltraEspecificos($, turno, provincia)
+        }
 
         if (numeros.length === 0) {
             console.log(`❌ NO se encontraron números para ${provincia} - ${turno}`)
@@ -368,9 +505,9 @@ async function obtenerResultadoEspecifico(provincia: string, turno: string): Pro
     }
 }
 
-// Función principal para obtener SOLO resultados 100% confiables
+// 🔥 FUNCIÓN PRINCIPAL CORREGIDA - SIN FILTROS RESTRICTIVOS
 async function obtenerResultadosConfiables(): Promise<any[]> {
-    console.log("🚀 INICIANDO EXTRACCIÓN ULTRA CONFIABLE")
+    console.log("🚀 INICIANDO EXTRACCIÓN ULTRA CONFIABLE - TODOS LOS RESULTADOS")
 
     const fechaActual = obtenerFechaArgentina()
     const diaSemana = fechaActual.getDay()
@@ -393,7 +530,7 @@ async function obtenerResultadosConfiables(): Promise<any[]> {
 
     const turnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
 
-    // Procesar cada provincia
+    // Procesar cada provincia (incluyendo las nuevas)
     for (const [provinciaKey, pizarraUrl] of Object.entries(URLS_PIZARRAS)) {
         console.log(`\n🏛️ === PROVINCIA: ${provinciaKey} ===`)
 
@@ -407,13 +544,19 @@ async function obtenerResultadosConfiables(): Promise<any[]> {
 
         // Procesar cada turno
         for (const turno of turnos) {
-            // Aplicar reglas específicas
+            // 🔥 SOLO MANTENER FILTROS ESPECÍFICOS CONOCIDOS - ELIMINAR FILTROS PARA NEUQUÉN Y MISIONES
             if (provinciaKey === "MONTEVIDEO") {
                 if (turno !== "Matutina" && turno !== "Nocturna") continue
                 if (turno === "Matutina" && diaSemana > 5) continue
                 if (turno === "Nocturna" && diaSemana === 0) continue
             }
             if (provinciaKey === "TUCUMAN" && turno === "Previa") continue
+
+            // 🔥 COMENTADO: NO FILTRAR NEUQUÉN Y MISIONES - BUSCAR TODOS LOS TURNOS
+            // if (provinciaKey === "NEUQUEN" && turno === "Previa") continue
+            // if (provinciaKey === "MISIONES" && turno === "Previa") continue
+
+            console.log(`🔍 Intentando obtener: ${provinciaKey} - ${turno}`)
 
             // Solo procesar si el sorteo finalizó
             if (esSorteoFinalizado(turno, fechaActual)) {
