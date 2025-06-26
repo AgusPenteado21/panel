@@ -242,7 +242,7 @@ export default function PagosAPasadorPage() {
                                         <TableHead className="text-white font-bold">Id</TableHead>
                                         <TableHead className="text-white font-bold">Fecha</TableHead>
                                         <TableHead className="text-white font-bold">Pasador</TableHead>
-                                        <TableHead className="text-white font-bold">Monto</TableHead>
+                                        <TableHead className="text-white font-bold">monto</TableHead>
                                         <TableHead className="text-white font-bold">Observaciones</TableHead>
                                         <TableHead className="text-white font-bold">Usuario</TableHead>
                                     </TableRow>
