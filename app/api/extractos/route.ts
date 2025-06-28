@@ -828,20 +828,20 @@ export async function POST(request: Request) {
             }
         }
 
-        // 🆕 PRESERVAR OTROS RESULTADOS DEL DÍA AL GUARDAR TUCUMÁN
-        // Si ya existen otros resultados scrapeados, mantenerlos
+        // 🆕 PRESERVAR TODOS LOS RESULTADOS Y SORTEOS AL GUARDAR
+        // Si ya existen datos para este día, mantenerlos
         if (docSnap.exists()) {
             const data = docSnap.data()
             if (data[fecha]) {
-                const datosExistentes = data[fecha] as ResultadoDia
-                // Mantener todas las provincias que NO sean la que estamos actualizando
-                datosDia.resultados = datosExistentes.resultados.filter((r: any) => r.provincia !== provincia)
+                datosDia = data[fecha] as ResultadoDia
             }
         }
 
+        // Buscar si ya existe la provincia
         let provinciaResultado = datosDia.resultados.find((r) => r.provincia === provincia)
 
         if (!provinciaResultado) {
+            // Si no existe la provincia, crearla
             provinciaResultado = {
                 loteria: provincia === "NACION" ? "Nacional" : provincia === "PROVINCIA" ? "Provincial" : provincia,
                 provincia: provincia,
@@ -850,7 +850,14 @@ export async function POST(request: Request) {
             datosDia.resultados.push(provinciaResultado)
         }
 
+        // 🔥 CRÍTICO: PRESERVAR TODOS LOS SORTEOS EXISTENTES DE LA PROVINCIA
+        // Solo actualizar el turno específico, mantener los demás
         provinciaResultado.sorteos[turno] = numeros
+
+        console.log(
+            `✅ Guardando ${provincia} - ${turno}. Sorteos totales de ${provincia}:`,
+            Object.keys(provinciaResultado.sorteos),
+        )
 
         // 🔥 GUARDADO CORREGIDO: Mantener estructura anidada por fecha
         const dataParaGuardar = {
