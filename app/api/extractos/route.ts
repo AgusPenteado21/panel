@@ -22,55 +22,12 @@ interface ResultadoDia {
 const PLACEHOLDER_RESULT = "----"
 
 function obtenerFechaArgentina() {
+    const fechaActual = new Date()
     try {
-        // Crear fecha actual en UTC
-        const ahora = new Date()
-
-        // Argentina está UTC-3 (o UTC-2 en horario de verano, pero usaremos UTC-3 como estándar)
-        const offsetArgentina = -3 * 60 // -3 horas en minutos
-        const offsetLocal = ahora.getTimezoneOffset() // offset del servidor en minutos
-
-        // Calcular la diferencia total
-        const diferenciaTotal = offsetLocal - offsetArgentina
-
-        // Crear nueva fecha ajustada a Argentina
-        const fechaArgentina = new Date(ahora.getTime() + diferenciaTotal * 60 * 1000)
-
-        console.log("🕐 DEBUG FECHA:")
-        console.log("- Fecha servidor (UTC):", ahora.toISOString())
-        console.log("- Offset servidor:", offsetLocal, "minutos")
-        console.log("- Fecha Argentina calculada:", fechaArgentina.toISOString())
-        console.log(
-            "- Fecha Argentina local:",
-            fechaArgentina.toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" }),
-        )
-
+        const fechaArgentina = toZonedTime(fechaActual, "America/Argentina/Buenos_Aires")
         return fechaArgentina
     } catch (error) {
-        console.error("Error calculando fecha argentina:", error)
-        // Fallback: usar UTC-3 manualmente
-        const ahora = new Date()
-        return new Date(ahora.getTime() - 3 * 60 * 60 * 1000)
-    }
-}
-
-function obtenerFechaArgentinaRobusta() {
-    try {
-        // Método 1: Usar Intl.DateTimeFormat
-        const ahora = new Date()
-        const fechaArgentina = new Date(ahora.toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }))
-
-        console.log("🕐 FECHA ROBUSTA:")
-        console.log("- Fecha original:", ahora.toISOString())
-        console.log("- Fecha Argentina:", fechaArgentina.toISOString())
-        console.log("- Fecha Argentina string:", fechaArgentina.toLocaleString("es-AR"))
-
-        return fechaArgentina
-    } catch (error) {
-        console.error("Error en fecha robusta:", error)
-        // Fallback: UTC-3
-        const ahora = new Date()
-        return new Date(ahora.getTime() - 3 * 60 * 60 * 1000)
+        return new Date(fechaActual.getTime() - 3 * 60 * 60 * 1000)
     }
 }
 
@@ -135,10 +92,10 @@ function obtenerTiempoSorteo(turno: string): number {
 }
 
 function esSorteoFinalizado(turno: string, fecha: Date): boolean {
-    const ahora = obtenerFechaArgentinaRobusta()
+    const ahora = obtenerFechaArgentina()
     const tiempoActual = ahora.getHours() * 60 + ahora.getMinutes()
     const tiempoSorteo = obtenerTiempoSorteo(turno)
-    const hoyArgentina = startOfDay(obtenerFechaArgentinaRobusta())
+    const hoyArgentina = startOfDay(obtenerFechaArgentina())
 
     if (isAfter(hoyArgentina, fecha)) return true
     return tiempoActual > tiempoSorteo + 30
@@ -310,15 +267,10 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
 }
 
 function validarResultadosUltraEstricto(numeros: string[], provincia: string, turno: string): boolean {
-    // Debe tener exactamente 20 números válidos, sin placeholders
-    if (numeros.length !== 20) return false
+    if (numeros.length < 18) return false
+    const numerosValidos = numeros.filter((num) => /^\d{4}$/.test(num) && num !== PLACEHOLDER_RESULT)
+    if (numerosValidos.length < 18) return false
 
-    const numerosValidos = numeros.filter((num) => /^\d{4}$/.test(num) && num !== PLACEHOLDER_RESULT && num !== "----")
-
-    // TODOS los números deben ser válidos (no 18, sino 20)
-    if (numerosValidos.length !== 20) return false
-
-    // Validaciones adicionales de patrones sospechosos
     let patronesSospechosos = 0
     for (const num of numerosValidos) {
         const numInt = Number.parseInt(num)
@@ -331,7 +283,7 @@ function validarResultadosUltraEstricto(numeros: string[], provincia: string, tu
     if (porcentajeSospechosos > 15) return false
 
     const numerosUnicos = new Set(numerosValidos)
-    if (numerosUnicos.size < numerosValidos.length * 0.95) return false // Más estricto
+    if (numerosUnicos.size < numerosValidos.length * 0.9) return false
 
     return true
 }
@@ -370,18 +322,15 @@ async function obtenerResultadoEspecifico(provincia: string, turno: string): Pro
             numeros = extraerNumerosUltraEspecificos($, turno, provincia)
         }
 
-        // Si no encuentra exactamente 20 números válidos, retornar null
-        if (numeros.length < 20) return null
+        if (numeros.length === 0) return null
 
-        const numerosCompletos = numeros.slice(0, 20)
-
-        // Verificar que TODOS sean números de 4 dígitos
-        const todosValidos = numerosCompletos.every((num) => /^\d{4}$/.test(num))
-        if (!todosValidos) return null
+        const numerosCompletos = [...numeros.slice(0, 20)]
+        while (numerosCompletos.length < 20) {
+            numerosCompletos.push(PLACEHOLDER_RESULT)
+        }
 
         const numerosReordenados = reordenarNumeros(numerosCompletos)
 
-        // Validación ultra estricta - si no pasa, no mostrar nada
         if (!validarResultadosUltraEstricto(numerosReordenados, provincia, turno)) return null
 
         return numerosReordenados
@@ -391,127 +340,80 @@ async function obtenerResultadoEspecifico(provincia: string, turno: string): Pro
 }
 
 async function obtenerResultadosConfiables(): Promise<any[]> {
-    const fechaActual = obtenerFechaArgentinaRobusta()
+    const fechaActual = obtenerFechaArgentina()
     const diaSemana = fechaActual.getDay()
 
-    console.log("🕐 SCRAPING - Fecha Argentina:", fechaActual.toLocaleString("es-AR"))
-    console.log("🕐 SCRAPING - Día de la semana:", diaSemana)
-
-    if (diaSemana === 0) {
-        console.log("❌ SCRAPING - Es domingo, no hay sorteos")
-        return []
-    }
+    if (diaSemana === 0) return []
 
     const fechaDisplay = format(fechaActual, "dd/MM/yyyy", { locale: es })
     const nombreDia = format(fechaActual, "EEEE", { locale: es }).replace(/^\w/, (c) => c.toUpperCase())
     const fechaKeyFirebase = format(fechaActual, "yyyy-MM-dd")
 
-    console.log("📅 SCRAPING - Fecha display:", fechaDisplay)
-    console.log("📅 SCRAPING - Clave Firebase:", fechaKeyFirebase)
-
     const resultadosApi: any[] = []
-
-    // LEER DATOS EXISTENTES PRIMERO
-    const docRef = doc(db, "extractos", fechaKeyFirebase)
-    const docSnap = await getDoc(docRef)
-
-    let resultadosParaFirebase: ResultadoDia
-
-    if (docSnap.exists()) {
-        const data = docSnap.data()
-        if (data[fechaDisplay]) {
-            resultadosParaFirebase = data[fechaDisplay] as ResultadoDia
-            console.log("✅ SCRAPING - Datos existentes encontrados")
-        } else {
-            resultadosParaFirebase = {
-                fecha: fechaDisplay,
-                dia: nombreDia,
-                resultados: [],
-            }
-            console.log("🆕 SCRAPING - Creando nueva estructura")
-        }
-    } else {
-        resultadosParaFirebase = {
-            fecha: fechaDisplay,
-            dia: nombreDia,
-            resultados: [],
-        }
-        console.log("🆕 SCRAPING - Documento nuevo")
+    const resultadosParaFirebase: ResultadoDia = {
+        fecha: fechaDisplay,
+        dia: nombreDia,
+        resultados: [],
     }
 
     const turnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
 
     for (const [provinciaKey, pizarraUrl] of Object.entries(URLS_PIZARRAS)) {
-        // Buscar si ya existe esta provincia en los datos guardados
-        let provinciaData = resultadosParaFirebase.resultados.find((r) => r.provincia === provinciaKey)
-
-        if (!provinciaData) {
-            provinciaData = {
-                loteria: provinciaKey === "NACION" ? "Nacional" : provinciaKey === "PROVINCIA" ? "Provincial" : provinciaKey,
-                provincia: provinciaKey,
-                sorteos: {} as { [key: string]: string[] },
-            }
-            resultadosParaFirebase.resultados.push(provinciaData)
+        const provinciaData = {
+            loteria: provinciaKey === "NACION" ? "Nacional" : provinciaKey === "PROVINCIA" ? "Provincial" : provinciaKey,
+            provincia: provinciaKey,
+            sorteos: {} as { [key: string]: string[] },
         }
 
+        let tieneResultadosValidos = false
+
         for (const turno of turnos) {
-            // SOLO hacer scraping si NO existe ya este turno
-            if (!provinciaData.sorteos[turno]) {
-                if (provinciaKey === "MONTEVIDEO") {
-                    if (turno !== "Matutina" && turno !== "Nocturna") continue
-                    if (turno === "Matutina" && diaSemana > 5) continue
-                    if (turno === "Nocturna" && diaSemana === 0) continue
-                }
-
-                if (esSorteoFinalizado(turno, fechaActual)) {
-                    console.log(`🔍 SCRAPING - Intentando ${provinciaKey} ${turno}...`)
-                    const numeros = await obtenerResultadoEspecifico(provinciaKey, turno)
-
-                    if (numeros !== null && numeros.length === 20) {
-                        provinciaData.sorteos[turno] = numeros
-                        console.log(`✅ SCRAPING - ${provinciaKey} ${turno} encontrado: ${numeros.slice(0, 3).join(", ")}...`)
-                    } else {
-                        console.log(`❌ SCRAPING - ${provinciaKey} ${turno} no encontrado o incompleto`)
-                    }
-                } else {
-                    console.log(`⏰ SCRAPING - ${provinciaKey} ${turno} aún no finalizado`)
-                }
-            } else {
-                console.log(`💾 SCRAPING - ${provinciaKey} ${turno} ya existe en Firebase`)
+            if (provinciaKey === "MONTEVIDEO") {
+                if (turno !== "Matutina" && turno !== "Nocturna") continue
+                if (turno === "Matutina" && diaSemana > 5) continue
+                if (turno === "Nocturna" && diaSemana === 0) continue
             }
 
-            // Agregar a la respuesta API si existe (ya sea nuevo o existente)
-            if (provinciaData.sorteos[turno]) {
-                resultadosApi.push({
-                    id: `${provinciaKey}-${turno}-${fechaDisplay}`,
-                    fecha: fechaDisplay,
-                    dia: nombreDia,
-                    sorteo: turno,
-                    loteria: provinciaData.loteria,
-                    provincia: provinciaKey,
-                    numeros: provinciaData.sorteos[turno],
-                    pizarraLink: pizarraUrl,
-                    necesita: "No",
-                    confirmado: "No",
-                })
+            if (esSorteoFinalizado(turno, fechaActual)) {
+                const numeros = await obtenerResultadoEspecifico(provinciaKey, turno)
+
+                if (numeros !== null && numeros.length > 0) {
+                    resultadosApi.push({
+                        id: `${provinciaKey}-${turno}-${fechaDisplay}`,
+                        fecha: fechaDisplay,
+                        dia: nombreDia,
+                        sorteo: turno,
+                        loteria: provinciaData.loteria,
+                        provincia: provinciaKey,
+                        numeros: numeros,
+                        pizarraLink: pizarraUrl,
+                        necesita: "No",
+                        confirmado: "No",
+                    })
+
+                    provinciaData.sorteos[turno] = numeros
+                    tieneResultadosValidos = true
+                }
             }
+        }
+
+        if (tieneResultadosValidos) {
+            resultadosParaFirebase.resultados.push(provinciaData)
         }
     }
 
-    // SOLO guardar si hay cambios nuevos
-    if (resultadosParaFirebase.resultados.some((r) => Object.keys(r.sorteos).length > 0)) {
+    if (resultadosParaFirebase.resultados.length > 0) {
         try {
+            const docRef = doc(db, "extractos", fechaKeyFirebase)
             const dataParaGuardar = {
                 [fechaDisplay]: resultadosParaFirebase,
             }
             await setDoc(docRef, dataParaGuardar, { merge: true })
-            console.log("💾 SCRAPING - Datos guardados en Firebase")
         } catch (error) {
-            console.error("❌ SCRAPING - Error guardando:", error)
+            // Error silencioso
         }
     }
 
-    console.log(`📊 SCRAPING - Total resultados encontrados: ${resultadosApi.length}`)
     return resultadosApi
 }
 
@@ -521,7 +423,7 @@ export async function GET(request: Request) {
         const parametroFecha = url.searchParams.get("date")
         const forceRefresh = url.searchParams.get("forceRefresh") === "true"
 
-        const fechaActualArgentina = obtenerFechaArgentinaRobusta()
+        const fechaActualArgentina = obtenerFechaArgentina()
         let fechaConsulta: Date
 
         if (parametroFecha) {
@@ -537,7 +439,41 @@ export async function GET(request: Request) {
         const esHoyEnArgentina =
             format(fechaConsulta, "yyyy-MM-dd") === format(startOfDay(fechaActualArgentina), "yyyy-MM-dd")
 
-        // Leer desde Firebase SIEMPRE
+        if (forceRefresh || esHoyEnArgentina) {
+            const resultados = await obtenerResultadosConfiables()
+
+            // Agregar datos de Tucumán desde Firebase
+            const docRef = doc(db, "extractos", fechaKeyFirebase)
+            const docSnap = await getDoc(docRef)
+
+            if (docSnap.exists()) {
+                const data = docSnap.data()
+                const resultadosData = data[fechaDisplayConsulta] as ResultadoDia
+
+                if (resultadosData?.resultados) {
+                    const tucumanData = resultadosData.resultados.find((r) => r.provincia === "TUCUMAN")
+                    if (tucumanData) {
+                        Object.entries(tucumanData.sorteos).forEach(([turno, numeros]) => {
+                            resultados.push({
+                                id: `TUCUMAN-${turno}-${fechaDisplayConsulta}`,
+                                fecha: fechaDisplayConsulta,
+                                dia: resultadosData.dia,
+                                sorteo: turno,
+                                loteria: "TUCUMAN",
+                                provincia: "TUCUMAN",
+                                numeros: numeros,
+                                pizarraLink: "",
+                                necesita: "No",
+                                confirmado: "No",
+                            })
+                        })
+                    }
+                }
+            }
+
+            return NextResponse.json(resultados, { headers: corsHeaders })
+        }
+
         const docRef = doc(db, "extractos", fechaKeyFirebase)
         const docSnap = await getDoc(docRef)
 
@@ -576,22 +512,6 @@ export async function GET(request: Request) {
             }
         }
 
-        // Si es hoy o forceRefresh, hacer scraping y AGREGAR a los datos existentes
-        if (forceRefresh || esHoyEnArgentina) {
-            const resultadosNuevos = await obtenerResultadosConfiables()
-
-            // Agregar solo los que no existen ya
-            for (const nuevoResultado of resultadosNuevos) {
-                const yaExiste = extractosFormateados.some(
-                    (existente) => existente.provincia === nuevoResultado.provincia && existente.sorteo === nuevoResultado.sorteo,
-                )
-
-                if (!yaExiste) {
-                    extractosFormateados.push(nuevoResultado)
-                }
-            }
-        }
-
         return NextResponse.json(extractosFormateados, { headers: corsHeaders })
     } catch (error) {
         return NextResponse.json([], { status: 200, headers: corsHeaders })
@@ -622,6 +542,7 @@ export async function POST(request: Request) {
             throw new Error("Datos incompletos o inválidos")
         }
 
+        // Validar que todos los números sean de 4 dígitos
         const todosValidos = numeros.every((num) => /^\d{4}$/.test(num))
         if (!todosValidos) {
             throw new Error("Todos los números deben ser de 4 dígitos")
@@ -675,8 +596,8 @@ export async function POST(request: Request) {
 
         await setDoc(docRef, dataParaGuardar, { merge: true })
 
-        // Verificación REAL
-        await new Promise((resolve) => setTimeout(resolve, 1000))
+        // Verificación REAL - Leer inmediatamente desde Firebase
+        await new Promise((resolve) => setTimeout(resolve, 1000)) // Esperar 1 segundo para asegurar que se escribió
 
         const verificacionDoc = await getDoc(docRef)
         if (!verificacionDoc.exists()) {
@@ -684,29 +605,43 @@ export async function POST(request: Request) {
         }
 
         const datosVerificacion = verificacionDoc.data()
+        console.log("🔍 VERIFICACIÓN - Estructura completa del documento:", JSON.stringify(datosVerificacion, null, 2))
 
         if (!datosVerificacion[fechaDisplay]) {
+            console.log("❌ FALLO - Fechas disponibles:", Object.keys(datosVerificacion))
             throw new Error(
                 `FALLO CRÍTICO: No se encontró la fecha ${fechaDisplay} en Firebase. Fechas disponibles: ${Object.keys(datosVerificacion).join(", ")}`,
             )
         }
 
         const resultadosVerificados = datosVerificacion[fechaDisplay].resultados
-        const provinciaVerificada = resultadosVerificados.find((r: any) => r.provincia === provincia)
+        console.log(
+            "🔍 VERIFICACIÓN - Provincias en resultados:",
+            resultadosVerificados.map((r: any) => r.provincia),
+        )
 
+        const provinciaVerificada = resultadosVerificados.find((r: any) => r.provincia === provincia)
         if (!provinciaVerificada) {
+            console.log(
+                "❌ FALLO - Provincias encontradas:",
+                resultadosVerificados.map((r: any) => r.provincia),
+            )
             throw new Error(
                 `FALLO CRÍTICO: No se encontró ${provincia} en Firebase. Provincias encontradas: ${resultadosVerificados.map((r: any) => r.provincia).join(", ")}`,
             )
         }
 
+        console.log("🔍 VERIFICACIÓN - Sorteos en provincia:", Object.keys(provinciaVerificada.sorteos))
+
         if (!provinciaVerificada.sorteos[turno]) {
+            console.log("❌ FALLO - Sorteos encontrados:", Object.keys(provinciaVerificada.sorteos))
             throw new Error(
                 `FALLO CRÍTICO: No se encontró el turno ${turno} en Firebase. Turnos encontrados: ${Object.keys(provinciaVerificada.sorteos).join(", ")}`,
             )
         }
 
         const numerosVerificados = provinciaVerificada.sorteos[turno]
+        console.log("🔍 VERIFICACIÓN - Números guardados:", numerosVerificados)
 
         if (!Array.isArray(numerosVerificados) || numerosVerificados.length !== 20) {
             throw new Error(
@@ -714,10 +649,20 @@ export async function POST(request: Request) {
             )
         }
 
+        // Verificar que los números son exactamente los que enviamos
         const numerosCoinciden = numeros.every((num, index) => numerosVerificados[index] === num)
         if (!numerosCoinciden) {
+            console.log("❌ FALLO - Números enviados:", numeros)
+            console.log("❌ FALLO - Números guardados:", numerosVerificados)
             throw new Error("FALLO CRÍTICO: Los números guardados no coinciden con los enviados")
         }
+
+        console.log("✅ VERIFICACIÓN EXITOSA - Datos confirmados en Firebase")
+        console.log(`📍 Documento: extractos/${fechaKeyFirebase}`)
+        console.log(`📍 Fecha: ${fechaDisplay}`)
+        console.log(`📍 Provincia: ${provincia}`)
+        console.log(`📍 Turno: ${turno}`)
+        console.log(`📍 Números: ${numerosVerificados.slice(0, 5).join(", ")}...`)
 
         return NextResponse.json(
             {
