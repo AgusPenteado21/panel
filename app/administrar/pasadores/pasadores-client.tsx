@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
@@ -17,7 +16,18 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { PlusCircle, Download, Pencil, Trash2, ChevronLeft, ChevronRight, Loader2, Key, Lock } from "lucide-react"
+import {
+    PlusCircle,
+    Download,
+    Pencil,
+    Trash2,
+    ChevronLeft,
+    ChevronRight,
+    Loader2,
+    Key,
+    Lock,
+    Users,
+} from "lucide-react"
 import Navbar from "@/app/components/Navbar"
 import { db } from "@/lib/firebase"
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where } from "firebase/firestore"
@@ -50,14 +60,17 @@ export default function PasadoresClient() {
     const [selectedPasadores, setSelectedPasadores] = useState<string[]>([])
     const [isNewDialogOpen, setIsNewDialogOpen] = useState(false)
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+    const [isBulkEditDialogOpen, setIsBulkEditDialogOpen] = useState(false)
     const [isChangePasswordDialogOpen, setIsChangePasswordDialogOpen] = useState(false)
     const [editingPasador, setEditingPasador] = useState<Pasador | null>(null)
     const [editingComision, setEditingComision] = useState<number>(0)
+    const [bulkComision, setBulkComision] = useState<number>(0)
     const [pasadores, setPasadores] = useState<Pasador[]>([])
     const [isLoading, setIsLoading] = useState(false)
     const [modulosDisponibles, setModulosDisponibles] = useState<number[]>([])
     const [moduloSeleccionado, setModuloSeleccionado] = useState<number>(70)
     const [isCreateModuleDialogOpen, setIsCreateModuleDialogOpen] = useState(false)
+
     const { toast } = useToast()
 
     useEffect(() => {
@@ -67,7 +80,6 @@ export default function PasadoresClient() {
     const calcularModulosDisponibles = (pasadores: Pasador[]) => {
         // Contar pasadores por módulo
         const contadorPorModulo: { [key: number]: number } = {}
-
         pasadores.forEach((pasador) => {
             if (pasador.modulo >= 70) {
                 contadorPorModulo[pasador.modulo] = (contadorPorModulo[pasador.modulo] || 0) + 1
@@ -76,7 +88,6 @@ export default function PasadoresClient() {
 
         // Encontrar módulos disponibles (que no estén llenos)
         const modulosDisponibles: number[] = []
-
         // Verificar módulos existentes
         Object.keys(contadorPorModulo).forEach((modulo) => {
             const numeroModulo = Number.parseInt(modulo)
@@ -150,10 +161,8 @@ export default function PasadoresClient() {
             // Agregar el módulo a la lista de módulos disponibles
             const nuevosModulos = [...modulosDisponibles, numeroModulo].sort((a, b) => a - b)
             setModulosDisponibles(nuevosModulos)
-
             // Seleccionar el nuevo módulo
             setModuloSeleccionado(numeroModulo)
-
             toast({
                 title: "Éxito",
                 description: `Módulo ${numeroModulo} creado correctamente.`,
@@ -179,7 +188,6 @@ export default function PasadoresClient() {
     const fetchPasadores = async () => {
         const pasadoresCollection = collection(db, "pasadores")
         const pasadoresSnapshot = await getDocs(pasadoresCollection)
-
         const pasadoresList = pasadoresSnapshot.docs.map((doc) => {
             const data = doc.data()
             return {
@@ -208,11 +216,9 @@ export default function PasadoresClient() {
         })
 
         setPasadores(pasadoresList)
-
         // Calcular módulos disponibles
         const modulos = calcularModulosDisponibles(pasadoresList)
         setModulosDisponibles(modulos)
-
         // Si el módulo seleccionado no está disponible, seleccionar el primero disponible
         if (!modulos.includes(moduloSeleccionado)) {
             setModuloSeleccionado(modulos[0])
@@ -320,6 +326,7 @@ export default function PasadoresClient() {
                 ...editingPasador,
                 comision: editingComision,
             }
+
             try {
                 await updateDoc(doc(db, "pasadores", editingPasador.id), updatedPasador)
                 setIsEditDialogOpen(false)
@@ -340,6 +347,38 @@ export default function PasadoresClient() {
             } finally {
                 setIsLoading(false)
             }
+        }
+    }
+
+    const handleBulkUpdateComision = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault()
+        setIsLoading(true)
+
+        try {
+            const updatePromises = selectedPasadores.map((pasadorId) =>
+                updateDoc(doc(db, "pasadores", pasadorId), { comision: bulkComision }),
+            )
+
+            await Promise.all(updatePromises)
+
+            setIsBulkEditDialogOpen(false)
+            setBulkComision(0)
+            setSelectedPasadores([])
+            await fetchPasadores()
+
+            toast({
+                title: "Éxito",
+                description: `Comisión actualizada para ${selectedPasadores.length} pasador(es).`,
+            })
+        } catch (error) {
+            console.error("Error al actualizar comisiones:", error)
+            toast({
+                title: "Error",
+                description: "No se pudieron actualizar las comisiones.",
+                variant: "destructive",
+            })
+        } finally {
+            setIsLoading(false)
         }
     }
 
@@ -422,6 +461,17 @@ export default function PasadoresClient() {
         )
     }
 
+    const toggleSelectAll = () => {
+        if (selectedPasadores.length === paginatedPasadores.length) {
+            setSelectedPasadores([])
+        } else {
+            setSelectedPasadores(paginatedPasadores.map((p) => p.id))
+        }
+    }
+
+    const isAllSelected = selectedPasadores.length === paginatedPasadores.length && paginatedPasadores.length > 0
+    const isPartiallySelected = selectedPasadores.length > 0 && selectedPasadores.length < paginatedPasadores.length
+
     const handleExportToExcel = () => {
         const workbook = XLSX.utils.book_new()
         const worksheetData = pasadores.map((p) => ({
@@ -437,8 +487,8 @@ export default function PasadoresClient() {
             Observaciones: p.observaciones,
             Estado: p.bloqueado ? "Bloqueado" : "Activo",
         }))
-        const worksheet = XLSX.utils.json_to_sheet(worksheetData)
 
+        const worksheet = XLSX.utils.json_to_sheet(worksheetData)
         XLSX.utils.book_append_sheet(workbook, worksheet, "Pasadores")
         XLSX.writeFile(workbook, "pasadores.xlsx")
 
@@ -559,6 +609,7 @@ export default function PasadoresClient() {
                                 </form>
                             </DialogContent>
                         </Dialog>
+
                         <Button
                             onClick={() => setIsCreateModuleDialogOpen(true)}
                             variant="outline"
@@ -567,6 +618,7 @@ export default function PasadoresClient() {
                             <PlusCircle className="h-4 w-4 mr-2" />
                             Crear Módulo
                         </Button>
+
                         <Button
                             variant="outline"
                             onClick={() =>
@@ -579,15 +631,30 @@ export default function PasadoresClient() {
                             <Pencil className="h-4 w-4 mr-2" />
                             Modificar
                         </Button>
+
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                setBulkComision(0)
+                                setIsBulkEditDialogOpen(true)
+                            }}
+                            disabled={selectedPasadores.length === 0}
+                            className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-500"
+                        >
+                            <Users className="h-4 w-4 mr-2" />
+                            Modificar Comisión ({selectedPasadores.length})
+                        </Button>
+
                         <Button
                             variant="outline"
                             disabled={selectedPasadores.length === 0}
                             onClick={handleDeletePasadores}
-                            className="border-red-300 text-red-700 hover:bg-red-50 hover:border-red-500"
+                            className="border-red-300 text-red-700 hover:bg-red-50 hover:border-red-500 bg-transparent"
                         >
                             <Trash2 className="h-4 w-4 mr-2" />
                             Eliminar
                         </Button>
+
                         <Button
                             variant="outline"
                             onClick={() => {
@@ -617,10 +684,11 @@ export default function PasadoresClient() {
                             <Lock className="h-4 w-4 mr-2" />
                             Bloquear/Desbloquear
                         </Button>
+
                         <Button
                             variant="outline"
                             onClick={handleExportToExcel}
-                            className="border-green-300 text-green-700 hover:bg-green-50 hover:border-green-500"
+                            className="border-green-300 text-green-700 hover:bg-green-50 hover:border-green-500 bg-transparent"
                         >
                             <Download className="h-4 w-4 mr-2" />
                             Exportar
@@ -632,7 +700,17 @@ export default function PasadoresClient() {
                     <Table>
                         <TableHeader className="bg-gradient-to-r from-blue-600 to-indigo-700">
                             <TableRow>
-                                <TableHead className="w-[50px] text-white"></TableHead>
+                                <TableHead className="w-[50px] text-white">
+                                    <input
+                                        type="checkbox"
+                                        checked={isAllSelected}
+                                        ref={(el) => {
+                                            if (el) el.indeterminate = isPartiallySelected
+                                        }}
+                                        onChange={toggleSelectAll}
+                                        className="h-4 w-4 rounded border-white text-white bg-transparent focus:ring-white focus:ring-2"
+                                    />
+                                </TableHead>
                                 <TableHead className="w-[120px] text-white font-bold">ID</TableHead>
                                 <TableHead className="w-[80px] text-white font-bold">Módulo</TableHead>
                                 <TableHead className="text-white font-bold">Nombre</TableHead>
@@ -650,8 +728,8 @@ export default function PasadoresClient() {
                                 <TableRow
                                     key={pasador.id}
                                     className={`${selectedPasadores.includes(pasador.id) ? "bg-blue-100" : ""} 
-                                    ${index % 2 === 0 ? "bg-blue-50" : "bg-white"} 
-                                    hover:bg-blue-100 transition-colors`}
+                    ${index % 2 === 0 ? "bg-blue-50" : "bg-white"} 
+                    hover:bg-blue-100 transition-colors`}
                                 >
                                     <TableCell>
                                         <Checkbox
@@ -710,6 +788,11 @@ export default function PasadoresClient() {
                 <div className="flex items-center justify-between mt-6 bg-white p-3 rounded-lg shadow-md border border-blue-200">
                     <div className="text-sm text-blue-700 font-medium">
                         Página {currentPage} de {totalPages} - Total: {pasadores.length} pasadores
+                        {selectedPasadores.length > 0 && (
+                            <span className="ml-4 text-indigo-600">
+                                ({selectedPasadores.length} seleccionado{selectedPasadores.length !== 1 ? "s" : ""})
+                            </span>
+                        )}
                     </div>
                     <div className="flex gap-2">
                         <Button
@@ -734,6 +817,8 @@ export default function PasadoresClient() {
                         </Button>
                     </div>
                 </div>
+
+                {/* Diálogo para modificar pasador individual */}
                 <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
                     <DialogContent className="bg-white border border-blue-200 shadow-xl">
                         <DialogHeader>
@@ -772,6 +857,66 @@ export default function PasadoresClient() {
                         </form>
                     </DialogContent>
                 </Dialog>
+
+                {/* Diálogo para modificar comisión masiva */}
+                <Dialog open={isBulkEditDialogOpen} onOpenChange={setIsBulkEditDialogOpen}>
+                    <DialogContent className="bg-white border border-indigo-200 shadow-xl">
+                        <DialogHeader>
+                            <DialogTitle className="text-indigo-800">Modificar Comisión Masiva</DialogTitle>
+                            <DialogDescription>
+                                Modificar la comisión de {selectedPasadores.length} pasador{selectedPasadores.length !== 1 ? "es" : ""}{" "}
+                                seleccionado{selectedPasadores.length !== 1 ? "s" : ""}
+                            </DialogDescription>
+                        </DialogHeader>
+                        <form className="grid gap-4 py-4" onSubmit={handleBulkUpdateComision}>
+                            <div className="grid gap-2">
+                                <Label htmlFor="bulkComision" className="text-indigo-700">
+                                    Nueva Comisión (%)
+                                </Label>
+                                <Input
+                                    id="bulkComision"
+                                    name="bulkComision"
+                                    type="number"
+                                    step="0.01"
+                                    value={bulkComision}
+                                    onChange={(e) => setBulkComision(Number.parseFloat(e.target.value))}
+                                    className="border-indigo-200 focus:border-indigo-500"
+                                    placeholder="Ej: 25.00"
+                                />
+                            </div>
+                            <div className="bg-indigo-50 p-3 rounded-md">
+                                <p className="text-sm text-indigo-700">
+                                    <strong>Pasadores seleccionados:</strong>
+                                </p>
+                                <div className="mt-2 max-h-32 overflow-y-auto">
+                                    {selectedPasadores.map((id) => {
+                                        const pasador = pasadores.find((p) => p.id === id)
+                                        return (
+                                            <div key={id} className="text-xs text-indigo-600 py-1">
+                                                • {pasador?.displayId} - {pasador?.nombre}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                            <Button
+                                type="submit"
+                                disabled={isLoading || !bulkComision}
+                                className="bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white"
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Actualizando...
+                                    </>
+                                ) : (
+                                    `Actualizar ${selectedPasadores.length} Pasador${selectedPasadores.length !== 1 ? "es" : ""}`
+                                )}
+                            </Button>
+                        </form>
+                    </DialogContent>
+                </Dialog>
+
                 <Dialog open={isChangePasswordDialogOpen} onOpenChange={setIsChangePasswordDialogOpen}>
                     <DialogContent className="bg-white border border-blue-200 shadow-xl">
                         <DialogHeader>
@@ -808,6 +953,7 @@ export default function PasadoresClient() {
                         </form>
                     </DialogContent>
                 </Dialog>
+
                 <Dialog open={isCreateModuleDialogOpen} onOpenChange={setIsCreateModuleDialogOpen}>
                     <DialogContent className="bg-white border border-blue-200 shadow-xl max-w-md">
                         <DialogHeader>
@@ -849,6 +995,7 @@ export default function PasadoresClient() {
                         </form>
                     </DialogContent>
                 </Dialog>
+
                 <Toaster />
             </div>
         </div>

@@ -9,11 +9,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Badge } from "@/components/ui/badge"
 import { db } from "@/lib/firebase"
-import { collection, getDocs, addDoc, serverTimestamp } from "firebase/firestore"
+import { collection, getDocs, addDoc, serverTimestamp, query, where } from "firebase/firestore"
+import { format } from "date-fns"
 import toast from "react-hot-toast"
 import Navbar from "@/app/components/Navbar"
-import { Loader2, Save, Printer, X, Calculator } from 'lucide-react'
+import { Loader2, Save, Printer, X, Calculator, RotateCcw, Search } from "lucide-react"
 
 interface Pasador {
     id: string
@@ -26,6 +29,23 @@ interface Jugada {
     numero: string
     posicion: string
     importe: string
+}
+
+interface JugadaFirebase {
+    id: string
+    tipo?: string
+    observacion?: string
+    fechaHora?: any
+    fechaFormateada?: Date
+    loteria?: string
+    provincias?: string[]
+    secuencia?: string
+    totalMonto?: number
+    monto?: string
+    numeros?: string[]
+    jugadas?: any[]
+    pasadorId?: string
+    [key: string]: any
 }
 
 const lotteryAbbreviations: { [key: string]: string } = {
@@ -47,8 +67,10 @@ const provinceAbbreviations: { [key: string]: string } = {
     CORRIE: "CR",
     CHACO: "CH",
     RIONEG: "RN",
-    SANTIA: "SG", // Agregado Santiago
-    TUCUMA: "TU", // Agregado Tucumán
+    SANTIA: "SG",
+    TUCUMA: "TU",
+    NEUQUE: "NEU",
+    MISION: "MIS",
 }
 
 // Número total de filas de jugadas
@@ -73,6 +95,14 @@ export default function CargarJugadas() {
     const [secuenciaCounter, setSecuenciaCounter] = useState(10000)
     const [isLoading, setIsLoading] = useState(false)
 
+    // Estados para repetir jugada
+    const [isRepeatDialogOpen, setIsRepeatDialogOpen] = useState(false)
+    const [secuenciaBuscar, setSecuenciaBuscar] = useState("")
+    const [isSearching, setIsSearching] = useState(false)
+    const [jugadasPasador, setJugadasPasador] = useState<JugadaFirebase[]>([])
+    const [isLoadingJugadas, setIsLoadingJugadas] = useState(false)
+    const [jugadaSeleccionada, setJugadaSeleccionada] = useState<JugadaFirebase | null>(null)
+
     // Crear un array para almacenar las referencias a los inputs
     const inputRefs = useRef<HTMLInputElement[][]>([])
 
@@ -82,7 +112,6 @@ export default function CargarJugadas() {
         if (jugadas.length < TOTAL_FILAS) {
             setJugadas(createEmptyJugadas())
         }
-
         // Inicializar las referencias
         inputRefs.current = Array(TOTAL_FILAS)
             .fill(0)
@@ -108,8 +137,10 @@ export default function CargarJugadas() {
         { id: "CORRIE", label: "Corrientes" },
         { id: "CHACO", label: "Chaco" },
         { id: "RIONEG", label: "Rio Negro" },
-        { id: "SANTIA", label: "Santiago" }, // Agregado Santiago
-        { id: "TUCUMA", label: "Tucumán" }, // Agregado Tucumán
+        { id: "SANTIA", label: "Santiago" },
+        { id: "TUCUMA", label: "Tucumán" },
+        { id: "NEUQUE", label: "Neuquén" },
+        { id: "MISION", label: "Misiones" },
     ]
 
     useEffect(() => {
@@ -182,6 +213,10 @@ export default function CargarJugadas() {
         })
     }
 
+    const formatearFecha = (fecha: Date) => {
+        return format(fecha, "dd/MM/yy HH:mm")
+    }
+
     const generarSecuencia = () => {
         const secuencia = secuenciaCounter.toString().padStart(9, "0")
         incrementSecuenciaCounter()
@@ -227,8 +262,233 @@ export default function CargarJugadas() {
 
         setTicketContent(ticketContent)
         setIsTicketDialogOpen(true)
-
         return secuencia
+    }
+
+    const obtenerJugadasDelPasador = async () => {
+        if (!selectedPasador) {
+            toast.error("Por favor, seleccione un pasador primero.")
+            return
+        }
+
+        setIsLoadingJugadas(true)
+        try {
+            const pasadorDoc = pasadores.find((p) => p.id === selectedPasador)
+            if (!pasadorDoc) {
+                toast.error("Pasador no encontrado.")
+                return
+            }
+
+            console.log("🔍 Obteniendo jugadas del pasador:", pasadorDoc.nombre)
+
+            const nombreColeccion = `JUGADAS DE ${pasadorDoc.nombre}`
+            const jugadasCollection = collection(db, nombreColeccion)
+            const jugadasSnapshot = await getDocs(jugadasCollection)
+
+            const jugadasList: JugadaFirebase[] = jugadasSnapshot.docs.map((doc) => {
+                const data = doc.data()
+                return {
+                    id: doc.id,
+                    ...data,
+                    fechaFormateada: data.fechaHora
+                        ? data.fechaHora.toDate
+                            ? data.fechaHora.toDate()
+                            : new Date(data.fechaHora)
+                        : new Date(),
+                } as JugadaFirebase
+            })
+
+            // Filtrar solo jugadas de tipo "NUEVA JUGADA"
+            const tiposPermitidos = ["NUEVA JUGADA"]
+            const jugadasFiltradas = jugadasList.filter((jugada) => jugada.tipo && tiposPermitidos.includes(jugada.tipo))
+
+            // Ordenar por fecha más reciente primero
+            jugadasFiltradas.sort((a, b) => {
+                const fechaA = a.fechaFormateada || new Date(0)
+                const fechaB = b.fechaFormateada || new Date(0)
+                return fechaB.getTime() - fechaA.getTime()
+            })
+
+            console.log("📋 Jugadas encontradas:", jugadasList.length)
+            console.log("📋 Jugadas filtradas:", jugadasFiltradas.length)
+            setJugadasPasador(jugadasFiltradas)
+
+            if (jugadasFiltradas.length === 0) {
+                toast.error(`No se encontraron jugadas anteriores de tipo "NUEVA JUGADA" para ${pasadorDoc.nombre}.`)
+            }
+        } catch (error) {
+            console.error("❌ Error al obtener jugadas:", error)
+            toast.error("Error al obtener las jugadas del pasador.")
+        } finally {
+            setIsLoadingJugadas(false)
+        }
+    }
+
+    const buscarJugadaAnterior = async () => {
+        if (!secuenciaBuscar.trim()) {
+            toast.error("Por favor, ingrese un número de secuencia.")
+            return
+        }
+
+        setIsSearching(true)
+        try {
+            console.log("🔍 Iniciando búsqueda de secuencia:", secuenciaBuscar)
+
+            let jugadasEncontradas: any[] = []
+            let pasadorEncontrado = null
+            let coleccionesRevisadas = 0
+
+            for (const pasador of pasadores) {
+                const nombreColeccion = `JUGADAS DE ${pasador.nombre}`
+                console.log(`🔎 Buscando en colección: "${nombreColeccion}"`)
+
+                try {
+                    const jugadasCollection = collection(db, nombreColeccion)
+                    const q = query(jugadasCollection, where("secuencia", "==", secuenciaBuscar))
+                    const querySnapshot = await getDocs(q)
+
+                    coleccionesRevisadas++
+
+                    if (!querySnapshot.empty) {
+                        const docs = querySnapshot.docs.map((doc) => {
+                            const data = doc.data()
+                            return { id: doc.id, ...data }
+                        })
+                        jugadasEncontradas = docs
+                        pasadorEncontrado = pasador
+                        break
+                    }
+                } catch (error) {
+                    console.error(`❌ Error al buscar en colección "${nombreColeccion}":`, error)
+                }
+            }
+
+            if (jugadasEncontradas.length === 0 || !pasadorEncontrado) {
+                toast.error(
+                    `No se encontró ninguna jugada con la secuencia "${secuenciaBuscar}". Se revisaron ${coleccionesRevisadas} colecciones.`,
+                )
+                return
+            }
+
+            // Filtrar solo los tipos permitidos
+            const tiposPermitidos = ["NUEVA JUGADA"]
+            const jugadasFiltradas = jugadasEncontradas.filter((jugada) => tiposPermitidos.includes(jugada.tipo))
+
+            if (jugadasFiltradas.length === 0) {
+                toast.error(`La jugada con secuencia "${secuenciaBuscar}" no es de tipo "NUEVA JUGADA".`)
+                return
+            }
+
+            // Limpiar jugadas actuales
+            limpiarFormulario()
+
+            // Configurar pasador
+            setSelectedPasador(pasadorEncontrado.id)
+
+            // Procesar la jugada encontrada
+            const jugada = jugadasFiltradas[0]
+
+            // Configurar sorteo y provincias
+            if (jugada.loteria) {
+                setSelectedSorteo(jugada.loteria)
+            }
+
+            if (jugada.provincias && jugada.provincias.length > 0) {
+                setSelectedLotteries(jugada.provincias)
+            }
+
+            // Cargar las jugadas individuales
+            if (jugada.jugadas && Array.isArray(jugada.jugadas)) {
+                const nuevasJugadas = createEmptyJugadas()
+
+                jugada.jugadas.forEach((jugadaItem: any, index: number) => {
+                    if (index < TOTAL_FILAS) {
+                        nuevasJugadas[index] = {
+                            numero: jugadaItem.numero || jugadaItem.originalNumero || "",
+                            posicion: jugadaItem.posicion || jugadaItem.originalPosicion || "",
+                            importe: jugadaItem.monto || jugadaItem.montoTotal?.toString() || "",
+                        }
+                    }
+                })
+
+                setJugadas(nuevasJugadas)
+            }
+
+            toast.success(`Jugada con secuencia "${secuenciaBuscar}" cargada exitosamente.`)
+            setIsRepeatDialogOpen(false)
+            setSecuenciaBuscar("")
+        } catch (error) {
+            console.error("❌ Error al buscar jugada:", error)
+            toast.error("Error al buscar la jugada. Por favor, intente nuevamente.")
+        } finally {
+            setIsSearching(false)
+        }
+    }
+
+    const cargarJugadaSeleccionada = async () => {
+        if (!jugadaSeleccionada) {
+            toast.error("Por favor, seleccione una jugada para repetir.")
+            return
+        }
+
+        try {
+            console.log("🎯 Cargando jugada seleccionada:", jugadaSeleccionada.secuencia)
+
+            // Limpiar formulario
+            limpiarFormulario()
+
+            // Configurar sorteo y provincias
+            if (jugadaSeleccionada.loteria) {
+                setSelectedSorteo(jugadaSeleccionada.loteria)
+            }
+
+            if (jugadaSeleccionada.provincias && jugadaSeleccionada.provincias.length > 0) {
+                setSelectedLotteries(jugadaSeleccionada.provincias)
+            }
+
+            // Cargar las jugadas individuales
+            if (jugadaSeleccionada.jugadas && Array.isArray(jugadaSeleccionada.jugadas)) {
+                const nuevasJugadas = createEmptyJugadas()
+
+                jugadaSeleccionada.jugadas.forEach((jugadaItem: any, index: number) => {
+                    if (index < TOTAL_FILAS) {
+                        nuevasJugadas[index] = {
+                            numero: jugadaItem.numero || jugadaItem.originalNumero || "",
+                            posicion: jugadaItem.posicion || jugadaItem.originalPosicion || "",
+                            importe: jugadaItem.monto || jugadaItem.montoTotal?.toString() || "",
+                        }
+                    }
+                })
+
+                setJugadas(nuevasJugadas)
+            }
+
+            // Cerrar el diálogo
+            setIsRepeatDialogOpen(false)
+            setJugadaSeleccionada(null)
+            setJugadasPasador([])
+
+            toast.success("Jugada cargada exitosamente. Puede modificarla y guardarla nuevamente.")
+        } catch (error) {
+            console.error("❌ Error al cargar jugada:", error)
+            toast.error("Error al cargar la jugada seleccionada.")
+        }
+    }
+
+    const obtenerResumenJugada = (jugada: JugadaFirebase) => {
+        let resumen = ""
+        let total = 0
+
+        if (jugada.jugadas && Array.isArray(jugada.jugadas)) {
+            const cantidad = jugada.jugadas.length
+            resumen = `${cantidad} Jugada(s)`
+            total = jugada.totalMonto || Number.parseFloat(jugada.monto || "0") || 0
+        } else {
+            resumen = "Jugada"
+            total = jugada.totalMonto || Number.parseFloat(jugada.monto || "0") || 0
+        }
+
+        return { resumen, total: Number(total) || 0 }
     }
 
     const guardarJugadas = async () => {
@@ -252,7 +512,6 @@ export default function CargarJugadas() {
             }
 
             const secuencia = generarTicket(jugadasValidas)
-
             const jugadasPasadorCollection = collection(db, `JUGADAS DE ${pasadorSeleccionado.nombre}`)
 
             const nuevaJugada = {
@@ -285,7 +544,6 @@ export default function CargarJugadas() {
             }
 
             await addDoc(jugadasPasadorCollection, nuevaJugada)
-
             toast.success("Jugadas guardadas exitosamente")
             limpiarFormulario()
         } catch (error) {
@@ -307,7 +565,6 @@ export default function CargarJugadas() {
     const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>, rowIndex: number, colIndex: number) => {
         if (e.key === "Enter") {
             e.preventDefault()
-
             // Determinar el siguiente campo para enfocar
             let nextRow = rowIndex
             let nextCol = colIndex + 1
@@ -472,28 +729,45 @@ export default function CargarJugadas() {
                                 <div className="text-xl font-bold text-blue-800">
                                     Total: <span className="text-green-600">${totalMonto.toFixed(2)}</span>
                                 </div>
-                                <Button
-                                    onClick={guardarJugadas}
-                                    className="bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white shadow-md transition-all duration-200 transform hover:scale-105"
-                                    disabled={isLoading}
-                                >
-                                    {isLoading ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            Guardando...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Save className="mr-2 h-4 w-4" />
-                                            Cargar Jugadas
-                                        </>
-                                    )}
-                                </Button>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            if (!selectedPasador) {
+                                                toast.error("Por favor, seleccione un pasador primero.")
+                                                return
+                                            }
+                                            setIsRepeatDialogOpen(true)
+                                            obtenerJugadasDelPasador()
+                                        }}
+                                        className="border-purple-500 text-purple-600 hover:bg-purple-50 bg-transparent"
+                                    >
+                                        <RotateCcw className="mr-2 h-4 w-4" /> Repetir Jugada
+                                    </Button>
+                                    <Button
+                                        onClick={guardarJugadas}
+                                        className="bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white shadow-md transition-all duration-200 transform hover:scale-105"
+                                        disabled={isLoading}
+                                    >
+                                        {isLoading ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                Guardando...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Save className="mr-2 h-4 w-4" />
+                                                Cargar Jugadas
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
                             </div>
                         </div>
                     </CardContent>
                 </Card>
 
+                {/* Diálogo de ticket */}
                 <Dialog open={isTicketDialogOpen} onOpenChange={setIsTicketDialogOpen}>
                     <DialogContent className="bg-white border border-blue-200 shadow-xl max-w-md">
                         <DialogHeader>
@@ -548,6 +822,178 @@ export default function CargarJugadas() {
                             >
                                 <Printer className="mr-2 h-4 w-4" />
                                 Imprimir
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Diálogo para repetir jugada anterior */}
+                <Dialog open={isRepeatDialogOpen} onOpenChange={setIsRepeatDialogOpen}>
+                    <DialogContent className="max-w-2xl max-h-[80vh]">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center">
+                                <RotateCcw className="h-5 w-5 mr-2 text-purple-600" />
+                                Repetir Jugada Anterior
+                                {selectedPasador && (
+                                    <Badge className="ml-2 bg-blue-100 text-blue-800">
+                                        {pasadores.find((p) => p.id === selectedPasador)?.nombre}
+                                    </Badge>
+                                )}
+                            </DialogTitle>
+
+                            {/* Buscador por número de secuencia */}
+                            <div className="mb-4">
+                                <Label className="text-sm font-medium mb-2 block">Buscar por número de secuencia:</Label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        value={secuenciaBuscar}
+                                        onChange={(e) => setSecuenciaBuscar(e.target.value)}
+                                        placeholder="Ingrese el número de secuencia"
+                                        className="flex-1"
+                                    />
+                                    <Button
+                                        onClick={buscarJugadaAnterior}
+                                        disabled={isSearching || !secuenciaBuscar.trim()}
+                                        variant="outline"
+                                        className="border-blue-500 text-blue-600 bg-transparent"
+                                    >
+                                        {isSearching ? (
+                                            <svg
+                                                className="animate-spin h-4 w-4"
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <circle
+                                                    className="opacity-25"
+                                                    cx="12"
+                                                    cy="12"
+                                                    r="10"
+                                                    stroke="currentColor"
+                                                    strokeWidth="4"
+                                                ></circle>
+                                                <path
+                                                    className="opacity-75"
+                                                    fill="currentColor"
+                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                ></path>
+                                            </svg>
+                                        ) : (
+                                            <Search className="h-4 w-4" />
+                                        )}
+                                    </Button>
+                                </div>
+                            </div>
+                        </DialogHeader>
+
+                        <div className="space-y-4">
+                            {isLoadingJugadas ? (
+                                <div className="flex items-center justify-center py-8">
+                                    <svg
+                                        className="animate-spin h-8 w-8 text-purple-600"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <circle
+                                            className="opacity-25"
+                                            cx="12"
+                                            cy="12"
+                                            r="10"
+                                            stroke="currentColor"
+                                            strokeWidth="4"
+                                        ></circle>
+                                        <path
+                                            className="opacity-75"
+                                            fill="currentColor"
+                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                        ></path>
+                                    </svg>
+                                    <span className="ml-2">Cargando jugadas...</span>
+                                </div>
+                            ) : jugadasPasador.length > 0 ? (
+                                <div>
+                                    <Label className="text-sm font-medium mb-2 block">Seleccione la jugada que desea repetir:</Label>
+                                    <ScrollArea className="h-[400px] rounded-md border p-2">
+                                        <div className="space-y-2">
+                                            {jugadasPasador.map((jugada, index) => {
+                                                const { resumen, total } = obtenerResumenJugada(jugada)
+                                                const isSelected = jugadaSeleccionada?.id === jugada.id
+
+                                                return (
+                                                    <div
+                                                        key={jugada.id}
+                                                        onClick={() => setJugadaSeleccionada(jugada)}
+                                                        className={`p-3 rounded-lg border cursor-pointer transition-all ${isSelected
+                                                                ? "border-purple-500 bg-purple-50"
+                                                                : "border-gray-200 hover:border-purple-300 hover:bg-gray-50"
+                                                            }`}
+                                                    >
+                                                        <div className="flex justify-between items-start">
+                                                            <div className="flex-1">
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <Badge
+                                                                        variant="outline"
+                                                                        className="text-xs bg-blue-100 text-blue-800 border-blue-300"
+                                                                    >
+                                                                        {jugada.tipo?.replace("NUEVA ", "")}
+                                                                    </Badge>
+                                                                    <span className="text-sm font-medium">{resumen}</span>
+                                                                </div>
+
+                                                                <div className="text-xs text-gray-500 space-y-1">
+                                                                    <div>📅 {formatearFecha(jugada.fechaFormateada || new Date())}</div>
+                                                                    <div>🎯 {jugada.loteria || "N/A"}</div>
+                                                                    {jugada.provincias && jugada.provincias.length > 0 && (
+                                                                        <div>🌍 {jugada.provincias.join(", ")}</div>
+                                                                    )}
+                                                                    <div>🔢 Secuencia: {jugada.secuencia}</div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="text-right">
+                                                                <div className="text-lg font-bold text-green-600">${total.toFixed(2)}</div>
+                                                                {isSelected && (
+                                                                    <div className="text-xs text-purple-600 font-medium">✓ Seleccionada</div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </ScrollArea>
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 text-gray-500">
+                                    <div className="text-4xl mb-2">📋</div>
+                                    <p>No se encontraron jugadas anteriores para este pasador.</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <DialogFooter className="flex justify-between">
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    setIsRepeatDialogOpen(false)
+                                    setJugadaSeleccionada(null)
+                                    setJugadasPasador([])
+                                    setSecuenciaBuscar("")
+                                }}
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                onClick={() => {
+                                    if (jugadaSeleccionada) {
+                                        cargarJugadaSeleccionada()
+                                    }
+                                }}
+                                disabled={!jugadaSeleccionada}
+                                className="bg-green-600 hover:bg-green-700"
+                            >
+                                <Save className="h-4 w-4 mr-2" /> Cargar Jugada
                             </Button>
                         </DialogFooter>
                     </DialogContent>

@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect, useRef } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -14,10 +13,10 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Plus, Trash2, Save, Printer, Share2, RefreshCw } from 'lucide-react'
+import { Plus, Trash2, Save, Printer, Share2, RefreshCw, RotateCcw, Search } from "lucide-react"
 import Navbar from "@/app/components/Navbar"
 import { db } from "@/lib/firebase"
-import { collection, getDocs, addDoc, serverTimestamp } from "firebase/firestore"
+import { collection, getDocs, addDoc, serverTimestamp, query, where } from "firebase/firestore"
 import { format } from "date-fns"
 import { toast } from "react-hot-toast"
 
@@ -66,6 +65,24 @@ interface Loteria {
     habilitada?: boolean
 }
 
+interface JugadaFirebase {
+    id: string
+    tipo?: string
+    observacion?: string
+    fechaHora?: any
+    fechaFormateada?: Date
+    loterias?: string[]
+    provincias?: string[]
+    secuencia?: string
+    totalMonto?: number
+    montoTotal?: string | number
+    numeros?: string[]
+    jugadas?: any[]
+    pasadorId?: string
+    nombreObservacion?: string
+    [key: string]: any
+}
+
 const lotteryAbbreviations: { [key: string]: string } = {
     PREVIA: "PRE",
     PRIMERA: "PRIM",
@@ -74,7 +91,6 @@ const lotteryAbbreviations: { [key: string]: string } = {
     NOCTURNA: "NOC",
 }
 
-// Agregar Santiago y Tucumán a las abreviaturas de provincias
 const provinceAbbreviations: { [key: string]: string } = {
     NACION: "NAC",
     PROVIN: "PRO",
@@ -86,11 +102,12 @@ const provinceAbbreviations: { [key: string]: string } = {
     CORRIE: "CRI",
     CHACO: "CHA",
     RIONEG: "RN",
-    SANTIA: "SG", // Agregado Santiago
-    TUCUMA: "TU", // Agregado Tucumán
+    SANTIA: "SG",
+    TUCUMA: "TU",
+    NEUQUE: "NEU",
+    MISION: "MIS",
 }
 
-// Agregar Santiago y Tucumán a la lista de loterías
 const loterias: Loteria[] = [
     { id: "NACION", label: "Nacional", color: "bg-blue-100 border-blue-500", habilitada: true },
     { id: "PROVIN", label: "Provincia", color: "bg-green-100 border-green-500", habilitada: true },
@@ -102,8 +119,10 @@ const loterias: Loteria[] = [
     { id: "CORRIE", label: "Corrientes", color: "bg-orange-100 border-orange-500", habilitada: true },
     { id: "CHACO", label: "Chaco", color: "bg-pink-100 border-pink-500", habilitada: true },
     { id: "RIONEG", label: "Río Negro", color: "bg-cyan-100 border-cyan-500", habilitada: true },
-    { id: "SANTIA", label: "Santiago", color: "bg-lime-100 border-lime-500", habilitada: true }, // Agregado Santiago
-    { id: "TUCUMA", label: "Tucumán", color: "bg-emerald-100 border-emerald-500", habilitada: true }, // Agregado Tucumán
+    { id: "SANTIA", label: "Santiago", color: "bg-lime-100 border-lime-500", habilitada: true },
+    { id: "TUCUMA", label: "Tucumán", color: "bg-emerald-100 border-emerald-500", habilitada: true },
+    { id: "NEUQUE", label: "Neuquén", color: "bg-violet-100 border-violet-500", habilitada: true },
+    { id: "MISION", label: "Misiones", color: "bg-rose-100 border-rose-500", habilitada: true },
 ]
 
 const formatDate = (date: Date): string => {
@@ -130,6 +149,21 @@ export default function CargarJugadas() {
     const [ticketContent, setTicketContent] = useState("")
     const [isLoading, setIsLoading] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
+
+    // Estados para repetir jugada
+    const [isRepeatDialogOpen, setIsRepeatDialogOpen] = useState(false)
+    const [secuenciaBuscar, setSecuenciaBuscar] = useState("")
+    const [isSearching, setIsSearching] = useState(false)
+
+    // Estados para la funcionalidad mejorada
+    const [jugadasPasador, setJugadasPasador] = useState<JugadaFirebase[]>([])
+    const [isLoadingJugadas, setIsLoadingJugadas] = useState(false)
+    const [jugadaSeleccionada, setJugadaSeleccionada] = useState<JugadaFirebase | null>(null)
+
+    // Estados para observación y búsqueda
+    const [observacionJugada, setObservacionJugada] = useState<string>("")
+    const [nombreObservacionJugada, setNombreObservacionJugada] = useState<string>("")
+    const [busquedaObservacion, setBusquedaObservacion] = useState<string>("")
 
     const numero1Ref = useRef<HTMLInputElement>(null)
     const numero2Ref = useRef<HTMLInputElement>(null)
@@ -172,32 +206,564 @@ export default function CargarJugadas() {
         }
     }
 
-    // Modificar la función handleTriplonaInput para agregar la jugada al presionar Enter en el último campo
+    const obtenerJugadasDelPasador = async () => {
+        if (!selectedPasador) {
+            toast.error("Por favor, seleccione un pasador primero.")
+            return
+        }
+
+        setIsLoadingJugadas(true)
+        try {
+            const pasadorDoc = pasadores.find((p) => p.id === selectedPasador)
+            if (!pasadorDoc) {
+                toast.error("Pasador no encontrado.")
+                return
+            }
+
+            console.log("🔍 Obteniendo jugadas del pasador:", pasadorDoc.nombre)
+            const nombreColeccion = `JUGADAS DE ${pasadorDoc.nombre}`
+            const jugadasCollection = collection(db, nombreColeccion)
+            const jugadasSnapshot = await getDocs(jugadasCollection)
+
+            const jugadasList: JugadaFirebase[] = jugadasSnapshot.docs.map((doc) => {
+                const data = doc.data()
+                return {
+                    id: doc.id,
+                    ...data,
+                    fechaFormateada: data.fechaHora
+                        ? data.fechaHora.toDate
+                            ? data.fechaHora.toDate()
+                            : new Date(data.fechaHora)
+                        : new Date(),
+                } as JugadaFirebase
+            })
+
+            // Filtrar solo los tipos de jugadas que queremos mostrar
+            const tiposPermitidos = ["NUEVA TRIPLONA", "NUEVA QUINTINA", "NUEVA BORRATINA"]
+            let jugadasFiltradas = jugadasList.filter((jugada) => jugada.tipo && tiposPermitidos.includes(jugada.tipo))
+
+            // Aplicar filtro de búsqueda por observación si existe
+            if (busquedaObservacion.trim()) {
+                jugadasFiltradas = jugadasFiltradas.filter(
+                    (jugada) =>
+                        jugada.observacion && jugada.observacion.toLowerCase().includes(busquedaObservacion.toLowerCase().trim()),
+                )
+            }
+
+            // Ordenar por fecha más reciente primero
+            jugadasFiltradas.sort((a, b) => {
+                const fechaA = a.fechaFormateada || new Date(0)
+                const fechaB = b.fechaFormateada || new Date(0)
+                return fechaB.getTime() - fechaA.getTime()
+            })
+
+            console.log("📋 Jugadas encontradas:", jugadasList.length)
+            console.log("📋 Jugadas filtradas:", jugadasFiltradas.length)
+            setJugadasPasador(jugadasFiltradas)
+
+            if (jugadasFiltradas.length === 0) {
+                toast.error(`No se encontraron jugadas anteriores de Triplona, Quintina o Borratina para ${pasadorDoc.nombre}.`)
+            }
+        } catch (error) {
+            console.error("❌ Error al obtener jugadas:", error)
+            toast.error("Error al obtener las jugadas del pasador.")
+        } finally {
+            setIsLoadingJugadas(false)
+        }
+    }
+
+    const buscarJugadaAnterior = async () => {
+        if (!secuenciaBuscar.trim()) {
+            toast.error("Por favor, ingrese un número de secuencia.")
+            return
+        }
+
+        setIsSearching(true)
+        try {
+            console.log("🔍 Iniciando búsqueda de secuencia:", secuenciaBuscar)
+            let jugadasEncontradas: any[] = []
+            let pasadorEncontrado = null
+            let coleccionesRevisadas = 0
+
+            for (const pasador of pasadores) {
+                const nombreColeccion = `JUGADAS DE ${pasador.nombre}`
+                console.log(`🔎 Buscando en colección: "${nombreColeccion}"`)
+
+                try {
+                    const jugadasCollection = collection(db, nombreColeccion)
+                    const q = query(jugadasCollection, where("secuencia", "==", secuenciaBuscar))
+                    const querySnapshot = await getDocs(q)
+                    coleccionesRevisadas++
+
+                    if (!querySnapshot.empty) {
+                        const docs = querySnapshot.docs.map((doc) => {
+                            const data = doc.data()
+                            return { id: doc.id, ...data }
+                        })
+                        jugadasEncontradas = docs
+                        pasadorEncontrado = pasador
+                        break
+                    }
+                } catch (error) {
+                    console.error(`❌ Error al buscar en colección "${nombreColeccion}":`, error)
+                }
+            }
+
+            if (jugadasEncontradas.length === 0 || !pasadorEncontrado) {
+                toast.error(
+                    `No se encontró ninguna jugada con la secuencia "${secuenciaBuscar}". Se revisaron ${coleccionesRevisadas} colecciones.`,
+                )
+                return
+            }
+
+            // Filtrar solo los tipos permitidos
+            const tiposPermitidos = ["NUEVA TRIPLONA", "NUEVA QUINTINA", "NUEVA BORRATINA"]
+            const jugadasFiltradas = jugadasEncontradas.filter((jugada) => tiposPermitidos.includes(jugada.tipo))
+
+            if (jugadasFiltradas.length === 0) {
+                toast.error(`La jugada con secuencia "${secuenciaBuscar}" no es de tipo Triplona, Quintina o Borratina.`)
+                return
+            }
+
+            console.log("🎯 Jugadas encontradas:", jugadasFiltradas)
+
+            // Limpiar jugadas actuales
+            resetearCampos()
+
+            // Configurar pasador
+            setSelectedPasador(pasadorEncontrado.id)
+
+            let totalCalculado = 0
+            let sorteoEncontrado = ""
+            let provinciasEncontradas: string[] = []
+
+            // Procesar cada jugada encontrada
+            for (const jugada of jugadasFiltradas) {
+                console.log("📋 Procesando jugada:", jugada)
+
+                // Configurar sorteo y provincias
+                if (jugada.loterias && jugada.loterias.length > 0 && !sorteoEncontrado) {
+                    const sorteoOriginal = jugada.loterias[0]
+                    const sorteoConvertido = sorteoOriginal === "LAPREVIA" ? "PREVIA" : sorteoOriginal
+                    sorteoEncontrado = sorteoConvertido
+                    setSelectedSorteo(sorteoConvertido)
+                    console.log("🎯 Sorteo configurado:", sorteoConvertido)
+                }
+
+                if (jugada.provincias && jugada.provincias.length > 0 && provinciasEncontradas.length === 0) {
+                    provinciasEncontradas = jugada.provincias
+                    setSelectedLotteries(jugada.provincias)
+                    console.log("🌍 Provincias configuradas:", jugada.provincias)
+                }
+
+                // Procesar según el tipo de jugada
+                if (jugada.tipo === "NUEVA TRIPLONA") {
+                    const nuevasTriplonas: TriplonaApuesta[] = []
+                    if (jugada.numeros && Array.isArray(jugada.numeros)) {
+                        jugada.numeros.forEach((numeroStr: string) => {
+                            const numeros = numeroStr.includes(" - ") ? numeroStr.split(" - ") : numeroStr.split("-")
+                            if (numeros.length === 3) {
+                                nuevasTriplonas.push({
+                                    numeros: numeros.map((n) => n.trim()),
+                                    loteria: sorteoEncontrado,
+                                    provincias: jugada.provincias || [],
+                                })
+                            }
+                        })
+                    }
+                    setTriplonaApuestas(nuevasTriplonas)
+                    totalCalculado += nuevasTriplonas.length * (jugada.provincias?.length || 1) * 50
+                    toast.success(
+                        `${nuevasTriplonas.length} Triplona(s) cargada(s) en ${jugada.provincias?.length || 0} lotería(s)`,
+                    )
+                } else if (jugada.tipo === "NUEVA QUINTINA") {
+                    const nuevasQuintinas: QuintinaApuesta[] = []
+                    if (jugada.numeros && Array.isArray(jugada.numeros)) {
+                        jugada.numeros.forEach((numeroStr: string) => {
+                            const numeros = numeroStr.split(",").map((n) => n.trim())
+                            if (numeros.length === 5) {
+                                nuevasQuintinas.push({
+                                    numeros: numeros,
+                                    loteria: sorteoEncontrado,
+                                    provincias: jugada.provincias || [],
+                                })
+                            }
+                        })
+                    }
+                    setQuintinaApuestas(nuevasQuintinas)
+                    totalCalculado += nuevasQuintinas.length * (jugada.provincias?.length || 1) * 100
+                    toast.success(
+                        `${nuevasQuintinas.length} Quintina(s) cargada(s) en ${jugada.provincias?.length || 0} lotería(s)`,
+                    )
+                } else if (jugada.tipo === "NUEVA BORRATINA") {
+                    const nuevasBorratinas: BorratinaApuesta[] = []
+                    if (jugada.jugadas && Array.isArray(jugada.jugadas)) {
+                        jugada.jugadas.forEach((borratina: any) => {
+                            if (borratina.numeros && Array.isArray(borratina.numeros) && borratina.numeros.length === 8) {
+                                nuevasBorratinas.push({
+                                    numeros: borratina.numeros,
+                                    loteria: sorteoEncontrado,
+                                })
+                            }
+                        })
+                    }
+                    setBorratinaApuestas(nuevasBorratinas)
+                    totalCalculado += nuevasBorratinas.length * 30
+                    toast.success(`${nuevasBorratinas.length} Borratina(s) cargada(s)`)
+                }
+            }
+
+            setTotal(totalCalculado)
+            const tiposEncontrados = jugadasFiltradas.map((j) => j.tipo).join(", ")
+            const loteriasTexto = provinciasEncontradas.join(", ")
+
+            console.log("🎉 Búsqueda completada exitosamente")
+            console.log("📋 Resumen:")
+            console.log("- Tipos:", tiposEncontrados)
+            console.log("- Sorteo:", sorteoEncontrado)
+            console.log("- Loterías:", loteriasTexto)
+            console.log("- Total:", totalCalculado)
+
+            toast.success(
+                `Jugada encontrada y cargada. Sorteo: ${sorteoEncontrado}. Loterías: ${loteriasTexto}. Total: $${totalCalculado.toFixed(2)}`,
+            )
+
+            setIsRepeatDialogOpen(false)
+            setSecuenciaBuscar("")
+        } catch (error) {
+            console.error("❌ Error al buscar jugada:", error)
+            toast.error("Error al buscar la jugada. Por favor, intente nuevamente.")
+        } finally {
+            setIsSearching(false)
+        }
+    }
+
+    const cargarJugadaSeleccionada = async () => {
+        if (!jugadaSeleccionada) {
+            toast.error("Por favor, seleccione una jugada para repetir.")
+            return
+        }
+
+        try {
+            console.log("🎯 Cargando jugada seleccionada:", jugadaSeleccionada.secuencia)
+            console.log("📋 Datos completos de la jugada:", jugadaSeleccionada)
+
+            // PASO 1: Limpiar SOLO las jugadas, NO el sorteo ni las loterías
+            setTriplonaApuestas([])
+            setBorratinaApuestas([])
+            setQuintinaApuestas([])
+            setExactaApuestas([])
+            setObservacionJugada("")
+            setNombreObservacionJugada("")
+
+            // PASO 2: Configurar sorteo desde loterias[0]
+            let sorteoConfiguracion = ""
+            if (jugadaSeleccionada.loterias && jugadaSeleccionada.loterias.length > 0) {
+                const sorteoOriginal = jugadaSeleccionada.loterias[0]
+                sorteoConfiguracion = sorteoOriginal === "LAPREVIA" ? "PREVIA" : sorteoOriginal
+                console.log("🎯 Configurando sorteo:", sorteoConfiguracion)
+            }
+
+            // PASO 3: Configurar las provincias/loterías desde provincias
+            const provinciasJugada = jugadaSeleccionada.provincias || []
+            console.log("🌍 Configurando provincias:", provinciasJugada)
+
+            // PASO 4: Aplicar configuración de forma síncrona
+            setSelectedSorteo(sorteoConfiguracion)
+            setSelectedLotteries(provinciasJugada)
+
+            let totalCalculado = 0
+            const nuevasTriplonas: TriplonaApuesta[] = []
+            const nuevasQuintinas: QuintinaApuesta[] = []
+            const nuevasBorratinas: BorratinaApuesta[] = []
+
+            // PASO 5: Procesar según el tipo de jugada
+            if (jugadaSeleccionada.tipo === "NUEVA TRIPLONA") {
+                console.log("🔢 Procesando TRIPLONA")
+                console.log("📊 Números array:", jugadaSeleccionada.numeros)
+
+                if (jugadaSeleccionada.numeros && Array.isArray(jugadaSeleccionada.numeros)) {
+                    jugadaSeleccionada.numeros.forEach((numeroStr: string, index: number) => {
+                        console.log(`🎲 Procesando número ${index + 1}:`, numeroStr)
+                        const numeros = numeroStr.includes(" - ") ? numeroStr.split(" - ") : numeroStr.split("-")
+                        if (numeros.length === 3) {
+                            const numerosLimpios = numeros.map((n) => n.trim())
+                            console.log("✅ Números procesados:", numerosLimpios)
+                            nuevasTriplonas.push({
+                                numeros: numerosLimpios,
+                                loteria: sorteoConfiguracion,
+                                provincias: provinciasJugada,
+                            })
+                        }
+                    })
+                }
+
+                setTriplonaApuestas(nuevasTriplonas)
+                totalCalculado = nuevasTriplonas.length * provinciasJugada.length * 50
+                console.log(
+                    `💰 Total Triplona: ${nuevasTriplonas.length} × ${provinciasJugada.length} × 50 = ${totalCalculado}`,
+                )
+                toast.success(
+                    `${nuevasTriplonas.length} Triplona(s) cargada(s) en ${provinciasJugada.length} lotería(s): ${provinciasJugada.join(", ")}`,
+                )
+            } else if (jugadaSeleccionada.tipo === "NUEVA QUINTINA") {
+                console.log("🔢 Procesando QUINTINA")
+                console.log("📊 Números array:", jugadaSeleccionada.numeros)
+
+                if (jugadaSeleccionada.numeros && Array.isArray(jugadaSeleccionada.numeros)) {
+                    jugadaSeleccionada.numeros.forEach((numeroStr: string, index: number) => {
+                        console.log(`🎲 Procesando quintina ${index + 1}:`, numeroStr)
+                        const numeros = numeroStr.split(",").map((n) => n.trim())
+                        if (numeros.length === 5) {
+                            console.log("✅ Números procesados:", numeros)
+                            nuevasQuintinas.push({
+                                numeros: numeros,
+                                loteria: sorteoConfiguracion,
+                                provincias: provinciasJugada,
+                            })
+                        }
+                    })
+                }
+
+                setQuintinaApuestas(nuevasQuintinas)
+                totalCalculado = nuevasQuintinas.length * provinciasJugada.length * 100
+                console.log(
+                    `💰 Total Quintina: ${nuevasQuintinas.length} × ${provinciasJugada.length} × 100 = ${totalCalculado}`,
+                )
+                toast.success(
+                    `${nuevasQuintinas.length} Quintina(s) cargada(s) en ${provinciasJugada.length} lotería(s): ${provinciasJugada.join(", ")}`,
+                )
+            } else if (jugadaSeleccionada.tipo === "NUEVA BORRATINA") {
+                console.log("🔢 Procesando BORRATINA")
+                console.log("📊 Jugadas array:", jugadaSeleccionada.jugadas)
+
+                if (jugadaSeleccionada.jugadas && Array.isArray(jugadaSeleccionada.jugadas)) {
+                    jugadaSeleccionada.jugadas.forEach((borratina: any, index: number) => {
+                        console.log(`🎲 Procesando borratina ${index + 1}:`, borratina)
+                        if (borratina.numeros && Array.isArray(borratina.numeros) && borratina.numeros.length === 8) {
+                            console.log("✅ Números procesados:", borratina.numeros)
+                            nuevasBorratinas.push({
+                                numeros: borratina.numeros,
+                                loteria: sorteoConfiguracion,
+                            })
+                        }
+                    })
+                }
+
+                setBorratinaApuestas(nuevasBorratinas)
+                totalCalculado = nuevasBorratinas.length * 30
+                console.log(`💰 Total Borratina: ${nuevasBorratinas.length} × 30 = ${totalCalculado}`)
+                toast.success(`${nuevasBorratinas.length} Borratina(s) cargada(s)`)
+            }
+
+            // PASO 6: Establecer el total calculado
+            setTotal(totalCalculado)
+            console.log("💰 Total final establecido:", totalCalculado)
+
+            // PASO 7: Cerrar el diálogo
+            setIsRepeatDialogOpen(false)
+            setJugadaSeleccionada(null)
+            setJugadasPasador([])
+
+            // PASO 8: Esperar un momento para que React actualice la UI
+            await new Promise((resolve) => setTimeout(resolve, 100))
+
+            // PASO 9: Generar y mostrar el ticket automáticamente con los datos correctos
+            const nuevaSecuencia = generarSecuencia()
+            setSecuencia(nuevaSecuencia)
+
+            // Esperar otro momento para asegurar que el estado se haya actualizado
+            await new Promise((resolve) => setTimeout(resolve, 100))
+
+            const ticketContent = generarContenidoTicket(nuevaSecuencia)
+            imprimirTicket(ticketContent)
+
+            // PASO 10: Mostrar resumen final
+            const loteriasTexto = provinciasJugada.length > 0 ? provinciasJugada.join(", ") : "Sin loterías"
+            console.log("🎉 Jugada cargada exitosamente")
+            console.log("📋 Resumen final:")
+            console.log("- Sorteo:", sorteoConfiguracion)
+            console.log("- Loterías:", loteriasTexto)
+            console.log("- Total:", totalCalculado)
+            console.log("- Ticket generado con secuencia:", nuevaSecuencia)
+
+            toast.success(
+                `¡Jugada repetida exitosamente! Sorteo: ${sorteoConfiguracion}. Loterías: ${loteriasTexto}. Total: $${totalCalculado.toFixed(2)}. Ticket generado.`,
+            )
+        } catch (error) {
+            console.error("❌ Error al cargar jugada:", error)
+            toast.error("Error al cargar la jugada seleccionada.")
+        }
+    }
+
+    const formatearFecha = (fecha: Date) => {
+        return format(fecha, "dd/MM/yy HH:mm")
+    }
+
+    const obtenerResumenJugada = (jugada: JugadaFirebase) => {
+        let resumen = ""
+        let total = 0
+        let numerosJugados: string[] = []
+        let loteriasApostadas = ""
+
+        // Obtener el sorteo desde loterias[0]
+        let sorteoJugada = "Sin especificar"
+        if (jugada.loterias && jugada.loterias.length > 0) {
+            const sorteoOriginal = jugada.loterias[0]
+            // Convertir nombres de sorteos si es necesario
+            if (sorteoOriginal === "LAPREVIA") {
+                sorteoJugada = "PREVIA"
+            } else {
+                sorteoJugada = sorteoOriginal
+            }
+        }
+
+        // Obtener las loterías apostadas desde provincias
+        if (jugada.provincias && jugada.provincias.length > 0) {
+            // Convertir códigos de provincias a nombres completos
+            const provinciasNombres = jugada.provincias.map((provincia) => {
+                const loteria = loterias.find((l) => l.id === provincia)
+                return loteria ? loteria.label : provincia
+            })
+            loteriasApostadas = provinciasNombres.join(", ")
+        } else {
+            // Si no hay provincias específicas, verificar si es borratina
+            if (jugada.tipo === "NUEVA BORRATINA") {
+                loteriasApostadas = "Todas las loterías"
+            } else {
+                loteriasApostadas = "Sin loterías especificadas"
+            }
+        }
+
+        // Procesar según el tipo de jugada
+        if (jugada.tipo === "NUEVA TRIPLONA") {
+            let cantidad = 0
+            if (jugada.numeros && Array.isArray(jugada.numeros)) {
+                cantidad = jugada.numeros.length
+                numerosJugados = jugada.numeros.map((numeroStr: string) => {
+                    return numeroStr.replace(/ - /g, "-")
+                })
+            } else if (jugada.jugadas && Array.isArray(jugada.jugadas)) {
+                cantidad = jugada.jugadas.length
+                numerosJugados = jugada.jugadas
+                    .map((j: any) => {
+                        if (j.numeros && Array.isArray(j.numeros)) {
+                            return j.numeros.join("-")
+                        }
+                        return ""
+                    })
+                    .filter(Boolean)
+            }
+
+            resumen = `${cantidad} Triplona(s)`
+            if (jugada.totalMonto) {
+                total = jugada.totalMonto
+            } else if (jugada.montoTotal) {
+                total = typeof jugada.montoTotal === "string" ? Number.parseFloat(jugada.montoTotal) : jugada.montoTotal
+            } else {
+                total = cantidad * (jugada.provincias?.length || 1) * 50
+            }
+        } else if (jugada.tipo === "NUEVA QUINTINA") {
+            let cantidad = 0
+            if (jugada.numeros && Array.isArray(jugada.numeros)) {
+                cantidad = jugada.numeros.length
+                numerosJugados = jugada.numeros.map((numeroStr: string) => {
+                    return numeroStr.replace(/,/g, "-")
+                })
+            } else if (jugada.jugadas && Array.isArray(jugada.jugadas)) {
+                cantidad = jugada.jugadas.length
+                numerosJugados = jugada.jugadas
+                    .map((j: any) => {
+                        if (j.numeros && Array.isArray(j.numeros)) {
+                            return j.numeros.join("-")
+                        }
+                        return ""
+                    })
+                    .filter(Boolean)
+            }
+
+            resumen = `${cantidad} Quintina(s)`
+            if (jugada.totalMonto) {
+                total = jugada.totalMonto
+            } else {
+                total = cantidad * (jugada.provincias?.length || 1) * 100
+            }
+        } else if (jugada.tipo === "NUEVA BORRATINA") {
+            let cantidad = 0
+            if (jugada.jugadas && Array.isArray(jugada.jugadas)) {
+                cantidad = jugada.jugadas.length
+                numerosJugados = jugada.jugadas
+                    .map((j: any) => {
+                        if (j.numeros && Array.isArray(j.numeros)) {
+                            return j.numeros.join("-")
+                        }
+                        return ""
+                    })
+                    .filter(Boolean)
+            } else if (jugada.numeros && Array.isArray(jugada.numeros)) {
+                cantidad = jugada.numeros.length
+                numerosJugados = jugada.numeros
+            }
+
+            resumen = `${cantidad} Borratina(s)`
+            if (jugada.totalMonto) {
+                total = jugada.totalMonto
+            } else {
+                total = cantidad * 30
+            }
+        } else if (jugada.tipo === "NUEVA EXACTA") {
+            let cantidad = 0
+            if (jugada.jugadas && Array.isArray(jugada.jugadas)) {
+                cantidad = jugada.jugadas.length
+                numerosJugados = jugada.jugadas
+                    .map((j: any) => {
+                        return `${j.numero || ""}-Pos:${j.posicion || ""}-$${j.importe || ""}`
+                    })
+                    .filter(Boolean)
+            }
+
+            resumen = `${cantidad} Exacta(s)`
+            total = jugada.totalMonto || 0
+        }
+
+        return {
+            resumen,
+            total: Number(total) || 0,
+            numerosJugados,
+            loteriasApostadas,
+            sorteoJugada, // Agregar el sorteo al retorno
+        }
+    }
+
     const handleTriplonaInput = (
         e: React.ChangeEvent<HTMLInputElement>,
         nextRef: React.RefObject<HTMLInputElement> | null,
     ) => {
         const value = e.target.value.replace(/\D/g, "")
         e.target.value = value
+
         if (value.length === 2 && nextRef && nextRef.current) {
             nextRef.current.focus()
         }
+
         if (value.length === 2 && !nextRef) {
             agregarTriplona()
         }
     }
 
-    // Modificar la función handleBorratinaInput para agregar la jugada al presionar Enter en el último campo
     const handleBorratinaInput = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
         const value = e.target.value.replace(/\D/g, "")
         e.target.value = value
+
         if (value.length === 2) {
             const isRepeated = borratinaRefs.current.some((ref, i) => i !== index && ref?.value === value)
+
             if (isRepeated) {
                 e.target.value = ""
                 toast.error("Este número ya ha sido ingresado. Por favor, elija otro.")
                 return
             }
+
             if (index < 7 && borratinaRefs.current[index + 1]) {
                 borratinaRefs.current[index + 1]?.focus()
             } else if (index === 7) {
@@ -206,10 +772,10 @@ export default function CargarJugadas() {
         }
     }
 
-    // Modificar la función handleQuintinaInput para agregar la jugada al presionar Enter en el último campo
     const handleQuintinaInput = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
         const value = e.target.value.replace(/\D/g, "")
         e.target.value = value
+
         if (value.length === 2) {
             if (index < 4 && quintinaRefs.current[index + 1]) {
                 quintinaRefs.current[index + 1]?.focus()
@@ -257,6 +823,7 @@ export default function CargarJugadas() {
         }
 
         const numeros = borratinaRefs.current.map((ref) => ref?.value || "")
+
         if (numeros.some((num) => num.length !== 2)) {
             toast.error("Por favor, ingrese ocho números de dos dígitos cada uno.")
             return
@@ -284,6 +851,7 @@ export default function CargarJugadas() {
         }
 
         const numeros = quintinaRefs.current.map((ref) => ref?.value || "")
+
         if (numeros.some((num) => num.length !== 2)) {
             toast.error("Por favor, ingrese cinco números de dos dígitos cada uno.")
             return
@@ -296,7 +864,6 @@ export default function CargarJugadas() {
         }
 
         setQuintinaApuestas([...quintinaApuestas, nuevaApuesta])
-        // Cambiar de 50 a 100 pesos por provincia
         setTotal(total + selectedLotteries.length * 100)
         toast.success("Quintina agregada correctamente")
 
@@ -322,7 +889,6 @@ export default function CargarJugadas() {
     const eliminarQuintina = (index: number) => {
         const apuestaEliminada = quintinaApuestas[index]
         setQuintinaApuestas(quintinaApuestas.filter((_, i) => i !== index))
-        // Cambiar de 50 a 100 pesos por provincia
         setTotal(total - apuestaEliminada.provincias.length * 100)
         toast.success("Quintina eliminada")
     }
@@ -373,7 +939,7 @@ export default function CargarJugadas() {
         return Date.now().toString()
     }
 
-    // Reemplazar la función generarContenidoTicket con esta versión actualizada
+    // FUNCIÓN CORREGIDA PARA GENERAR EL CONTENIDO DEL TICKET
     const generarContenidoTicket = (secuenciaParam?: string) => {
         const pasadorSeleccionado = pasadores.find((p) => p.id === selectedPasador)
         if (!pasadorSeleccionado) {
@@ -386,6 +952,7 @@ export default function CargarJugadas() {
         const terminal = "72-0005"
         const secuenciaTicket = secuenciaParam || generarSecuencia()
 
+        // Encabezado del ticket
         ticketContent += "TICKET\n"
         ticketContent += `FECHA/HORA ${fechaHora}\n`
         ticketContent += `TERMINAL   ${terminal}\n`
@@ -397,60 +964,84 @@ export default function CargarJugadas() {
         ticketContent += `${loteriaAbreviada}\n`
         ticketContent += `SECUENCIA  ${secuenciaTicket}\n`
 
-        // Generar contenido para cada tipo de jugada
+        // TRIPLONA - Con provincias y números
         if (triplonaApuestas.length > 0) {
             ticketContent += "\n**** NUEVA TRIPLONA ****\n"
-            const provinciasSet = new Set(triplonaApuestas[0].provincias.map((l) => provinceAbbreviations[l] || l))
-            ticketContent += `LOTERIAS: ${Array.from(provinciasSet).join(" ")}\n`
 
+            // Mostrar las loterías donde se juega
+            const provinciasTriplona = triplonaApuestas[0].provincias || selectedLotteries
+            if (provinciasTriplona.length > 0) {
+                const provinciasAbreviadas = provinciasTriplona.map((l) => provinceAbbreviations[l] || l)
+                ticketContent += `LOTERIAS: ${provinciasAbreviadas.join(" ")}\n`
+            }
+
+            // Mostrar cada triplona con sus números
             triplonaApuestas.forEach((apuesta) => {
                 const numerosFormateados = apuesta.numeros.join("-")
                 ticketContent += `${numerosFormateados}   $50.00\n`
             })
 
             ticketContent += "-".repeat(32) + "\n"
-            ticketContent += `TOTAL: $${(triplonaApuestas.length * 50 * triplonaApuestas[0].provincias.length).toFixed(2)}\n\n`
+            const totalTriplona = triplonaApuestas.length * 50 * provinciasTriplona.length
+            ticketContent += `TOTAL: $${totalTriplona.toFixed(2)}\n\n`
         }
 
+        // BORRATINA - Con números (las borratinas van en todas las loterías)
         if (borratinaApuestas.length > 0) {
             ticketContent += "\n**** NUEVA BORRATINA ****\n"
+            ticketContent += "LOTERIAS: TODAS\n"
 
+            // Mostrar cada borratina con sus números
             borratinaApuestas.forEach((apuesta) => {
                 const numerosFormateados = apuesta.numeros.join("-")
                 ticketContent += `${numerosFormateados}   $30.00\n`
             })
 
             ticketContent += "-".repeat(32) + "\n"
-            ticketContent += `TOTAL: $${(borratinaApuestas.length * 30).toFixed(2)}\n\n`
+            const totalBorratina = borratinaApuestas.length * 30
+            ticketContent += `TOTAL: $${totalBorratina.toFixed(2)}\n\n`
         }
 
+        // QUINTINA - Con provincias y números
         if (quintinaApuestas.length > 0) {
             ticketContent += "\n**** NUEVA QUINTINA ****\n"
-            const provinciasSet = new Set(quintinaApuestas[0].provincias.map((l) => provinceAbbreviations[l] || l))
-            ticketContent += `LOTERIAS: ${Array.from(provinciasSet).join(" ")}\n`
 
+            // Mostrar las loterías donde se juega
+            const provinciasQuintina = quintinaApuestas[0].provincias || selectedLotteries
+            if (provinciasQuintina.length > 0) {
+                const provinciasAbreviadas = provinciasQuintina.map((l) => provinceAbbreviations[l] || l)
+                ticketContent += `LOTERIAS: ${provinciasAbreviadas.join(" ")}\n`
+            }
+
+            // Mostrar cada quintina con sus números
             quintinaApuestas.forEach((apuesta) => {
                 const numerosFormateados = apuesta.numeros.join("-")
-                // Cambiar de $50.00 a $100.00 en el ticket
                 ticketContent += `${numerosFormateados}   $100.00\n`
             })
 
             ticketContent += "-".repeat(32) + "\n"
-            // Cambiar de 50 a 100 pesos por provincia en el cálculo del total
-            ticketContent += `TOTAL: $${(quintinaApuestas.length * 100 * quintinaApuestas[0].provincias.length).toFixed(2)}\n\n`
+            const totalQuintina = quintinaApuestas.length * 100 * provinciasQuintina.length
+            ticketContent += `TOTAL: $${totalQuintina.toFixed(2)}\n\n`
         }
 
+        // EXACTA - Con provincias, números, posiciones e importes
         if (exactaApuestas.length > 0) {
             ticketContent += "\n**** NUEVA EXACTA ****\n"
-            const provinciasSet = new Set(exactaApuestas[0].provincias.map((l) => provinceAbbreviations[l] || l))
-            ticketContent += `LOTERIAS: ${Array.from(provinciasSet).join(" ")}\n`
+
+            // Mostrar las loterías donde se juega
+            const provinciasExacta = exactaApuestas[0].provincias || selectedLotteries
+            if (provinciasExacta.length > 0) {
+                const provinciasAbreviadas = provinciasExacta.map((l) => provinceAbbreviations[l] || l)
+                ticketContent += `LOTERIAS: ${provinciasAbreviadas.join(" ")}\n`
+            }
+
             ticketContent += "NUMERO UBIC   IMPORTE\n"
 
+            // Mostrar cada exacta con número, posición e importe
             exactaApuestas.forEach((apuesta) => {
                 const numero = apuesta.numero.padStart(4, "0")
                 const posicion = apuesta.posicion.padStart(2, " ")
                 const importe = Number.parseFloat(apuesta.importe) || 0
-
                 ticketContent += `${numero}  ${posicion}   $${importe.toFixed(2)}\n`
             })
 
@@ -469,13 +1060,11 @@ export default function CargarJugadas() {
         return ticketContent
     }
 
-    // Modificar la función de impresión para adaptarla a impresoras térmicas
     const imprimirTicket = (ticketContent: string) => {
         setTicketContent(ticketContent)
         setIsTicketDialogOpen(true)
     }
 
-    // Implementar la función para imprimir en impresora térmica
     const imprimirEnTermica = async () => {
         try {
             const printWindow = window.open("", "_blank")
@@ -533,7 +1122,6 @@ export default function CargarJugadas() {
         }
     }
 
-    // Implementar la función para compartir el ticket
     const compartirTicket = async () => {
         try {
             if (navigator.share) {
@@ -542,7 +1130,6 @@ export default function CargarJugadas() {
                     text: ticketContent,
                 })
             } else {
-                // Fallback para navegadores que no soportan Web Share API
                 await navigator.clipboard.writeText(ticketContent)
                 toast.success("Ticket copiado al portapapeles")
             }
@@ -563,6 +1150,8 @@ export default function CargarJugadas() {
         setSelectedLotteries([])
         setSelectedSorteo("")
         setSelectedPasador("")
+        setObservacionJugada("")
+        setNombreObservacionJugada("") // Agregar esta línea
         setTotal(0)
         toast.success("Formulario reiniciado")
     }
@@ -581,21 +1170,19 @@ export default function CargarJugadas() {
         try {
             setIsSaving(true)
             console.log("Iniciando proceso de guardar jugadas")
+
             const pasadorDoc = pasadores.find((p) => p.id === selectedPasador)
             if (!pasadorDoc) {
                 throw new Error("Error: Pasador no encontrado.")
             }
 
             const jugadasCollection = collection(db, `JUGADAS DE ${pasadorDoc.nombre}`)
-
-            // Generar una única secuencia para usar en todo el proceso
             const nuevaSecuencia = generarSecuencia()
             setSecuencia(nuevaSecuencia)
 
             const fechaHoraISO = new Date().toISOString()
 
-            // Función para guardar jugadas agrupadas por tipo
-            const guardarJugadasPorTipo = async (tipo: string, apuestas: any[]) => {
+            const guardarJugadasPorTipo = async (tipo: string, apuestas: any[], observacion = "", nombreObservacion = "") => {
                 if (apuestas.length === 0) return
 
                 if (tipo === "NUEVA QUINTINA") {
@@ -608,8 +1195,10 @@ export default function CargarJugadas() {
                         provincias: selectedLotteries,
                         secuencia: nuevaSecuencia,
                         tipo: "NUEVA QUINTINA",
-                        // Cambiar de 50 a 100 pesos por provincia
                         totalMonto: apuestas.length * selectedLotteries.length * 100,
+                        observacion: observacion,
+                        nombreObservacion: nombreObservacion, // Agregar esta línea
+                        jugadas: apuestas.map((a) => ({ numeros: a.numeros })),
                     }
 
                     const docRef = await addDoc(jugadasCollection, nuevaJugada)
@@ -625,6 +1214,9 @@ export default function CargarJugadas() {
                         provincias: selectedLotteries,
                         secuencia: nuevaSecuencia,
                         tipo: "NUEVA TRIPLONA",
+                        observacion: observacion,
+                        nombreObservacion: nombreObservacion, // Agregar esta línea
+                        jugadas: apuestas.map((a) => ({ numeros: a.numeros })),
                     }
 
                     const docRef = await addDoc(jugadasCollection, nuevaJugada)
@@ -638,10 +1230,13 @@ export default function CargarJugadas() {
                         secuencia: nuevaSecuencia,
                         tipo: "NUEVA BORRATINA",
                         totalMonto: apuestas.length * 30,
+                        observacion: observacion,
+                        nombreObservacion: nombreObservacion, // Agregar esta línea
                         jugadas: apuestas.map((d: BorratinaApuesta) => ({
                             numeros: d.numeros,
                         })),
                     }
+
                     const docRef = await addDoc(jugadasCollection, nuevaJugada)
                     console.log(`Jugadas NUEVA BORRATINA guardadas con ID: ${docRef.id}`)
                 } else if (tipo === "NUEVA EXACTA") {
@@ -662,20 +1257,20 @@ export default function CargarJugadas() {
                             importe: d.importe,
                         })),
                     }
+
                     const docRef = await addDoc(jugadasCollection, nuevaJugada)
                     console.log(`Jugadas NUEVA EXACTA guardadas con ID: ${docRef.id}`)
                 }
             }
 
-            // Guardar cada tipo de apuesta
-            await guardarJugadasPorTipo("NUEVA TRIPLONA", triplonaApuestas)
-            await guardarJugadasPorTipo("NUEVA BORRATINA", borratinaApuestas)
-            await guardarJugadasPorTipo("NUEVA QUINTINA", quintinaApuestas)
-            await guardarJugadasPorTipo("NUEVA EXACTA", exactaApuestas)
+            await guardarJugadasPorTipo("NUEVA TRIPLONA", triplonaApuestas, observacionJugada, nombreObservacionJugada)
+            await guardarJugadasPorTipo("NUEVA BORRATINA", borratinaApuestas, observacionJugada, nombreObservacionJugada)
+            await guardarJugadasPorTipo("NUEVA QUINTINA", quintinaApuestas, observacionJugada, nombreObservacionJugada)
+            await guardarJugadasPorTipo("NUEVA EXACTA", exactaApuestas, "", nombreObservacionJugada)
 
-            // Generar el ticket con la misma secuencia que se usó para guardar en la base de datos
             const ticketContent = generarContenidoTicket(nuevaSecuencia)
             imprimirTicket(ticketContent)
+
             resetearCampos()
             toast.success("Jugadas guardadas exitosamente")
         } catch (error) {
@@ -690,18 +1285,6 @@ export default function CargarJugadas() {
         }
     }
 
-    const limpiarFormulario = () => {
-        setJugadas(Array(4).fill({ numero: "", posicion: "", importe: "" }))
-        setExactaNumero("")
-        setExactaPosicion("")
-        setExactaImporte("")
-        setSelectedLotteries([])
-        setSelectedSorteo("")
-        setSelectedPasador("")
-        toast.success("Formulario limpiado")
-    }
-
-    // Obtener el color del sorteo seleccionado
     const getSorteoColor = () => {
         const sorteo = sorteos.find((s) => s.id === selectedSorteo)
         return sorteo?.color || "bg-gray-600"
@@ -752,6 +1335,7 @@ export default function CargarJugadas() {
                                         </SelectContent>
                                     </Select>
                                 </div>
+
                                 <div>
                                     <Label htmlFor="pasador" className="mb-2 block text-sm font-medium">
                                         PASADOR:
@@ -774,7 +1358,7 @@ export default function CargarJugadas() {
                             <div className="mb-6">
                                 <Label className="mb-2 block text-sm font-medium">LOTERÍAS:</Label>
                                 <div
-                                    className={`grid grid-cols-2 sm:grid-cols-3 gap-3 ${activeTab === "borratina" ? "opacity-50" : ""}`}
+                                    className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 ${activeTab === "borratina" ? "opacity-50" : ""}`}
                                 >
                                     {loterias.map((loteria) => (
                                         <div
@@ -1190,19 +1774,52 @@ export default function CargarJugadas() {
 
                             <Separator className="my-4" />
 
+                            <div className="mb-4">
+                                <Label htmlFor="observacion" className="text-sm font-medium mb-2 block">
+                                    Observación (opcional):
+                                </Label>
+                                <Input
+                                    id="observacion"
+                                    value={observacionJugada}
+                                    onChange={(e) => setObservacionJugada(e.target.value)}
+                                    placeholder="Ej: Números de la suerte, Cumpleaños, etc."
+                                    className="w-full"
+                                    maxLength={100}
+                                />
+                            </div>
+
+                            <div className="mb-4">
+                                <Label htmlFor="nombreObservacion" className="text-sm font-medium mb-2 block">
+                                    Asignar nombre a esta jugada (opcional):
+                                </Label>
+                                <Input
+                                    id="nombreObservacion"
+                                    value={nombreObservacionJugada}
+                                    onChange={(e) => setNombreObservacionJugada(e.target.value)}
+                                    placeholder="Ej: Jugada especial, Números favoritos, etc."
+                                    className="w-full"
+                                    maxLength={50}
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Este nombre te ayudará a identificar y buscar esta jugada más fácilmente
+                                </p>
+                            </div>
+
                             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                                 <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-4 rounded-lg text-white w-full md:w-auto">
                                     <h3 className="text-sm font-medium opacity-90">TOTAL A PAGAR:</h3>
                                     <p className="text-3xl font-bold">${total.toFixed(2)}</p>
                                 </div>
-                                <div className="flex gap-2 w-full md:w-auto">
+
+                                <div className="flex gap-2 w-full md:w-auto flex-wrap">
                                     <Button
                                         variant="outline"
                                         onClick={resetearCampos}
-                                        className="border-red-500 text-red-600 hover:bg-red-50"
+                                        className="border-red-500 text-red-600 hover:bg-red-50 bg-transparent"
                                     >
                                         <RefreshCw className="h-4 w-4 mr-2" /> Reiniciar
                                     </Button>
+
                                     <Button
                                         onClick={guardarJugadas}
                                         disabled={
@@ -1244,6 +1861,21 @@ export default function CargarJugadas() {
                                             </>
                                         )}
                                     </Button>
+
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            if (!selectedPasador) {
+                                                toast.error("Por favor, seleccione un pasador primero.")
+                                                return
+                                            }
+                                            setIsRepeatDialogOpen(true)
+                                            obtenerJugadasDelPasador()
+                                        }}
+                                        className="border-purple-500 text-purple-600 hover:bg-purple-50 bg-transparent"
+                                    >
+                                        <RotateCcw className="h-4 w-4 mr-2" /> Repetir Jugada
+                                    </Button>
                                 </div>
                             </div>
                         </CardContent>
@@ -1264,14 +1896,222 @@ export default function CargarJugadas() {
                         </div>
                         <DialogFooter className="flex justify-between">
                             <div className="flex gap-2">
-                                <Button variant="outline" className="border-blue-500 text-blue-600" onClick={compartirTicket}>
+                                <Button
+                                    variant="outline"
+                                    className="border-blue-500 text-blue-600 bg-transparent"
+                                    onClick={compartirTicket}
+                                >
                                     <Share2 className="h-4 w-4 mr-2" /> Compartir
                                 </Button>
-                                <Button variant="outline" className="border-green-500 text-green-600" onClick={imprimirEnTermica}>
+                                <Button
+                                    variant="outline"
+                                    className="border-green-500 text-green-600 bg-transparent"
+                                    onClick={imprimirEnTermica}
+                                >
                                     <Printer className="h-4 w-4 mr-2" /> Imprimir
                                 </Button>
                             </div>
                             <Button onClick={() => setIsTicketDialogOpen(false)}>Cerrar</Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Diálogo para repetir jugada anterior */}
+                <Dialog open={isRepeatDialogOpen} onOpenChange={setIsRepeatDialogOpen}>
+                    <DialogContent className="max-w-2xl max-h-[80vh]">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center">
+                                <RotateCcw className="h-5 w-5 mr-2 text-purple-600" />
+                                Repetir Jugada Anterior
+                                {selectedPasador && (
+                                    <Badge className="ml-2 bg-blue-100 text-blue-800">
+                                        {pasadores.find((p) => p.id === selectedPasador)?.nombre}
+                                    </Badge>
+                                )}
+                            </DialogTitle>
+                            {/* Buscador por número de secuencia */}
+                            <div className="mb-4">
+                                <Label className="text-sm font-medium mb-2 block">Buscar por número de secuencia:</Label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        value={secuenciaBuscar}
+                                        onChange={(e) => setSecuenciaBuscar(e.target.value)}
+                                        placeholder="Ingrese el número de secuencia"
+                                        className="flex-1"
+                                    />
+                                    <Button
+                                        onClick={buscarJugadaAnterior}
+                                        disabled={isSearching || !secuenciaBuscar.trim()}
+                                        variant="outline"
+                                        className="border-blue-500 text-blue-600 bg-transparent"
+                                    >
+                                        {isSearching ? (
+                                            <svg
+                                                className="animate-spin h-4 w-4"
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <circle
+                                                    className="opacity-25"
+                                                    cx="12"
+                                                    cy="12"
+                                                    r="10"
+                                                    stroke="currentColor"
+                                                    strokeWidth="4"
+                                                ></circle>
+                                                <path
+                                                    className="opacity-75"
+                                                    fill="currentColor"
+                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                ></path>
+                                            </svg>
+                                        ) : (
+                                            <Search className="h-4 w-4" />
+                                        )}
+                                    </Button>
+                                </div>
+                            </div>
+                        </DialogHeader>
+
+                        <div className="space-y-4">
+                            {isLoadingJugadas ? (
+                                <div className="flex items-center justify-center py-8">
+                                    <svg
+                                        className="animate-spin h-8 w-8 text-purple-600"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <circle
+                                            className="opacity-25"
+                                            cx="12"
+                                            cy="12"
+                                            r="10"
+                                            stroke="currentColor"
+                                            strokeWidth="4"
+                                        ></circle>
+                                        <path
+                                            className="opacity-75"
+                                            fill="currentColor"
+                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                        ></path>
+                                    </svg>
+                                    <span className="ml-2">Cargando jugadas...</span>
+                                </div>
+                            ) : jugadasPasador.length > 0 ? (
+                                <div>
+                                    <Label className="text-sm font-medium mb-2 block">Seleccione la jugada que desea repetir:</Label>
+                                    <ScrollArea className="h-[400px] rounded-md border p-2">
+                                        <div className="space-y-2">
+                                            {jugadasPasador.map((jugada, index) => {
+                                                const { resumen, total, numerosJugados, loteriasApostadas, sorteoJugada } =
+                                                    obtenerResumenJugada(jugada)
+                                                const isSelected = jugadaSeleccionada?.id === jugada.id
+                                                return (
+                                                    <div
+                                                        key={jugada.id}
+                                                        onClick={() => setJugadaSeleccionada(jugada)}
+                                                        className={`p-3 rounded-lg border cursor-pointer transition-all ${isSelected
+                                                                ? "border-purple-500 bg-purple-50"
+                                                                : "border-gray-200 hover:border-purple-300 hover:bg-gray-50"
+                                                            }`}
+                                                    >
+                                                        <div className="flex justify-between items-start">
+                                                            <div className="flex-1">
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <Badge
+                                                                        variant="outline"
+                                                                        className={`text-xs ${jugada.tipo === "NUEVA TRIPLONA"
+                                                                                ? "bg-purple-100 text-purple-800 border-purple-300"
+                                                                                : jugada.tipo === "NUEVA QUINTINA"
+                                                                                    ? "bg-green-100 text-green-800 border-green-300"
+                                                                                    : jugada.tipo === "NUEVA BORRATINA"
+                                                                                        ? "bg-blue-100 text-blue-800 border-blue-300"
+                                                                                        : "bg-amber-100 text-amber-800 border-amber-300"
+                                                                            }`}
+                                                                    >
+                                                                        {jugada.tipo?.replace("NUEVA ", "")}
+                                                                    </Badge>
+                                                                    <span className="text-sm font-medium">{resumen}</span>
+                                                                </div>
+                                                                <div className="text-xs text-gray-500 space-y-1">
+                                                                    <div>📅 {formatearFecha(jugada.fechaFormateada || new Date())}</div>
+                                                                    <div>🎯 Sorteo: {sorteoJugada || sorteoJugada}</div>
+                                                                    <div>🎰 Loterías: {loteriasApostadas}</div>
+                                                                    {jugada.provincias && jugada.provincias.length > 0 && (
+                                                                        <div>🌍 {jugada.provincias.join(", ")}</div>
+                                                                    )}
+                                                                    <div>🔢 Secuencia: {jugada.secuencia}</div>
+                                                                    {jugada.observacion && <div>📝 {jugada.observacion}</div>}
+                                                                    {jugada.nombreObservacion && <div>🏷️ {jugada.nombreObservacion}</div>}
+                                                                    {numerosJugados.length > 0 && (
+                                                                        <div className="mt-2">
+                                                                            <div className="text-xs font-medium text-gray-600 mb-1">🎲 Números jugados:</div>
+                                                                            <div className="flex flex-wrap gap-1">
+                                                                                {numerosJugados.slice(0, 3).map((numero, idx) => (
+                                                                                    <span
+                                                                                        key={idx}
+                                                                                        className="inline-block bg-gray-100 text-gray-700 px-1 py-0.5 rounded text-xs"
+                                                                                    >
+                                                                                        {numero}
+                                                                                    </span>
+                                                                                ))}
+                                                                                {numerosJugados.length > 3 && (
+                                                                                    <span className="text-xs text-gray-500">
+                                                                                        +{numerosJugados.length - 3} más
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <div className="text-lg font-bold text-green-600">${total.toFixed(2)}</div>
+                                                                {isSelected && (
+                                                                    <div className="text-xs text-purple-600 font-medium">✓ Seleccionada</div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </ScrollArea>
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 text-gray-500">
+                                    <div className="text-4xl mb-2">📋</div>
+                                    <p>No se encontraron jugadas anteriores para este pasador.</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <DialogFooter className="flex justify-between">
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    setIsRepeatDialogOpen(false)
+                                    setJugadaSeleccionada(null)
+                                    setJugadasPasador([])
+                                    setSecuenciaBuscar("")
+                                    setBusquedaObservacion("")
+                                }}
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                onClick={() => {
+                                    if (jugadaSeleccionada) {
+                                        cargarJugadaSeleccionada()
+                                    }
+                                }}
+                                disabled={!jugadaSeleccionada}
+                                className="bg-green-600 hover:bg-green-700"
+                            >
+                                <Save className="h-4 w-4 mr-2" /> Cargar Jugada
+                            </Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
