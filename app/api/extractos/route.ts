@@ -33,25 +33,82 @@ interface Resultado {
 
 const PLACEHOLDER_RESULT = "----" // Placeholder para resultados no disponibles
 
-// 🔥 FUNCIÓN MEJORADA PARA ZONA HORARIA CONSISTENTE
+// 🔥 FUNCIÓN CORREGIDA PARA ZONA HORARIA CONSISTENTE
 function obtenerFechaArgentina() {
-    const fechaActual = new Date()
     try {
-        // 🆕 FORZAR ZONA HORARIA ARGENTINA CONSISTENTE
-        const fechaArgentina = toZonedTime(fechaActual, "America/Argentina/Buenos_Aires")
+        // 🆕 CREAR FECHA ARGENTINA DIRECTAMENTE SIN CONVERSIONES
+        const ahora = new Date()
 
-        // 🔥 LOG DETALLADO PARA DEBUG
-        console.log(`🕐 FECHA ACTUAL UTC: ${fechaActual.toISOString()}`)
-        console.log(`🇦🇷 FECHA ARGENTINA: ${fechaArgentina.toISOString()}`)
-        console.log(`📅 FECHA FORMATEADA: ${format(fechaArgentina, "dd/MM/yyyy HH:mm:ss", { locale: es })}`)
+        // Obtener componentes en zona horaria Argentina
+        const formatter = new Intl.DateTimeFormat("en-CA", {
+            timeZone: "America/Argentina/Buenos_Aires",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+        })
+
+        const parts = formatter.formatToParts(ahora)
+        const partsObj = parts.reduce((acc, part) => {
+            acc[part.type] = part.value
+            return acc
+        }, {} as any)
+
+        // Crear fecha Argentina directamente
+        const fechaArgentina = new Date(
+            `${partsObj.year}-${partsObj.month}-${partsObj.day}T${partsObj.hour}:${partsObj.minute}:${partsObj.second}`,
+        )
+
+        console.log(`🕐 UTC: ${ahora.toISOString()}`)
+        console.log(`🇦🇷 ARGENTINA: ${fechaArgentina.toISOString()}`)
+        console.log(`📅 FORMATEADA: ${format(fechaArgentina, "dd/MM/yyyy HH:mm:ss", { locale: es })}`)
 
         return fechaArgentina
     } catch (error) {
-        console.error("❌ Error al usar toZonedTime, usando offset manual:", error)
-        // 🔥 FALLBACK MEJORADO: UTC-3 (Argentina)
-        const fechaArgentina = new Date(fechaActual.getTime() - 3 * 60 * 60 * 1000)
-        console.log(`🔄 FALLBACK ARGENTINA: ${fechaArgentina.toISOString()}`)
+        console.error("❌ Error con Intl, usando offset manual:", error)
+        // Fallback: UTC-3 (Argentina)
+        const ahora = new Date()
+        const fechaArgentina = new Date(ahora.getTime() - 3 * 60 * 60 * 1000)
+        console.log(`🔄 FALLBACK: ${fechaArgentina.toISOString()}`)
         return fechaArgentina
+    }
+}
+
+// 🆕 FUNCIÓN PARA PARSEAR FECHA CONSISTENTE
+function parsearFechaConsistente(fechaString: string): Date {
+    try {
+        // Parsear fecha en formato yyyy-MM-dd
+        const fechaBase = parse(fechaString, "yyyy-MM-dd", new Date())
+
+        // Convertir a zona horaria Argentina
+        const fechaArgentina = toZonedTime(fechaBase, "America/Argentina/Buenos_Aires")
+
+        console.log(`📅 PARSEANDO: ${fechaString}`)
+        console.log(`📅 BASE: ${fechaBase.toISOString()}`)
+        console.log(`📅 ARGENTINA: ${fechaArgentina.toISOString()}`)
+
+        return startOfDay(fechaArgentina)
+    } catch (error) {
+        console.error("❌ Error parseando fecha:", error)
+        return startOfDay(new Date(fechaString))
+    }
+}
+
+// 🆕 FUNCIÓN PARA FORMATEAR FECHA CONSISTENTE
+function formatearFechaConsistente(fecha: Date, formato: string): string {
+    try {
+        // Asegurar que la fecha esté en zona horaria Argentina
+        const fechaArgentina = toZonedTime(fecha, "America/Argentina/Buenos_Aires")
+        const resultado = format(fechaArgentina, formato, { locale: es })
+
+        console.log(`📅 FORMATEANDO: ${fecha.toISOString()} → ${resultado}`)
+        return resultado
+    } catch (error) {
+        console.error("❌ Error formateando fecha:", error)
+        return format(fecha, formato, { locale: es })
     }
 }
 
@@ -193,8 +250,8 @@ function esSorteoFinalizado(turno: string, fecha: Date): boolean {
     console.log(
         `  - Hora sorteo: ${Math.floor(tiempoSorteo / 60)}:${(tiempoSorteo % 60).toString().padStart(2, "0")} (${tiempoSorteo} min)`,
     )
-    console.log(`  - Fecha consulta: ${format(fecha, "dd/MM/yyyy")}`)
-    console.log(`  - Hoy Argentina: ${format(hoyArgentina, "dd/MM/yyyy")}`)
+    console.log(`  - Fecha consulta: ${formatearFechaConsistente(fecha, "dd/MM/yyyy")}`)
+    console.log(`  - Hoy Argentina: ${formatearFechaConsistente(hoyArgentina, "dd/MM/yyyy")}`)
 
     if (isAfter(hoyArgentina, fecha)) {
         console.log(`  ✅ FINALIZADO: Fecha pasada`)
@@ -624,11 +681,12 @@ async function obtenerResultadosConfiables(): Promise<any[]> {
         return []
     }
 
-    const fechaDisplay = format(fechaActual, "dd/MM/yyyy", { locale: es })
-    const nombreDia = format(fechaActual, "EEEE", { locale: es }).replace(/^\w/, (c) => c.toUpperCase())
-    const fechaKeyFirebase = format(fechaActual, "yyyy-MM-dd")
+    const fechaDisplay = formatearFechaConsistente(fechaActual, "dd/MM/yyyy")
+    const nombreDia = formatearFechaConsistente(fechaActual, "EEEE").replace(/^\w/, (c) => c.toUpperCase())
+    const fechaKeyFirebase = formatearFechaConsistente(fechaActual, "yyyy-MM-dd")
 
     console.log(`📅 PROCESANDO FECHA: ${fechaDisplay} (${nombreDia})`)
+    console.log(`📅 KEY FIREBASE: ${fechaKeyFirebase}`)
 
     const resultadosApi: any[] = []
     const resultadosParaFirebase: ResultadoDia = {
@@ -781,21 +839,29 @@ export async function GET(request: Request) {
         const parametroFecha = url.searchParams.get("date")
         const forceRefresh = url.searchParams.get("forceRefresh") === "true"
 
+        console.log(`📥 PARÁMETROS: fecha=${parametroFecha}, forceRefresh=${forceRefresh}`)
+
         const fechaActualArgentina = obtenerFechaArgentina()
 
         let fechaConsulta: Date
         if (parametroFecha) {
-            fechaConsulta = startOfDay(
-                toZonedTime(parse(parametroFecha, "yyyy-MM-dd", new Date()), "America/Argentina/Buenos_Aires"),
-            )
+            // 🔥 USAR FUNCIÓN CONSISTENTE PARA PARSEAR FECHA
+            fechaConsulta = parsearFechaConsistente(parametroFecha)
+            console.log(`📅 FECHA PARSEADA: ${parametroFecha} → ${fechaConsulta.toISOString()}`)
         } else {
             fechaConsulta = startOfDay(fechaActualArgentina)
+            console.log(`📅 FECHA ACTUAL: ${fechaConsulta.toISOString()}`)
         }
 
-        const fechaKeyFirebase = format(fechaConsulta, "yyyy-MM-dd")
-        const fechaDisplayConsulta = format(fechaConsulta, "dd/MM/yyyy", { locale: es })
+        const fechaKeyFirebase = formatearFechaConsistente(fechaConsulta, "yyyy-MM-dd")
+        const fechaDisplayConsulta = formatearFechaConsistente(fechaConsulta, "dd/MM/yyyy")
         const esHoyEnArgentina =
-            format(fechaConsulta, "yyyy-MM-dd") === format(startOfDay(fechaActualArgentina), "yyyy-MM-dd")
+            formatearFechaConsistente(fechaConsulta, "yyyy-MM-dd") ===
+            formatearFechaConsistente(startOfDay(fechaActualArgentina), "yyyy-MM-dd")
+
+        console.log(`📅 KEY FIREBASE: ${fechaKeyFirebase}`)
+        console.log(`📅 FECHA DISPLAY: ${fechaDisplayConsulta}`)
+        console.log(`📅 ES HOY: ${esHoyEnArgentina}`)
 
         // Si es hoy o se fuerza, hacer scraping
         if (forceRefresh || esHoyEnArgentina) {
@@ -803,7 +869,7 @@ export async function GET(request: Request) {
 
             const resultados = await obtenerResultadosConfiables()
 
-            // IMPORTANTE: Devolver directamente el array de resultados, sin envolverlo en un objeto
+            console.log(`📤 DEVOLVIENDO ${resultados.length} resultados de scraping`)
             return NextResponse.json(resultados, { headers: corsHeaders })
         }
 
@@ -829,6 +895,8 @@ export async function GET(request: Request) {
             // Buscar cualquier fecha en formato dd/MM/yyyy
             else {
                 const fechasEncontradas = Object.keys(data).filter((key) => key.includes("/"))
+                console.log(`🔍 Fechas encontradas en documento:`, fechasEncontradas)
+
                 if (fechasEncontradas.length > 0) {
                     const primeraFecha = fechasEncontradas[0]
                     resultadosData = data[primeraFecha] as ResultadoDia
@@ -865,7 +933,7 @@ export async function GET(request: Request) {
             console.log(`❌ No existe documento para ${fechaKeyFirebase}`)
         }
 
-        // IMPORTANTE: Devolver directamente el array de resultados, sin envolverlo en un objeto
+        console.log(`📤 DEVOLVIENDO ${extractosFormateados.length} resultados desde Firebase`)
         return NextResponse.json(extractosFormateados, { headers: corsHeaders })
     } catch (error) {
         console.error("❌ Error en GET:", error)
@@ -898,10 +966,15 @@ export async function POST(request: Request) {
             throw new Error("Datos incompletos o inválidos")
         }
 
+        // 🔥 USAR FUNCIONES CONSISTENTES PARA FECHAS
         const fechaObj = parse(fecha, "dd/MM/yyyy", new Date())
         const fechaArgentina = toZonedTime(fechaObj, "America/Argentina/Buenos_Aires")
-        const fechaKeyFirebase = format(fechaArgentina, "yyyy-MM-dd")
-        const nombreDia = format(fechaArgentina, "EEEE", { locale: es }).replace(/^\w/, (c) => c.toUpperCase())
+        const fechaKeyFirebase = formatearFechaConsistente(fechaArgentina, "yyyy-MM-dd")
+        const nombreDia = formatearFechaConsistente(fechaArgentina, "EEEE").replace(/^\w/, (c) => c.toUpperCase())
+
+        console.log(`📅 POST - Fecha recibida: ${fecha}`)
+        console.log(`📅 POST - Key Firebase: ${fechaKeyFirebase}`)
+        console.log(`📅 POST - Nombre día: ${nombreDia}`)
 
         const docRef = doc(db, "extractos", fechaKeyFirebase)
         const docSnap = await getDoc(docRef)
@@ -915,6 +988,7 @@ export async function POST(request: Request) {
             if (data[fecha]) {
                 // Estructura anidada por fecha
                 datosDia = data[fecha] as ResultadoDia
+                console.log(`📋 POST - Datos existentes encontrados para ${fecha}`)
             } else {
                 // Crear nueva estructura
                 datosDia = {
@@ -922,6 +996,7 @@ export async function POST(request: Request) {
                     dia: nombreDia,
                     resultados: [],
                 }
+                console.log(`📋 POST - Creando nueva estructura para ${fecha}`)
             }
         } else {
             datosDia = {
@@ -929,15 +1004,7 @@ export async function POST(request: Request) {
                 dia: nombreDia,
                 resultados: [],
             }
-        }
-
-        // 🆕 PRESERVAR TODOS LOS RESULTADOS Y SORTEOS AL GUARDAR
-        // Si ya existen datos para este día, mantenerlos
-        if (docSnap.exists()) {
-            const data = docSnap.data()
-            if (data[fecha]) {
-                datosDia = data[fecha] as ResultadoDia
-            }
+            console.log(`📋 POST - Creando documento nuevo para ${fechaKeyFirebase}`)
         }
 
         // Buscar si ya existe la provincia
@@ -950,6 +1017,7 @@ export async function POST(request: Request) {
                 sorteos: {},
             }
             datosDia.resultados.push(provinciaResultado)
+            console.log(`📋 POST - Provincia ${provincia} creada`)
         }
 
         // 🔥 CRÍTICO: PRESERVAR TODOS LOS SORTEOS EXISTENTES DE LA PROVINCIA
