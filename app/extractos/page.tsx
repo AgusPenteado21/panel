@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useCallback, useEffect } from "react"
 import Navbar from "../components/Navbar"
 import { Button } from "@/components/ui/button"
@@ -29,7 +31,7 @@ import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
@@ -46,7 +48,7 @@ interface Extracto {
     provincia?: string
 }
 
-interface TucumanData {
+interface ProvinciaData {
     [key: string]: string[] // turno -> numeros
 }
 
@@ -79,7 +81,7 @@ export default function ExtractosPage() {
 
     // Estados para el modal de Tucumán
     const [showTucumanModal, setShowTucumanModal] = useState(false)
-    const [tucumanData, setTucumanData] = useState<TucumanData>({
+    const [tucumanData, setTucumanData] = useState<ProvinciaData>({
         Previa: Array(20).fill(""),
         Primera: Array(20).fill(""),
         Matutina: Array(20).fill(""),
@@ -87,6 +89,17 @@ export default function ExtractosPage() {
         Nocturna: Array(20).fill(""),
     })
     const [isSavingTucuman, setIsSavingTucuman] = useState(false)
+
+    // Estados para el modal de Neuquén
+    const [showNeuquenModal, setShowNeuquenModal] = useState(false)
+    const [neuquenData, setNeuquenData] = useState<ProvinciaData>({
+        Previa: Array(20).fill(""),
+        Primera: Array(20).fill(""),
+        Matutina: Array(20).fill(""),
+        Vespertina: Array(20).fill(""),
+        Nocturna: Array(20).fill(""),
+    })
+    const [isSavingNeuquen, setIsSavingNeuquen] = useState(false)
 
     const fetchExtractos = useCallback(
         async (date: Date) => {
@@ -170,11 +183,19 @@ export default function ExtractosPage() {
         )
     }
 
-    const handleTucumanNumberChange = (turno: string, index: number, value: string) => {
+    // Función genérica para manejar cambios de números
+    const handleProvinciaNumberChange = (
+        provincia: string,
+        turno: string,
+        index: number,
+        value: string,
+        setData: React.Dispatch<React.SetStateAction<ProvinciaData>>,
+        data: ProvinciaData,
+    ) => {
         // Solo permitir números y máximo 4 dígitos
         const numeroLimpio = value.replace(/\D/g, "").slice(0, 4)
 
-        setTucumanData((prev) => ({
+        setData((prev) => ({
             ...prev,
             [turno]: prev[turno].map((num, i) => (i === index ? numeroLimpio : num)),
         }))
@@ -184,69 +205,92 @@ export default function ExtractosPage() {
             const nextIndex = index + 1
             if (nextIndex < 20) {
                 // Focus al siguiente input del mismo turno
-                const nextInput = document.querySelector(
-                    `input[data-turno="${turno}"][data-index="${nextIndex}"]`,
-                ) as HTMLInputElement
-                if (nextInput) {
-                    nextInput.focus()
-                    nextInput.select()
-                }
+                setTimeout(() => {
+                    const nextInput = document.querySelector(
+                        `input[data-provincia="${provincia}"][data-turno="${turno}"][data-index="${nextIndex}"]`,
+                    ) as HTMLInputElement
+                    if (nextInput) {
+                        nextInput.focus()
+                        nextInput.select()
+                    }
+                }, 10)
             } else {
                 // Si es el último del turno, pasar al primer input del siguiente turno
-                const turnos = Object.keys(tucumanData)
+                const turnos = Object.keys(data)
                 const currentTurnoIndex = turnos.indexOf(turno)
                 if (currentTurnoIndex < turnos.length - 1) {
                     const nextTurno = turnos[currentTurnoIndex + 1]
-                    const firstInputNextTurno = document.querySelector(
-                        `input[data-turno="${nextTurno}"][data-index="0"]`,
-                    ) as HTMLInputElement
-                    if (firstInputNextTurno) {
-                        firstInputNextTurno.focus()
-                    }
+                    setTimeout(() => {
+                        const firstInputNextTurno = document.querySelector(
+                            `input[data-provincia="${provincia}"][data-turno="${nextTurno}"][data-index="0"]`,
+                        ) as HTMLInputElement
+                        if (firstInputNextTurno) {
+                            firstInputNextTurno.focus()
+                        }
+                    }, 10)
                 }
             }
         }
     }
 
-    // Función para obtener turnos de Tucumán ya guardados
-    const getTurnosYaGuardados = () => {
-        const turnosTucuman = extractos
-            .filter((extracto) => extracto.provincia === "TUCUMAN" || extracto.loteria === "TUCUMAN")
-            .map((extracto) => extracto.sorteo)
-        return turnosTucuman
+    const handleTucumanNumberChange = (turno: string, index: number, value: string) => {
+        handleProvinciaNumberChange("TUCUMAN", turno, index, value, setTucumanData, tucumanData)
     }
 
-    // Función para obtener solo turnos pendientes
-    const getTurnosPendientes = () => {
-        const turnosYaGuardados = getTurnosYaGuardados()
+    // Handler para Neuquén
+    const handleNeuquenNumberChange = (turno: string, index: number, value: string) => {
+        handleProvinciaNumberChange("NEUQUEN", turno, index, value, setNeuquenData, neuquenData)
+    }
+
+    // Función genérica para obtener turnos ya guardados
+    const getTurnosYaGuardados = (provincia: string) => {
+        const turnosProvincia = extractos
+            .filter((extracto) => extracto.provincia === provincia || extracto.loteria === provincia)
+            .map((extracto) => extracto.sorteo)
+        return turnosProvincia
+    }
+
+    // Función genérica para obtener turnos pendientes
+    const getTurnosPendientes = (provincia: string) => {
+        const turnosYaGuardados = getTurnosYaGuardados(provincia)
         const todosTurnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
         return todosTurnos.filter((turno) => !turnosYaGuardados.includes(turno))
     }
 
-    // Función para validar que un turno esté completo
-    const isTurnoCompleto = (turno: string) => {
-        const numerosDelTurno = tucumanData[turno]
+    // Función genérica para validar que un turno esté completo
+    const isTurnoCompleto = (turno: string, data: ProvinciaData) => {
+        const numerosDelTurno = data[turno]
         const numerosCompletos = numerosDelTurno.filter((num) => num.trim().length === 4 && /^\d{4}$/.test(num.trim()))
         return numerosCompletos.length === 20
     }
 
-    // Función para contar números completados en un turno
-    const contarNumerosCompletados = (turno: string) => {
-        const numerosDelTurno = tucumanData[turno]
+    // Función genérica para contar números completados
+    const contarNumerosCompletados = (turno: string, data: ProvinciaData) => {
+        const numerosDelTurno = data[turno]
         return numerosDelTurno.filter((num) => num.trim().length === 4 && /^\d{4}$/.test(num.trim())).length
     }
 
-    const handleConfirmarTucuman = async () => {
+    // Función genérica para confirmar resultados de provincia
+    const handleConfirmarProvincia = async (
+        provincia: string,
+        data: ProvinciaData,
+        setData: React.Dispatch<React.SetStateAction<ProvinciaData>>,
+        setIsSaving: React.Dispatch<React.SetStateAction<boolean>>,
+        setShowModal: React.Dispatch<React.SetStateAction<boolean>>,
+    ) => {
         try {
-            setIsSavingTucuman(true)
+            setIsSaving(true)
             setError(null)
 
+            // 🔥 USAR LA FECHA SELECCIONADA, NO LA ACTUAL
             const fecha = format(selectedDate, "dd/MM/yyyy", { locale: es })
-            const turnosPendientes = getTurnosPendientes()
+            console.log(`🗓️ Guardando con fecha seleccionada: ${fecha}`)
+
+            const turnosPendientes = getTurnosPendientes(provincia)
 
             // Validar que al menos un turno pendiente tenga números
             const turnosConDatos = turnosPendientes.filter((turno) => {
-                const numerosDelTurno = tucumanData[turno]
+                const numerosDelTurno = data[turno]
                 // Verificar que TODOS los 20 números estén completos y sean de 4 dígitos
                 const numerosCompletos = numerosDelTurno.filter((num) => num.trim().length === 4 && /^\d{4}$/.test(num.trim()))
                 return numerosCompletos.length === 20
@@ -257,13 +301,12 @@ export default function ExtractosPage() {
                 return
             }
 
-            console.log("🔄 Guardando turnos de Tucumán:", turnosConDatos)
-
+            console.log(`🔄 Guardando turnos de ${provincia}:`, turnosConDatos)
             let turnosGuardadosExitosamente = 0
 
             // Enviar cada turno por separado
             for (const turno of turnosConDatos) {
-                const numerosCompletos = tucumanData[turno].map((num) => num.trim())
+                const numerosCompletos = data[turno].map((num) => num.trim())
 
                 // Validación final antes de enviar
                 const todosCompletos = numerosCompletos.every((num) => /^\d{4}$/.test(num))
@@ -271,7 +314,7 @@ export default function ExtractosPage() {
                     throw new Error(`El turno ${turno} tiene números incompletos. Todos deben ser de 4 dígitos.`)
                 }
 
-                console.log(`📤 Enviando ${turno}:`, numerosCompletos)
+                console.log(`📤 Enviando ${provincia} ${turno} para fecha ${fecha}:`, numerosCompletos)
 
                 const response = await fetch("/api/extractos", {
                     method: "POST",
@@ -279,15 +322,15 @@ export default function ExtractosPage() {
                         "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                        provincia: "TUCUMAN",
+                        provincia: provincia,
                         turno: turno,
-                        fecha: fecha,
+                        fecha: fecha, // 🔥 Usar la fecha seleccionada
                         numeros: numerosCompletos,
                     }),
                 })
 
                 const responseData = await response.json()
-                console.log(`📥 Respuesta ${turno}:`, responseData)
+                console.log(`📥 Respuesta ${provincia} ${turno}:`, responseData)
 
                 if (!response.ok) {
                     throw new Error(
@@ -300,14 +343,14 @@ export default function ExtractosPage() {
                 }
 
                 turnosGuardadosExitosamente++
-                console.log(`✅ ${turno} guardado exitosamente`)
+                console.log(`✅ ${provincia} ${turno} guardado exitosamente para ${fecha}`)
             }
 
             // Si llegamos aquí, todos los turnos se guardaron exitosamente
-            console.log(`🎉 ${turnosGuardadosExitosamente} turnos guardados exitosamente en la base de datos`)
+            console.log(`🎉 ${turnosGuardadosExitosamente} turnos de ${provincia} guardados exitosamente para ${fecha}`)
 
             // Limpiar solo los turnos que se guardaron
-            setTucumanData((prev) => {
+            setData((prev) => {
                 const newData = { ...prev }
                 turnosConDatos.forEach((turno) => {
                     newData[turno] = Array(20).fill("")
@@ -325,16 +368,25 @@ export default function ExtractosPage() {
 
             // Cerrar el modal después de un breve delay para que el usuario vea la confirmación
             setTimeout(() => {
-                setShowTucumanModal(false)
-                // Mostrar alerta de éxito (opcional)
-                alert(`✅ ${turnosGuardadosExitosamente} turno(s) de Tucumán guardado(s) exitosamente en la base de datos`)
+                setShowModal(false)
+                // Mostrar alerta de éxito
+                alert(`✅ ${turnosGuardadosExitosamente} turno(s) de ${provincia} guardado(s) exitosamente para ${fecha}`)
             }, 500)
         } catch (error) {
-            console.error("❌ Error al guardar Tucumán:", error)
-            setError(error instanceof Error ? error.message : "Error al guardar los resultados de Tucumán")
+            console.error(`❌ Error al guardar ${provincia}:`, error)
+            setError(error instanceof Error ? error.message : `Error al guardar los resultados de ${provincia}`)
         } finally {
-            setIsSavingTucuman(false)
+            setIsSaving(false)
         }
+    }
+
+    const handleConfirmarTucuman = () => {
+        handleConfirmarProvincia("TUCUMAN", tucumanData, setTucumanData, setIsSavingTucuman, setShowTucumanModal)
+    }
+
+    // Handler para confirmar Neuquén
+    const handleConfirmarNeuquen = () => {
+        handleConfirmarProvincia("NEUQUEN", neuquenData, setNeuquenData, setIsSavingNeuquen, setShowNeuquenModal)
     }
 
     const formatDateAndDay = (fecha: string) => {
@@ -376,17 +428,21 @@ export default function ExtractosPage() {
         try {
             setIsLoading(true)
             setError(null)
+
             const extractosAConfirmar = extractos.filter(
                 (extracto) => selectAll || extractosSeleccionados.includes(extracto.id),
             )
+
             console.log(`Confirmando ${extractosAConfirmar.length} extractos`)
             const response = await confirmarResultados(extractosAConfirmar)
             console.log("Respuesta de confirmación recibida")
+
             setExtractos((prevExtractos) =>
                 prevExtractos.map((extracto) =>
                     selectAll || extractosSeleccionados.includes(extracto.id) ? { ...extracto, confirmado: "Sí" } : extracto,
                 ),
             )
+
             setExtractosSeleccionados([])
             setSelectAll(false)
             console.log("Extractos confirmados con éxito")
@@ -415,6 +471,7 @@ export default function ExtractosPage() {
                 setError("No se pueden seleccionar fechas futuras.")
                 return
             }
+
             const adjustedDate = setHours(newDate, 12)
             console.log(`Nueva fecha seleccionada: ${adjustedDate.toISOString()}`)
             setSelectedDate(adjustedDate)
@@ -431,6 +488,7 @@ export default function ExtractosPage() {
             setIsLoading(true)
             setError(null)
             setDebugInfo("Obteniendo fecha forzada de Argentina...")
+
             const response = await fetch("/api/extractos/forzar-fecha", {
                 method: "GET",
                 headers: {
@@ -439,11 +497,14 @@ export default function ExtractosPage() {
                     Expires: "0",
                 },
             })
+
             if (!response.ok) {
                 throw new Error(`Error HTTP! status: ${response.status}`)
             }
+
             const data = await response.json()
             setDebugInfo((prev) => prev + `\nFecha forzada recibida: ${JSON.stringify(data)}`)
+
             setUsarFechaForzada(true)
             fetchExtractos(selectedDate)
         } catch (error) {
@@ -455,6 +516,7 @@ export default function ExtractosPage() {
     }
 
     const sorteoOrder = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
+
     const sortExtractos = (a: Extracto, b: Extracto) => {
         return sorteoOrder.indexOf(a.sorteo) - sorteoOrder.indexOf(b.sorteo)
     }
@@ -466,6 +528,28 @@ export default function ExtractosPage() {
         if (sorteo.includes("Vespertina")) return "bg-orange-100 text-orange-800"
         if (sorteo.includes("Nocturna")) return "bg-indigo-100 text-indigo-800"
         return "bg-gray-100 text-gray-800"
+    }
+
+    // 🔥 FUNCIÓN PARA ABRIR MODAL TUCUMÁN CON PREVENCIÓN DE CIERRE
+    const abrirModalTucuman = (e: React.MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        console.log("🔓 Abriendo modal Tucumán")
+        setShowTucumanModal(true)
+    }
+
+    // 🔥 FUNCIÓN PARA ABRIR MODAL NEUQUÉN CON PREVENCIÓN DE CIERRE
+    const abrirModalNeuquen = (e: React.MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        console.log("🔓 Abriendo modal Neuquén")
+        setShowNeuquenModal(true)
+    }
+
+    // 🔥 FUNCIÓN PARA CERRAR MODAL CON CONFIRMACIÓN
+    const cerrarModal = (provincia: string, setShowModal: React.Dispatch<React.SetStateAction<boolean>>) => {
+        console.log(`🔒 Cerrando modal ${provincia}`)
+        setShowModal(false)
     }
 
     useEffect(() => {
@@ -515,7 +599,6 @@ export default function ExtractosPage() {
                                     </PopoverContent>
                                 </Popover>
                             </div>
-
                             <div className="flex gap-2">
                                 <Button
                                     variant="outline"
@@ -567,115 +650,37 @@ export default function ExtractosPage() {
                                 )}
                             </Button>
 
-                            {/* Botón Tipear Tucumán */}
-                            <Dialog open={showTucumanModal} onOpenChange={setShowTucumanModal}>
-                                <DialogTrigger asChild>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="border-yellow-300 text-yellow-700 hover:bg-yellow-50 hover:border-yellow-500 bg-transparent"
-                                        disabled={getTurnosPendientes().length === 0}
-                                    >
-                                        <Keyboard className="h-3 w-3 mr-1" />
-                                        <span className="text-xs">
-                                            {getTurnosPendientes().length === 0 ? "Completo" : `Tipear (${getTurnosPendientes().length})`}
-                                        </span>
-                                    </Button>
-                                </DialogTrigger>
-                                <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-                                    <DialogHeader>
-                                        <DialogTitle className="text-lg font-bold text-center">Tipear Resultados - Tucumán</DialogTitle>
-                                    </DialogHeader>
+                            {/* 🔥 Botón Tipear Tucumán CORREGIDO */}
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={abrirModalTucuman}
+                                className="border-yellow-300 text-yellow-700 hover:bg-yellow-50 hover:border-yellow-500 bg-transparent"
+                                disabled={getTurnosPendientes("TUCUMAN").length === 0}
+                            >
+                                <Keyboard className="h-3 w-3 mr-1" />
+                                <span className="text-xs">
+                                    {getTurnosPendientes("TUCUMAN").length === 0
+                                        ? "Tucumán Completo"
+                                        : `Tipear Tucumán (${getTurnosPendientes("TUCUMAN").length})`}
+                                </span>
+                            </Button>
 
-                                    {getTurnosPendientes().length === 0 ? (
-                                        <div className="text-center py-8">
-                                            <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-                                            <p className="text-lg font-semibold text-green-700">
-                                                ¡Todos los turnos de Tucumán ya están guardados!
-                                            </p>
-                                            <p className="text-sm text-gray-600 mt-2">No hay turnos pendientes para tipear.</p>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <div className="space-y-6">
-                                                {getTurnosPendientes().map((turno) => {
-                                                    const numerosCompletados = contarNumerosCompletados(turno)
-                                                    const turnoCompleto = isTurnoCompleto(turno)
-
-                                                    return (
-                                                        <div key={turno} className="border rounded-lg p-4">
-                                                            <div className="flex justify-between items-center mb-3">
-                                                                <Label className="text-sm font-semibold">{turno}</Label>
-                                                                <div className="flex items-center gap-2">
-                                                                    <span
-                                                                        className={`text-xs px-2 py-1 rounded ${turnoCompleto ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
-                                                                            }`}
-                                                                    >
-                                                                        {numerosCompletados}/20
-                                                                    </span>
-                                                                    {turnoCompleto && <CheckCircle className="h-4 w-4 text-green-500" />}
-                                                                </div>
-                                                            </div>
-                                                            <div className="grid grid-cols-10 gap-2">
-                                                                {tucumanData[turno].map((numero, index) => (
-                                                                    <Input
-                                                                        key={index}
-                                                                        type="text"
-                                                                        value={numero}
-                                                                        onChange={(e) => handleTucumanNumberChange(turno, index, e.target.value)}
-                                                                        className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
-                                                                                ? "border-green-300 bg-green-50"
-                                                                                : numero.length > 0
-                                                                                    ? "border-yellow-300 bg-yellow-50"
-                                                                                    : "border-gray-300"
-                                                                            }`}
-                                                                        placeholder={`${index + 1}`}
-                                                                        maxLength={4}
-                                                                        data-turno={turno}
-                                                                        data-index={index}
-                                                                    />
-                                                                ))}
-                                                            </div>
-                                                            {!turnoCompleto && numerosCompletados > 0 && (
-                                                                <p className="text-xs text-yellow-600 mt-2">
-                                                                    Faltan {20 - numerosCompletados} números de 4 dígitos para completar este turno
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                    )
-                                                })}
-                                            </div>
-
-                                            <div className="flex justify-end gap-2 pt-4 border-t">
-                                                <Button variant="outline" onClick={() => setShowTucumanModal(false)} disabled={isSavingTucuman}>
-                                                    Cancelar
-                                                </Button>
-                                                <Button
-                                                    onClick={handleConfirmarTucuman}
-                                                    disabled={
-                                                        isSavingTucuman ||
-                                                        getTurnosPendientes().filter((turno) => isTurnoCompleto(turno)).length === 0
-                                                    }
-                                                    className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
-                                                >
-                                                    {isSavingTucuman ? (
-                                                        <>
-                                                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                                            Guardando...
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <CheckCircle className="h-4 w-4 mr-2" />
-                                                            Confirmar ({getTurnosPendientes().filter((turno) => isTurnoCompleto(turno)).length} turnos
-                                                            listos)
-                                                        </>
-                                                    )}
-                                                </Button>
-                                            </div>
-                                        </>
-                                    )}
-                                </DialogContent>
-                            </Dialog>
+                            {/* 🔥 Botón Tipear Neuquén CORREGIDO */}
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={abrirModalNeuquen}
+                                className="border-orange-300 text-orange-700 hover:bg-orange-50 hover:border-orange-500 bg-transparent"
+                                disabled={getTurnosPendientes("NEUQUEN").length === 0}
+                            >
+                                <Keyboard className="h-3 w-3 mr-1" />
+                                <span className="text-xs">
+                                    {getTurnosPendientes("NEUQUEN").length === 0
+                                        ? "Neuquén Completo"
+                                        : `Tipear Neuquén (${getTurnosPendientes("NEUQUEN").length})`}
+                                </span>
+                            </Button>
 
                             <Button
                                 variant="outline"
@@ -686,6 +691,7 @@ export default function ExtractosPage() {
                                 <CheckCircle className="h-3 w-3 mr-1" />
                                 <span className="text-xs">Confirmar</span>
                             </Button>
+
                             <Button
                                 variant="outline"
                                 size="sm"
@@ -694,6 +700,7 @@ export default function ExtractosPage() {
                                 <XCircle className="h-3 w-3 mr-1" />
                                 <span className="text-xs">Eliminar Confirmación</span>
                             </Button>
+
                             <Button
                                 variant="outline"
                                 size="sm"
@@ -702,6 +709,7 @@ export default function ExtractosPage() {
                                 <Trash2 className="h-3 w-3 mr-1" />
                                 <span className="text-xs">Eliminar Extracto</span>
                             </Button>
+
                             <Button
                                 variant="outline"
                                 size="sm"
@@ -710,6 +718,7 @@ export default function ExtractosPage() {
                                 <Printer className="h-3 w-3 mr-1" />
                                 <span className="text-xs">Imprimir</span>
                             </Button>
+
                             <Button
                                 variant="outline"
                                 size="sm"
@@ -724,8 +733,9 @@ export default function ExtractosPage() {
                         <div className="mb-4 p-4 bg-blue-100 border border-blue-300 rounded-lg flex items-start">
                             <Info className="h-5 w-5 mr-2 text-blue-600 flex-shrink-0 mt-0.5" />
                             <p className="text-sm text-blue-800">
-                                Nota: Los sorteos de Montevideo (Matutina y Nocturna) solo se muestran de lunes a viernes. Para Tucumán,
-                                use el botón "Tipear" para ingresar los resultados manualmente.
+                                Nota: Los sorteos de Montevideo (Matutina y Nocturna) solo se muestran de lunes a viernes. Para Tucumán
+                                y Neuquén, use los botones "Tipear" para ingresar los resultados manualmente. Los resultados se
+                                guardarán con la fecha seleccionada en el calendario.
                             </p>
                         </div>
 
@@ -895,6 +905,212 @@ export default function ExtractosPage() {
                         </div>
                     </CardContent>
                 </Card>
+
+                {/* 🔥 Modal de Tucumán CORREGIDO */}
+                <Dialog open={showTucumanModal} onOpenChange={(open) => !open && cerrarModal("TUCUMAN", setShowTucumanModal)}>
+                    <DialogContent
+                        className="max-w-4xl max-h-[80vh] overflow-y-auto"
+                        onPointerDownOutside={(e) => e.preventDefault()}
+                    >
+                        <DialogHeader>
+                            <DialogTitle className="text-lg font-bold text-center">
+                                Tipear Resultados - TUCUMÁN ({format(selectedDate, "dd/MM/yyyy", { locale: es })})
+                            </DialogTitle>
+                        </DialogHeader>
+                        {getTurnosPendientes("TUCUMAN").length === 0 ? (
+                            <div className="text-center py-8">
+                                <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                                <p className="text-lg font-semibold text-green-700">¡Todos los turnos de TUCUMÁN ya están guardados!</p>
+                                <p className="text-sm text-gray-600 mt-2">No hay turnos pendientes para tipear.</p>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="space-y-6">
+                                    {getTurnosPendientes("TUCUMAN").map((turno) => {
+                                        const numerosCompletados = contarNumerosCompletados(turno, tucumanData)
+                                        const turnoCompleto = isTurnoCompleto(turno, tucumanData)
+                                        return (
+                                            <div key={turno} className="border rounded-lg p-4">
+                                                <div className="flex justify-between items-center mb-3">
+                                                    <Label className="text-sm font-semibold">{turno}</Label>
+                                                    <div className="flex items-center gap-2">
+                                                        <span
+                                                            className={`text-xs px-2 py-1 rounded ${turnoCompleto ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
+                                                                }`}
+                                                        >
+                                                            {numerosCompletados}/20
+                                                        </span>
+                                                        {turnoCompleto && <CheckCircle className="h-4 w-4 text-green-500" />}
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-10 gap-2">
+                                                    {tucumanData[turno].map((numero, index) => (
+                                                        <Input
+                                                            key={index}
+                                                            type="text"
+                                                            value={numero}
+                                                            onChange={(e) => handleTucumanNumberChange(turno, index, e.target.value)}
+                                                            className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
+                                                                    ? "border-green-300 bg-green-50"
+                                                                    : numero.length > 0
+                                                                        ? "border-yellow-300 bg-yellow-50"
+                                                                        : "border-gray-300"
+                                                                }`}
+                                                            placeholder={`${index + 1}`}
+                                                            maxLength={4}
+                                                            data-provincia="TUCUMAN"
+                                                            data-turno={turno}
+                                                            data-index={index}
+                                                        />
+                                                    ))}
+                                                </div>
+                                                {!turnoCompleto && numerosCompletados > 0 && (
+                                                    <p className="text-xs text-yellow-600 mt-2">
+                                                        Faltan {20 - numerosCompletados} números de 4 dígitos para completar este turno
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                                <div className="flex justify-end gap-2 pt-4 border-t">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => cerrarModal("TUCUMAN", setShowTucumanModal)}
+                                        disabled={isSavingTucuman}
+                                    >
+                                        Cancelar
+                                    </Button>
+                                    <Button
+                                        onClick={handleConfirmarTucuman}
+                                        disabled={
+                                            isSavingTucuman ||
+                                            getTurnosPendientes("TUCUMAN").filter((turno) => isTurnoCompleto(turno, tucumanData)).length === 0
+                                        }
+                                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
+                                    >
+                                        {isSavingTucuman ? (
+                                            <>
+                                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                                Guardando...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <CheckCircle className="h-4 w-4 mr-2" />
+                                                Confirmar (
+                                                {getTurnosPendientes("TUCUMAN").filter((turno) => isTurnoCompleto(turno, tucumanData)).length}{" "}
+                                                turnos listos)
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+                            </>
+                        )}
+                    </DialogContent>
+                </Dialog>
+
+                {/* 🔥 Modal de Neuquén CORREGIDO */}
+                <Dialog open={showNeuquenModal} onOpenChange={(open) => !open && cerrarModal("NEUQUEN", setShowNeuquenModal)}>
+                    <DialogContent
+                        className="max-w-4xl max-h-[80vh] overflow-y-auto"
+                        onPointerDownOutside={(e) => e.preventDefault()}
+                    >
+                        <DialogHeader>
+                            <DialogTitle className="text-lg font-bold text-center">
+                                Tipear Resultados - NEUQUÉN ({format(selectedDate, "dd/MM/yyyy", { locale: es })})
+                            </DialogTitle>
+                        </DialogHeader>
+                        {getTurnosPendientes("NEUQUEN").length === 0 ? (
+                            <div className="text-center py-8">
+                                <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                                <p className="text-lg font-semibold text-green-700">¡Todos los turnos de NEUQUÉN ya están guardados!</p>
+                                <p className="text-sm text-gray-600 mt-2">No hay turnos pendientes para tipear.</p>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="space-y-6">
+                                    {getTurnosPendientes("NEUQUEN").map((turno) => {
+                                        const numerosCompletados = contarNumerosCompletados(turno, neuquenData)
+                                        const turnoCompleto = isTurnoCompleto(turno, neuquenData)
+                                        return (
+                                            <div key={turno} className="border rounded-lg p-4">
+                                                <div className="flex justify-between items-center mb-3">
+                                                    <Label className="text-sm font-semibold">{turno}</Label>
+                                                    <div className="flex items-center gap-2">
+                                                        <span
+                                                            className={`text-xs px-2 py-1 rounded ${turnoCompleto ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
+                                                                }`}
+                                                        >
+                                                            {numerosCompletados}/20
+                                                        </span>
+                                                        {turnoCompleto && <CheckCircle className="h-4 w-4 text-green-500" />}
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-10 gap-2">
+                                                    {neuquenData[turno].map((numero, index) => (
+                                                        <Input
+                                                            key={index}
+                                                            type="text"
+                                                            value={numero}
+                                                            onChange={(e) => handleNeuquenNumberChange(turno, index, e.target.value)}
+                                                            className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
+                                                                    ? "border-green-300 bg-green-50"
+                                                                    : numero.length > 0
+                                                                        ? "border-yellow-300 bg-yellow-50"
+                                                                        : "border-gray-300"
+                                                                }`}
+                                                            placeholder={`${index + 1}`}
+                                                            maxLength={4}
+                                                            data-provincia="NEUQUEN"
+                                                            data-turno={turno}
+                                                            data-index={index}
+                                                        />
+                                                    ))}
+                                                </div>
+                                                {!turnoCompleto && numerosCompletados > 0 && (
+                                                    <p className="text-xs text-yellow-600 mt-2">
+                                                        Faltan {20 - numerosCompletados} números de 4 dígitos para completar este turno
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                                <div className="flex justify-end gap-2 pt-4 border-t">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => cerrarModal("NEUQUEN", setShowNeuquenModal)}
+                                        disabled={isSavingNeuquen}
+                                    >
+                                        Cancelar
+                                    </Button>
+                                    <Button
+                                        onClick={handleConfirmarNeuquen}
+                                        disabled={
+                                            isSavingNeuquen ||
+                                            getTurnosPendientes("NEUQUEN").filter((turno) => isTurnoCompleto(turno, neuquenData)).length === 0
+                                        }
+                                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
+                                    >
+                                        {isSavingNeuquen ? (
+                                            <>
+                                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                                Guardando...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <CheckCircle className="h-4 w-4 mr-2" />
+                                                Confirmar (
+                                                {getTurnosPendientes("NEUQUEN").filter((turno) => isTurnoCompleto(turno, neuquenData)).length}{" "}
+                                                turnos listos)
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+                            </>
+                        )}
+                    </DialogContent>
+                </Dialog>
             </main>
         </div>
     )
