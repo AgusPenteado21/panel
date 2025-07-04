@@ -33,16 +33,41 @@ interface Resultado {
 
 const PLACEHOLDER_RESULT = "----" // Placeholder para resultados no disponibles
 
-// Función para obtener la fecha actual en Argentina
+// 🔥 FUNCIÓN MEJORADA PARA ZONA HORARIA CONSISTENTE
 function obtenerFechaArgentina() {
     const fechaActual = new Date()
     try {
+        // 🆕 FORZAR ZONA HORARIA ARGENTINA CONSISTENTE
         const fechaArgentina = toZonedTime(fechaActual, "America/Argentina/Buenos_Aires")
+
+        // 🔥 LOG DETALLADO PARA DEBUG
+        console.log(`🕐 FECHA ACTUAL UTC: ${fechaActual.toISOString()}`)
+        console.log(`🇦🇷 FECHA ARGENTINA: ${fechaArgentina.toISOString()}`)
+        console.log(`📅 FECHA FORMATEADA: ${format(fechaArgentina, "dd/MM/yyyy HH:mm:ss", { locale: es })}`)
+
         return fechaArgentina
     } catch (error) {
-        console.error("Error al usar toZonedTime, usando offset manual:", error)
-        return new Date(fechaActual.getTime() - 3 * 60 * 60 * 1000)
+        console.error("❌ Error al usar toZonedTime, usando offset manual:", error)
+        // 🔥 FALLBACK MEJORADO: UTC-3 (Argentina)
+        const fechaArgentina = new Date(fechaActual.getTime() - 3 * 60 * 60 * 1000)
+        console.log(`🔄 FALLBACK ARGENTINA: ${fechaArgentina.toISOString()}`)
+        return fechaArgentina
     }
+}
+
+// 🆕 FUNCIÓN PARA DETECTAR ENTORNO
+function detectarEntorno(): string {
+    const entorno = process.env.NODE_ENV || "development"
+    const esRailway = process.env.RAILWAY_ENVIRONMENT_NAME !== undefined
+    const esVercel = process.env.VERCEL !== undefined
+
+    console.log(`🌍 ENTORNO DETECTADO:`)
+    console.log(`  - NODE_ENV: ${entorno}`)
+    console.log(`  - Railway: ${esRailway}`)
+    console.log(`  - Vercel: ${esVercel}`)
+    console.log(`  - TZ: ${process.env.TZ || "No definida"}`)
+
+    return esRailway ? "railway" : esVercel ? "vercel" : "local"
 }
 
 // Constantes
@@ -60,8 +85,6 @@ const URLS_PIZARRAS = {
     MONTEVIDEO: "https://vivitusuerte.com/pizarra/montevideo",
     "RIO NEGRO": "https://vivitusuerte.com/pizarra/rio+negro",
     SANTIAGO: "https://vivitusuerte.com/pizarra/santiago",
-    // 🚫 TUCUMAN REMOVIDO DEL SCRAPING AUTOMÁTICO - SOLO MANUAL
-    // TUCUMAN: "https://vivitusuerte.com/pizarra/tucuman",
     NEUQUEN: "https://vivitusuerte.com/pizarra/neuquen",
     MISIONES: "https://vivitusuerte.com/pizarra/misiones",
 }
@@ -74,7 +97,7 @@ const HORARIOS_SORTEOS = {
     Nocturna: "21:00",
 }
 
-// Funciones auxiliares
+// 🔥 FUNCIÓN CORREGIDA CON HEADERS COMPATIBLES
 async function obtenerConTiempoLimite(url: string, opciones: RequestInit = {}): Promise<Response> {
     const controlador = new AbortController()
     const id = setTimeout(() => controlador.abort(), TIEMPO_ESPERA_FETCH)
@@ -82,25 +105,60 @@ async function obtenerConTiempoLimite(url: string, opciones: RequestInit = {}): 
     try {
         const timestamp = Date.now()
         const urlConTimestamp = `${url}${url.includes("?") ? "&" : "?"}_t=${timestamp}`
+
+        // 🔥 HEADERS CORREGIDOS - ESTRUCTURA COMPATIBLE
+        const entorno = detectarEntorno()
+
+        // Headers base comunes
+        const headersBase: Record<string, string> = {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+        }
+
+        // Headers específicos por entorno
+        let headersEspecificos: Record<string, string> = {}
+
+        if (entorno === "railway") {
+            headersEspecificos = {
+                "User-Agent":
+                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
+                "Accept-Encoding": "gzip, deflate, br",
+                DNT: "1",
+                Connection: "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
+            }
+        } else {
+            headersEspecificos = {
+                "User-Agent":
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            }
+        }
+
+        // Combinar headers
+        const headersFinales = {
+            ...headersBase,
+            ...headersEspecificos,
+            ...opciones.headers,
+        }
+
         const respuesta = await fetch(urlConTimestamp, {
             ...opciones,
             signal: controlador.signal,
             cache: "no-store",
-            headers: {
-                ...opciones.headers,
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-                Pragma: "no-cache",
-                Expires: "0",
-                "User-Agent":
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            },
+            headers: headersFinales,
         })
 
         clearTimeout(id)
+
+        console.log(`🌐 FETCH ${url}: Status ${respuesta.status} (${entorno})`)
         return respuesta
     } catch (error) {
         clearTimeout(id)
-        console.error(`Error en obtenerConTiempoLimite para ${url}:`, error)
+        console.error(`❌ Error en obtenerConTiempoLimite para ${url}:`, error)
         throw error
     }
 }
@@ -111,28 +169,45 @@ function obtenerTiempoSorteo(turno: string): number {
         console.error(`Horario no definido para el turno: ${turno}`)
         return -1
     }
-
     const [horas, minutos] = horario.split(":").map(Number)
     if (isNaN(horas) || isNaN(minutos)) {
         console.error(`Formato de horario inválido para el turno: ${turno}`)
         return -1
     }
-
     return horas * 60 + minutos
 }
 
+// 🔥 FUNCIÓN MEJORADA CON LOGS DETALLADOS
 function esSorteoFinalizado(turno: string, fecha: Date): boolean {
     const ahora = obtenerFechaArgentina()
     const tiempoActual = ahora.getHours() * 60 + ahora.getMinutes()
     const tiempoSorteo = obtenerTiempoSorteo(turno)
+
     const hoyArgentina = startOfDay(obtenerFechaArgentina())
 
+    // 🔥 LOGS DETALLADOS PARA DEBUG
+    console.log(`⏰ VERIFICANDO SORTEO: ${turno}`)
+    console.log(
+        `  - Hora actual: ${ahora.getHours()}:${ahora.getMinutes().toString().padStart(2, "0")} (${tiempoActual} min)`,
+    )
+    console.log(
+        `  - Hora sorteo: ${Math.floor(tiempoSorteo / 60)}:${(tiempoSorteo % 60).toString().padStart(2, "0")} (${tiempoSorteo} min)`,
+    )
+    console.log(`  - Fecha consulta: ${format(fecha, "dd/MM/yyyy")}`)
+    console.log(`  - Hoy Argentina: ${format(hoyArgentina, "dd/MM/yyyy")}`)
+
     if (isAfter(hoyArgentina, fecha)) {
+        console.log(`  ✅ FINALIZADO: Fecha pasada`)
         return true
     }
 
     // Considerar finalizado 30 minutos después de la hora del sorteo para mayor seguridad
-    return tiempoActual > tiempoSorteo + 30
+    const finalizado = tiempoActual > tiempoSorteo + 30
+    console.log(
+        `  ${finalizado ? "✅" : "⏰"} ${finalizado ? "FINALIZADO" : "PENDIENTE"}: ${tiempoActual} > ${tiempoSorteo + 30}`,
+    )
+
+    return finalizado
 }
 
 // 🆕 FUNCIÓN ESPECÍFICA PARA NEUQUÉN
@@ -239,6 +314,7 @@ function extraerNumerosMisiones($: cheerio.CheerioAPI, turno: string): string[] 
             const otrosTurnos = ["previa", "primera", "matutina", "vespertina", "nocturna"].filter(
                 (t) => t !== turno.toLowerCase(),
             )
+
             const contieneOtroTurno = otrosTurnos.some(
                 (otroTurno) =>
                     textoSeccion.includes(otroTurno) &&
@@ -317,7 +393,6 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
         for (const otroTurno of otrosTurnos) {
             const regexOtroTurno = new RegExp(`\\b${otroTurno}\\b`, "i")
             const matchOtro = regexOtroTurno.exec(textoCompleto.substring(indiceInicio + turno.length))
-
             if (matchOtro) {
                 const indiceOtro = indiceInicio + turno.length + matchOtro.index
                 if (indiceOtro < indiceFin) {
@@ -348,6 +423,7 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
     console.log(`🗂️ Estrategia 3: Tablas ultra específicas`)
 
     const tablas = $("table").toArray()
+
     for (const tabla of tablas) {
         const $tabla = $(tabla)
         const textoTabla = $tabla.text()
@@ -437,14 +513,12 @@ function validarResultadosUltraEstricto(numeros: string[], provincia: string, tu
 
 function reordenarNumeros(numeros: string[]): string[] {
     const numerosOrdenados = Array(20).fill(PLACEHOLDER_RESULT)
-
     numeros.forEach((num, index) => {
         if (index < 20) {
             const nuevoIndice = index % 2 === 0 ? index / 2 : 10 + Math.floor(index / 2)
             numerosOrdenados[nuevoIndice] = num
         }
     })
-
     return numerosOrdenados
 }
 
@@ -459,11 +533,34 @@ async function obtenerResultadoEspecifico(provincia: string, turno: string): Pro
 
         console.log(`\n🔍 PROCESANDO: ${provincia} - ${turno}`)
 
-        // Obtener HTML de la pizarra
-        const pizarraHtml = await obtenerConTiempoLimite(url)
+        // 🔥 RETRY LOGIC PARA RAILWAY
+        let intentos = 0
+        const maxIntentos = 3
+        let pizarraHtml: Response | null = null
 
-        if (!pizarraHtml.ok) {
-            console.error(`❌ Error HTTP ${pizarraHtml.status} para ${url}`)
+        while (intentos < maxIntentos && !pizarraHtml?.ok) {
+            try {
+                intentos++
+                console.log(`🔄 Intento ${intentos}/${maxIntentos} para ${provincia}`)
+
+                pizarraHtml = await obtenerConTiempoLimite(url)
+
+                if (!pizarraHtml.ok) {
+                    console.error(`❌ Error HTTP ${pizarraHtml.status} para ${url} (intento ${intentos})`)
+                    if (intentos < maxIntentos) {
+                        await new Promise((resolve) => setTimeout(resolve, 2000)) // Esperar 2 segundos
+                    }
+                }
+            } catch (error) {
+                console.error(`❌ Error en intento ${intentos} para ${provincia}:`, error)
+                if (intentos < maxIntentos) {
+                    await new Promise((resolve) => setTimeout(resolve, 2000))
+                }
+            }
+        }
+
+        if (!pizarraHtml?.ok) {
+            console.error(`❌ Falló después de ${maxIntentos} intentos: ${provincia}`)
             return null
         }
 
@@ -503,6 +600,7 @@ async function obtenerResultadoEspecifico(provincia: string, turno: string): Pro
         }
 
         console.log(`✅ ÉXITO: ${provincia} - ${turno} → Números válidos encontrados`)
+        console.log(`📊 NÚMEROS: ${numerosReordenados.slice(0, 10).join(", ")}...`)
         return numerosReordenados
     } catch (error) {
         console.error(`❌ ERROR: ${provincia} - ${turno}:`, error)
@@ -513,6 +611,10 @@ async function obtenerResultadoEspecifico(provincia: string, turno: string): Pro
 // 🔥 FUNCIÓN PRINCIPAL CORREGIDA - SIN FILTROS RESTRICTIVOS
 async function obtenerResultadosConfiables(): Promise<any[]> {
     console.log("🚀 INICIANDO EXTRACCIÓN ULTRA CONFIABLE - TODOS LOS RESULTADOS")
+
+    // 🔥 DETECTAR ENTORNO AL INICIO
+    const entorno = detectarEntorno()
+    console.log(`🌍 EJECUTÁNDOSE EN: ${entorno.toUpperCase()}`)
 
     const fechaActual = obtenerFechaArgentina()
     const diaSemana = fechaActual.getDay()
@@ -526,6 +628,8 @@ async function obtenerResultadosConfiables(): Promise<any[]> {
     const nombreDia = format(fechaActual, "EEEE", { locale: es }).replace(/^\w/, (c) => c.toUpperCase())
     const fechaKeyFirebase = format(fechaActual, "yyyy-MM-dd")
 
+    console.log(`📅 PROCESANDO FECHA: ${fechaDisplay} (${nombreDia})`)
+
     const resultadosApi: any[] = []
     const resultadosParaFirebase: ResultadoDia = {
         fecha: fechaDisplay,
@@ -535,7 +639,7 @@ async function obtenerResultadosConfiables(): Promise<any[]> {
 
     const turnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
 
-    // Procesar cada provincia (incluyendo las nuevas) - 🚫 TUCUMÁN EXCLUIDO
+    // Procesar cada provincia (incluyendo las nuevas)
     for (const [provinciaKey, pizarraUrl] of Object.entries(URLS_PIZARRAS)) {
         console.log(`\n🏛️ === PROVINCIA: ${provinciaKey} ===`)
 
@@ -549,15 +653,12 @@ async function obtenerResultadosConfiables(): Promise<any[]> {
 
         // Procesar cada turno
         for (const turno of turnos) {
-            // 🔥 SOLO MANTENER FILTROS ESPECÍFICOS CONOCIDOS - ELIMINAR FILTROS PARA NEUQUÉN Y MISIONES
+            // 🔥 SOLO MANTENER FILTROS ESPECÍFICOS CONOCIDOS
             if (provinciaKey === "MONTEVIDEO") {
                 if (turno !== "Matutina" && turno !== "Nocturna") continue
                 if (turno === "Matutina" && diaSemana > 5) continue
                 if (turno === "Nocturna" && diaSemana === 0) continue
             }
-
-            // 🚫 TUCUMÁN YA NO ESTÁ EN URLS_PIZARRAS, PERO POR SEGURIDAD:
-            // if (provinciaKey === "TUCUMAN" && turno === "Previa") continue
 
             console.log(`🔍 Intentando obtener: ${provinciaKey} - ${turno}`)
 
@@ -651,6 +752,7 @@ async function obtenerResultadosConfiables(): Promise<any[]> {
     if (resultadosParaFirebase.resultados.length > 0) {
         try {
             const docRef = doc(db, "extractos", fechaKeyFirebase)
+
             // 🔥 ESTRUCTURA CORREGIDA: Guardar anidado por fecha como espera el Dart
             const dataParaGuardar = {
                 [fechaDisplay]: resultadosParaFirebase,
@@ -668,7 +770,6 @@ async function obtenerResultadosConfiables(): Promise<any[]> {
         `📊 RESULTADOS API:`,
         resultadosApi.map((r) => `${r.provincia}-${r.sorteo}`),
     )
-
     return resultadosApi
 }
 
@@ -681,8 +782,8 @@ export async function GET(request: Request) {
         const forceRefresh = url.searchParams.get("forceRefresh") === "true"
 
         const fechaActualArgentina = obtenerFechaArgentina()
-        let fechaConsulta: Date
 
+        let fechaConsulta: Date
         if (parametroFecha) {
             fechaConsulta = startOfDay(
                 toZonedTime(parse(parametroFecha, "yyyy-MM-dd", new Date()), "America/Argentina/Buenos_Aires"),
@@ -699,7 +800,9 @@ export async function GET(request: Request) {
         // Si es hoy o se fuerza, hacer scraping
         if (forceRefresh || esHoyEnArgentina) {
             console.log(forceRefresh ? "🔄 FORZANDO ACTUALIZACIÓN" : "📅 CONSULTANDO HOY")
+
             const resultados = await obtenerResultadosConfiables()
+
             // IMPORTANTE: Devolver directamente el array de resultados, sin envolverlo en un objeto
             return NextResponse.json(resultados, { headers: corsHeaders })
         }
@@ -788,7 +891,6 @@ export async function OPTIONS() {
 
 export async function POST(request: Request) {
     console.log("📝 Actualización manual")
-
     try {
         const { provincia, turno, fecha, numeros } = await request.json()
 
@@ -809,6 +911,7 @@ export async function POST(request: Request) {
         // 🔥 LECTURA CORREGIDA: Buscar en estructura anidada
         if (docSnap.exists()) {
             const data = docSnap.data()
+
             if (data[fecha]) {
                 // Estructura anidada por fecha
                 datosDia = data[fecha] as ResultadoDia
@@ -839,7 +942,6 @@ export async function POST(request: Request) {
 
         // Buscar si ya existe la provincia
         let provinciaResultado = datosDia.resultados.find((r) => r.provincia === provincia)
-
         if (!provinciaResultado) {
             // Si no existe la provincia, crearla
             provinciaResultado = {
@@ -867,7 +969,6 @@ export async function POST(request: Request) {
         await setDoc(docRef, dataParaGuardar, { merge: true })
 
         console.log(`✅ Manual: ${provincia} - ${turno}`)
-
         return NextResponse.json({ success: true, message: "Actualizado manualmente" }, { headers: corsHeaders })
     } catch (error) {
         console.error("❌ Error manual:", error)
