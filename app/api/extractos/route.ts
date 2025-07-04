@@ -33,78 +33,122 @@ interface Resultado {
 
 const PLACEHOLDER_RESULT = "----" // Placeholder para resultados no disponibles
 
-// 🔥 FUNCIÓN CORREGIDA PARA ZONA HORARIA CONSISTENTE
-function obtenerFechaArgentina() {
+// 🔥 FUNCIÓN ULTRA ROBUSTA PARA RAILWAY
+function obtenerFechaArgentinaRobusta(): Date {
     try {
-        // 🆕 CREAR FECHA ARGENTINA DIRECTAMENTE SIN CONVERSIONES
-        const ahora = new Date()
+        console.log("🌍 === DIAGNÓSTICO DE ZONA HORARIA ===")
 
-        // Obtener componentes en zona horaria Argentina
-        const formatter = new Intl.DateTimeFormat("en-CA", {
-            timeZone: "America/Argentina/Buenos_Aires",
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: false,
-        })
+        const ahoraUTC = new Date()
+        console.log(`🕐 UTC Original: ${ahoraUTC.toISOString()}`)
+        console.log(`🕐 UTC toString: ${ahoraUTC.toString()}`)
 
-        const parts = formatter.formatToParts(ahora)
-        const partsObj = parts.reduce((acc, part) => {
-            acc[part.type] = part.value
-            return acc
-        }, {} as any)
+        // 🆕 MÉTODO 1: Offset manual directo (más confiable)
+        const offsetArgentina = -3 * 60 // Argentina es UTC-3 (en minutos)
+        const offsetLocal = ahoraUTC.getTimezoneOffset() // Offset del servidor en minutos
 
-        // Crear fecha Argentina directamente
-        const fechaArgentina = new Date(
-            `${partsObj.year}-${partsObj.month}-${partsObj.day}T${partsObj.hour}:${partsObj.minute}:${partsObj.second}`,
-        )
+        console.log(`⏰ Offset Argentina: ${offsetArgentina} minutos`)
+        console.log(`⏰ Offset Servidor: ${offsetLocal} minutos`)
 
-        console.log(`🕐 UTC: ${ahora.toISOString()}`)
-        console.log(`🇦🇷 ARGENTINA: ${fechaArgentina.toISOString()}`)
-        console.log(`📅 FORMATEADA: ${format(fechaArgentina, "dd/MM/yyyy HH:mm:ss", { locale: es })}`)
+        // Calcular diferencia total
+        const diferenciaMinutos = offsetLocal + offsetArgentina
+        const fechaArgentina = new Date(ahoraUTC.getTime() + diferenciaMinutos * 60 * 1000)
 
-        return fechaArgentina
+        console.log(`🇦🇷 Argentina Calculada: ${fechaArgentina.toISOString()}`)
+        console.log(`🇦🇷 Argentina toString: ${fechaArgentina.toString()}`)
+
+        // 🆕 MÉTODO 2: Verificación con Intl (backup)
+        let fechaIntl: Date | null = null
+        try {
+            const formatter = new Intl.DateTimeFormat("en-CA", {
+                timeZone: "America/Argentina/Buenos_Aires",
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: false,
+            })
+
+            const parts = formatter.formatToParts(ahoraUTC)
+            const partsObj = parts.reduce((acc, part) => {
+                acc[part.type] = part.value
+                return acc
+            }, {} as any)
+
+            fechaIntl = new Date(
+                `${partsObj.year}-${partsObj.month}-${partsObj.day}T${partsObj.hour}:${partsObj.minute}:${partsObj.second}`,
+            )
+
+            console.log(`🌐 Intl Argentina: ${fechaIntl.toISOString()}`)
+        } catch (error) {
+            console.log(`⚠️ Intl falló: ${error}`)
+        }
+
+        // 🆕 MÉTODO 3: Verificación con date-fns (backup)
+        let fechaDateFns: Date | null = null
+        try {
+            fechaDateFns = toZonedTime(ahoraUTC, "America/Argentina/Buenos_Aires")
+            console.log(`📅 date-fns Argentina: ${fechaDateFns.toISOString()}`)
+        } catch (error) {
+            console.log(`⚠️ date-fns falló: ${error}`)
+        }
+
+        // 🔥 DECISIÓN: Usar el método manual como principal
+        const fechaFinal = fechaArgentina
+
+        console.log(`✅ FECHA FINAL SELECCIONADA: ${fechaFinal.toISOString()}`)
+        console.log(`📅 Formateada: ${format(fechaFinal, "dd/MM/yyyy HH:mm:ss", { locale: es })}`)
+        console.log(`📅 Solo fecha: ${format(fechaFinal, "yyyy-MM-dd")}`)
+
+        return fechaFinal
     } catch (error) {
-        console.error("❌ Error con Intl, usando offset manual:", error)
-        // Fallback: UTC-3 (Argentina)
-        const ahora = new Date()
-        const fechaArgentina = new Date(ahora.getTime() - 3 * 60 * 60 * 1000)
-        console.log(`🔄 FALLBACK: ${fechaArgentina.toISOString()}`)
-        return fechaArgentina
+        console.error("❌ Error total en fecha Argentina:", error)
+        // Último recurso: UTC-3 fijo
+        const fallback = new Date(Date.now() - 3 * 60 * 60 * 1000)
+        console.log(`🆘 FALLBACK: ${fallback.toISOString()}`)
+        return fallback
     }
 }
 
-// 🆕 FUNCIÓN PARA PARSEAR FECHA CONSISTENTE
-function parsearFechaConsistente(fechaString: string): Date {
+// 🆕 FUNCIÓN PARA PARSEAR FECHA DE CONSULTA (yyyy-MM-dd)
+function parsearFechaConsulta(fechaString: string): Date {
     try {
-        // Parsear fecha en formato yyyy-MM-dd
-        const fechaBase = parse(fechaString, "yyyy-MM-dd", new Date())
+        console.log(`📥 PARSEANDO FECHA CONSULTA: ${fechaString}`)
 
-        // Convertir a zona horaria Argentina
-        const fechaArgentina = toZonedTime(fechaBase, "America/Argentina/Buenos_Aires")
+        // Parsear como fecha local Argentina
+        const [year, month, day] = fechaString.split("-").map(Number)
 
-        console.log(`📅 PARSEANDO: ${fechaString}`)
-        console.log(`📅 BASE: ${fechaBase.toISOString()}`)
-        console.log(`📅 ARGENTINA: ${fechaArgentina.toISOString()}`)
+        // Crear fecha en zona horaria Argentina (mediodía para evitar problemas de borde)
+        const fechaArgentina = new Date()
+        fechaArgentina.setFullYear(year, month - 1, day)
+        fechaArgentina.setHours(12, 0, 0, 0) // Mediodía Argentina
 
-        return startOfDay(fechaArgentina)
+        // Ajustar a zona horaria Argentina
+        const offsetArgentina = -3 * 60 // UTC-3 en minutos
+        const offsetLocal = fechaArgentina.getTimezoneOffset()
+        const diferenciaMinutos = offsetLocal + offsetArgentina
+
+        const fechaFinal = new Date(fechaArgentina.getTime() + diferenciaMinutos * 60 * 1000)
+
+        console.log(`📅 Fecha parseada: ${fechaString} → ${fechaFinal.toISOString()}`)
+        console.log(`📅 Fecha display: ${format(fechaFinal, "dd/MM/yyyy")}`)
+
+        return startOfDay(fechaFinal)
     } catch (error) {
-        console.error("❌ Error parseando fecha:", error)
+        console.error("❌ Error parseando fecha consulta:", error)
         return startOfDay(new Date(fechaString))
     }
 }
 
-// 🆕 FUNCIÓN PARA FORMATEAR FECHA CONSISTENTE
-function formatearFechaConsistente(fecha: Date, formato: string): string {
+// 🆕 FUNCIÓN PARA FORMATEAR FECHAS CONSISTENTE
+function formatearFechaArgentina(fecha: Date, formato: string): string {
     try {
-        // Asegurar que la fecha esté en zona horaria Argentina
-        const fechaArgentina = toZonedTime(fecha, "America/Argentina/Buenos_Aires")
+        // Asegurar que estamos trabajando con fecha Argentina
+        const fechaArgentina = new Date(fecha)
         const resultado = format(fechaArgentina, formato, { locale: es })
 
-        console.log(`📅 FORMATEANDO: ${fecha.toISOString()} → ${resultado}`)
+        console.log(`📅 FORMATO: ${fecha.toISOString()} → ${formato} → ${resultado}`)
         return resultado
     } catch (error) {
         console.error("❌ Error formateando fecha:", error)
@@ -118,11 +162,18 @@ function detectarEntorno(): string {
     const esRailway = process.env.RAILWAY_ENVIRONMENT_NAME !== undefined
     const esVercel = process.env.VERCEL !== undefined
 
+    // 🔥 INFORMACIÓN ESPECÍFICA DE RAILWAY
+    const railwayRegion = process.env.RAILWAY_REGION || "unknown"
+    const railwayService = process.env.RAILWAY_SERVICE_NAME || "unknown"
+
     console.log(`🌍 ENTORNO DETECTADO:`)
     console.log(`  - NODE_ENV: ${entorno}`)
     console.log(`  - Railway: ${esRailway}`)
+    console.log(`  - Railway Region: ${railwayRegion}`)
+    console.log(`  - Railway Service: ${railwayService}`)
     console.log(`  - Vercel: ${esVercel}`)
     console.log(`  - TZ: ${process.env.TZ || "No definida"}`)
+    console.log(`  - Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
 
     return esRailway ? "railway" : esVercel ? "vercel" : "local"
 }
@@ -236,11 +287,11 @@ function obtenerTiempoSorteo(turno: string): number {
 
 // 🔥 FUNCIÓN MEJORADA CON LOGS DETALLADOS
 function esSorteoFinalizado(turno: string, fecha: Date): boolean {
-    const ahora = obtenerFechaArgentina()
+    const ahora = obtenerFechaArgentinaRobusta()
     const tiempoActual = ahora.getHours() * 60 + ahora.getMinutes()
     const tiempoSorteo = obtenerTiempoSorteo(turno)
 
-    const hoyArgentina = startOfDay(obtenerFechaArgentina())
+    const hoyArgentina = startOfDay(obtenerFechaArgentinaRobusta())
 
     // 🔥 LOGS DETALLADOS PARA DEBUG
     console.log(`⏰ VERIFICANDO SORTEO: ${turno}`)
@@ -250,8 +301,8 @@ function esSorteoFinalizado(turno: string, fecha: Date): boolean {
     console.log(
         `  - Hora sorteo: ${Math.floor(tiempoSorteo / 60)}:${(tiempoSorteo % 60).toString().padStart(2, "0")} (${tiempoSorteo} min)`,
     )
-    console.log(`  - Fecha consulta: ${formatearFechaConsistente(fecha, "dd/MM/yyyy")}`)
-    console.log(`  - Hoy Argentina: ${formatearFechaConsistente(hoyArgentina, "dd/MM/yyyy")}`)
+    console.log(`  - Fecha consulta: ${formatearFechaArgentina(fecha, "dd/MM/yyyy")}`)
+    console.log(`  - Hoy Argentina: ${formatearFechaArgentina(hoyArgentina, "dd/MM/yyyy")}`)
 
     if (isAfter(hoyArgentina, fecha)) {
         console.log(`  ✅ FINALIZADO: Fecha pasada`)
@@ -673,7 +724,7 @@ async function obtenerResultadosConfiables(): Promise<any[]> {
     const entorno = detectarEntorno()
     console.log(`🌍 EJECUTÁNDOSE EN: ${entorno.toUpperCase()}`)
 
-    const fechaActual = obtenerFechaArgentina()
+    const fechaActual = obtenerFechaArgentinaRobusta()
     const diaSemana = fechaActual.getDay()
 
     if (diaSemana === 0) {
@@ -681,9 +732,9 @@ async function obtenerResultadosConfiables(): Promise<any[]> {
         return []
     }
 
-    const fechaDisplay = formatearFechaConsistente(fechaActual, "dd/MM/yyyy")
-    const nombreDia = formatearFechaConsistente(fechaActual, "EEEE").replace(/^\w/, (c) => c.toUpperCase())
-    const fechaKeyFirebase = formatearFechaConsistente(fechaActual, "yyyy-MM-dd")
+    const fechaDisplay = formatearFechaArgentina(fechaActual, "dd/MM/yyyy")
+    const nombreDia = formatearFechaArgentina(fechaActual, "EEEE").replace(/^\w/, (c) => c.toUpperCase())
+    const fechaKeyFirebase = formatearFechaArgentina(fechaActual, "yyyy-MM-dd")
 
     console.log(`📅 PROCESANDO FECHA: ${fechaDisplay} (${nombreDia})`)
     console.log(`📅 KEY FIREBASE: ${fechaKeyFirebase}`)
@@ -832,7 +883,7 @@ async function obtenerResultadosConfiables(): Promise<any[]> {
 }
 
 export async function GET(request: Request) {
-    console.log("=== 🚀 API ULTRA CONFIABLE ===")
+    console.log("=== 🚀 API ULTRA CONFIABLE - RAILWAY OPTIMIZADA ===")
 
     try {
         const url = new URL(request.url)
@@ -841,25 +892,27 @@ export async function GET(request: Request) {
 
         console.log(`📥 PARÁMETROS: fecha=${parametroFecha}, forceRefresh=${forceRefresh}`)
 
-        const fechaActualArgentina = obtenerFechaArgentina()
+        const fechaActualArgentina = obtenerFechaArgentinaRobusta()
 
         let fechaConsulta: Date
         if (parametroFecha) {
-            // 🔥 USAR FUNCIÓN CONSISTENTE PARA PARSEAR FECHA
-            fechaConsulta = parsearFechaConsistente(parametroFecha)
+            // 🔥 USAR FUNCIÓN ROBUSTA PARA PARSEAR FECHA
+            fechaConsulta = parsearFechaConsulta(parametroFecha)
             console.log(`📅 FECHA PARSEADA: ${parametroFecha} → ${fechaConsulta.toISOString()}`)
         } else {
             fechaConsulta = startOfDay(fechaActualArgentina)
             console.log(`📅 FECHA ACTUAL: ${fechaConsulta.toISOString()}`)
         }
 
-        const fechaKeyFirebase = formatearFechaConsistente(fechaConsulta, "yyyy-MM-dd")
-        const fechaDisplayConsulta = formatearFechaConsistente(fechaConsulta, "dd/MM/yyyy")
-        const esHoyEnArgentina =
-            formatearFechaConsistente(fechaConsulta, "yyyy-MM-dd") ===
-            formatearFechaConsistente(startOfDay(fechaActualArgentina), "yyyy-MM-dd")
+        const fechaKeyFirebase = formatearFechaArgentina(fechaConsulta, "yyyy-MM-dd")
+        const fechaDisplayConsulta = formatearFechaArgentina(fechaConsulta, "dd/MM/yyyy")
 
-        console.log(`📅 KEY FIREBASE: ${fechaKeyFirebase}`)
+        // 🔥 COMPARACIÓN ROBUSTA DE FECHAS
+        const fechaHoyKey = formatearFechaArgentina(startOfDay(fechaActualArgentina), "yyyy-MM-dd")
+        const esHoyEnArgentina = fechaKeyFirebase === fechaHoyKey
+
+        console.log(`📅 KEY FIREBASE CONSULTA: ${fechaKeyFirebase}`)
+        console.log(`📅 KEY FIREBASE HOY: ${fechaHoyKey}`)
         console.log(`📅 FECHA DISPLAY: ${fechaDisplayConsulta}`)
         console.log(`📅 ES HOY: ${esHoyEnArgentina}`)
 
@@ -898,9 +951,26 @@ export async function GET(request: Request) {
                 console.log(`🔍 Fechas encontradas en documento:`, fechasEncontradas)
 
                 if (fechasEncontradas.length > 0) {
-                    const primeraFecha = fechasEncontradas[0]
-                    resultadosData = data[primeraFecha] as ResultadoDia
-                    console.log(`✅ Usando primera fecha encontrada: ${primeraFecha}`)
+                    // 🆕 BUSCAR LA FECHA MÁS CERCANA A LA SOLICITADA
+                    let fechaMasCercana = fechasEncontradas[0]
+                    let menorDiferencia = Number.MAX_SAFE_INTEGER
+
+                    for (const fechaEncontrada of fechasEncontradas) {
+                        try {
+                            const fechaEncontradaObj = parse(fechaEncontrada, "dd/MM/yyyy", new Date())
+                            const diferencia = Math.abs(fechaEncontradaObj.getTime() - fechaConsulta.getTime())
+
+                            if (diferencia < menorDiferencia) {
+                                menorDiferencia = diferencia
+                                fechaMasCercana = fechaEncontrada
+                            }
+                        } catch (error) {
+                            console.log(`⚠️ Error parseando fecha ${fechaEncontrada}:`, error)
+                        }
+                    }
+
+                    resultadosData = data[fechaMasCercana] as ResultadoDia
+                    console.log(`✅ Usando fecha más cercana: ${fechaMasCercana}`)
                 }
             }
 
@@ -966,11 +1036,11 @@ export async function POST(request: Request) {
             throw new Error("Datos incompletos o inválidos")
         }
 
-        // 🔥 USAR FUNCIONES CONSISTENTES PARA FECHAS
+        // 🔥 USAR FUNCIONES ROBUSTAS PARA FECHAS
         const fechaObj = parse(fecha, "dd/MM/yyyy", new Date())
         const fechaArgentina = toZonedTime(fechaObj, "America/Argentina/Buenos_Aires")
-        const fechaKeyFirebase = formatearFechaConsistente(fechaArgentina, "yyyy-MM-dd")
-        const nombreDia = formatearFechaConsistente(fechaArgentina, "EEEE").replace(/^\w/, (c) => c.toUpperCase())
+        const fechaKeyFirebase = formatearFechaArgentina(fechaArgentina, "yyyy-MM-dd")
+        const nombreDia = formatearFechaArgentina(fechaArgentina, "EEEE").replace(/^\w/, (c) => c.toUpperCase())
 
         console.log(`📅 POST - Fecha recibida: ${fecha}`)
         console.log(`📅 POST - Key Firebase: ${fechaKeyFirebase}`)
@@ -1050,4 +1120,4 @@ export async function POST(request: Request) {
     }
 }
 
-console.log("app/api/extractos/route.ts cargado.")
+console.log("app/api/extractos/route.ts cargado - RAILWAY OPTIMIZADO.")
