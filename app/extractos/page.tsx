@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useCallback, useEffect } from "react"
 import Navbar from "../components/Navbar"
 import { Button } from "@/components/ui/button"
@@ -100,6 +99,28 @@ export default function ExtractosPage() {
         Nocturna: Array(20).fill(""),
     })
     const [isSavingNeuquen, setIsSavingNeuquen] = useState(false)
+
+    // Estados para el modal de Santa Fe
+    const [showSantaFeModal, setShowSantaFeModal] = useState(false)
+    const [santaFeData, setSantaFeData] = useState<ProvinciaData>({
+        Previa: Array(20).fill(""),
+        Primera: Array(20).fill(""),
+        Matutina: Array(20).fill(""),
+        Vespertina: Array(20).fill(""),
+        Nocturna: Array(20).fill(""),
+    })
+    const [isSavingSantaFe, setIsSavingSantaFe] = useState(false)
+
+    // Estados para el modal de Misiones
+    const [showMisionesModal, setShowMisionesModal] = useState(false)
+    const [misionesData, setMisionesData] = useState<ProvinciaData>({
+        Previa: Array(20).fill(""),
+        Primera: Array(20).fill(""),
+        Matutina: Array(20).fill(""),
+        Vespertina: Array(20).fill(""),
+        Nocturna: Array(20).fill(""),
+    })
+    const [isSavingMisiones, setIsSavingMisiones] = useState(false)
 
     const fetchExtractos = useCallback(
         async (date: Date) => {
@@ -233,13 +254,21 @@ export default function ExtractosPage() {
         }
     }
 
+    // Handlers específicos para cada provincia
     const handleTucumanNumberChange = (turno: string, index: number, value: string) => {
         handleProvinciaNumberChange("TUCUMAN", turno, index, value, setTucumanData, tucumanData)
     }
 
-    // Handler para Neuquén
     const handleNeuquenNumberChange = (turno: string, index: number, value: string) => {
         handleProvinciaNumberChange("NEUQUEN", turno, index, value, setNeuquenData, neuquenData)
+    }
+
+    const handleSantaFeNumberChange = (turno: string, index: number, value: string) => {
+        handleProvinciaNumberChange("SANTA", turno, index, value, setSantaFeData, santaFeData)
+    }
+
+    const handleMisionesNumberChange = (turno: string, index: number, value: string) => {
+        handleProvinciaNumberChange("MISION", turno, index, value, setMisionesData, misionesData)
     }
 
     // Función genérica para obtener turnos ya guardados
@@ -282,7 +311,7 @@ export default function ExtractosPage() {
             setIsSaving(true)
             setError(null)
 
-            // 🔥 USAR LA FECHA SELECCIONADA, NO LA ACTUAL
+            // Usar la fecha seleccionada
             const fecha = format(selectedDate, "dd/MM/yyyy", { locale: es })
             console.log(`🗓️ Guardando con fecha seleccionada: ${fecha}`)
 
@@ -324,7 +353,7 @@ export default function ExtractosPage() {
                     body: JSON.stringify({
                         provincia: provincia,
                         turno: turno,
-                        fecha: fecha, // 🔥 Usar la fecha seleccionada
+                        fecha: fecha,
                         numeros: numerosCompletos,
                     }),
                 })
@@ -380,13 +409,21 @@ export default function ExtractosPage() {
         }
     }
 
+    // Handlers específicos para confirmar cada provincia
     const handleConfirmarTucuman = () => {
         handleConfirmarProvincia("TUCUMAN", tucumanData, setTucumanData, setIsSavingTucuman, setShowTucumanModal)
     }
 
-    // Handler para confirmar Neuquén
     const handleConfirmarNeuquen = () => {
         handleConfirmarProvincia("NEUQUEN", neuquenData, setNeuquenData, setIsSavingNeuquen, setShowNeuquenModal)
+    }
+
+    const handleConfirmarSantaFe = () => {
+        handleConfirmarProvincia("SANTA", santaFeData, setSantaFeData, setIsSavingSantaFe, setShowSantaFeModal)
+    }
+
+    const handleConfirmarMisiones = () => {
+        handleConfirmarProvincia("MISION", misionesData, setMisionesData, setIsSavingMisiones, setShowMisionesModal)
     }
 
     const formatDateAndDay = (fecha: string) => {
@@ -504,7 +541,6 @@ export default function ExtractosPage() {
 
             const data = await response.json()
             setDebugInfo((prev) => prev + `\nFecha forzada recibida: ${JSON.stringify(data)}`)
-
             setUsarFechaForzada(true)
             fetchExtractos(selectedDate)
         } catch (error) {
@@ -516,7 +552,6 @@ export default function ExtractosPage() {
     }
 
     const sorteoOrder = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
-
     const sortExtractos = (a: Extracto, b: Extracto) => {
         return sorteoOrder.indexOf(a.sorteo) - sorteoOrder.indexOf(b.sorteo)
     }
@@ -530,7 +565,7 @@ export default function ExtractosPage() {
         return "bg-gray-100 text-gray-800"
     }
 
-    // 🔥 FUNCIÓN PARA ABRIR MODAL TUCUMÁN CON PREVENCIÓN DE CIERRE
+    // Funciones para abrir modales
     const abrirModalTucuman = (e: React.MouseEvent) => {
         e.preventDefault()
         e.stopPropagation()
@@ -538,7 +573,6 @@ export default function ExtractosPage() {
         setShowTucumanModal(true)
     }
 
-    // 🔥 FUNCIÓN PARA ABRIR MODAL NEUQUÉN CON PREVENCIÓN DE CIERRE
     const abrirModalNeuquen = (e: React.MouseEvent) => {
         e.preventDefault()
         e.stopPropagation()
@@ -546,7 +580,21 @@ export default function ExtractosPage() {
         setShowNeuquenModal(true)
     }
 
-    // 🔥 FUNCIÓN PARA CERRAR MODAL CON CONFIRMACIÓN
+    const abrirModalSantaFe = (e: React.MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        console.log("🔓 Abriendo modal Santa Fe")
+        setShowSantaFeModal(true)
+    }
+
+    const abrirModalMisiones = (e: React.MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        console.log("🔓 Abriendo modal Misiones")
+        setShowMisionesModal(true)
+    }
+
+    // Función para cerrar modal
     const cerrarModal = (provincia: string, setShowModal: React.Dispatch<React.SetStateAction<boolean>>) => {
         console.log(`🔒 Cerrando modal ${provincia}`)
         setShowModal(false)
@@ -650,7 +698,7 @@ export default function ExtractosPage() {
                                 )}
                             </Button>
 
-                            {/* 🔥 Botón Tipear Tucumán CORREGIDO */}
+                            {/* Botón Tipear Tucumán */}
                             <Button
                                 variant="outline"
                                 size="sm"
@@ -666,7 +714,7 @@ export default function ExtractosPage() {
                                 </span>
                             </Button>
 
-                            {/* 🔥 Botón Tipear Neuquén CORREGIDO */}
+                            {/* Botón Tipear Neuquén */}
                             <Button
                                 variant="outline"
                                 size="sm"
@@ -679,6 +727,38 @@ export default function ExtractosPage() {
                                     {getTurnosPendientes("NEUQUEN").length === 0
                                         ? "Neuquén Completo"
                                         : `Tipear Neuquén (${getTurnosPendientes("NEUQUEN").length})`}
+                                </span>
+                            </Button>
+
+                            {/* Botón Tipear Santa Fe */}
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={abrirModalSantaFe}
+                                className="border-red-300 text-red-700 hover:bg-red-50 hover:border-red-500 bg-transparent"
+                                disabled={getTurnosPendientes("SANTA").length === 0}
+                            >
+                                <Keyboard className="h-3 w-3 mr-1" />
+                                <span className="text-xs">
+                                    {getTurnosPendientes("SANTA").length === 0
+                                        ? "Santa Fe Completo"
+                                        : `Tipear Santa Fe (${getTurnosPendientes("SANTA").length})`}
+                                </span>
+                            </Button>
+
+                            {/* Botón Tipear Misiones */}
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={abrirModalMisiones}
+                                className="border-pink-300 text-pink-700 hover:bg-pink-50 hover:border-pink-500 bg-transparent"
+                                disabled={getTurnosPendientes("MISION").length === 0}
+                            >
+                                <Keyboard className="h-3 w-3 mr-1" />
+                                <span className="text-xs">
+                                    {getTurnosPendientes("MISION").length === 0
+                                        ? "Misiones Completo"
+                                        : `Tipear Misiones (${getTurnosPendientes("MISION").length})`}
                                 </span>
                             </Button>
 
@@ -733,9 +813,9 @@ export default function ExtractosPage() {
                         <div className="mb-4 p-4 bg-blue-100 border border-blue-300 rounded-lg flex items-start">
                             <Info className="h-5 w-5 mr-2 text-blue-600 flex-shrink-0 mt-0.5" />
                             <p className="text-sm text-blue-800">
-                                Nota: Los sorteos de Montevideo (Matutina y Nocturna) solo se muestran de lunes a viernes. Para Tucumán
-                                y Neuquén, use los botones "Tipear" para ingresar los resultados manualmente. Los resultados se
-                                guardarán con la fecha seleccionada en el calendario.
+                                Nota: Los sorteos de Montevideo (Matutina y Nocturna) solo se muestran de lunes a viernes. Para Tucumán,
+                                Neuquén, Santa Fe y Misiones, use los botones "Tipear" para ingresar los resultados manualmente. Los
+                                resultados se guardarán con la fecha seleccionada en el calendario.
                             </p>
                         </div>
 
@@ -906,7 +986,7 @@ export default function ExtractosPage() {
                     </CardContent>
                 </Card>
 
-                {/* 🔥 Modal de Tucumán CORREGIDO */}
+                {/* Modal de Tucumán */}
                 <Dialog open={showTucumanModal} onOpenChange={(open) => !open && cerrarModal("TUCUMAN", setShowTucumanModal)}>
                     <DialogContent
                         className="max-w-4xl max-h-[80vh] overflow-y-auto"
@@ -951,10 +1031,10 @@ export default function ExtractosPage() {
                                                             value={numero}
                                                             onChange={(e) => handleTucumanNumberChange(turno, index, e.target.value)}
                                                             className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
-                                                                ? "border-green-300 bg-green-50"
-                                                                : numero.length > 0
-                                                                    ? "border-yellow-300 bg-yellow-50"
-                                                                    : "border-gray-300"
+                                                                    ? "border-green-300 bg-green-50"
+                                                                    : numero.length > 0
+                                                                        ? "border-yellow-300 bg-yellow-50"
+                                                                        : "border-gray-300"
                                                                 }`}
                                                             placeholder={`${index + 1}`}
                                                             maxLength={4}
@@ -1009,7 +1089,7 @@ export default function ExtractosPage() {
                     </DialogContent>
                 </Dialog>
 
-                {/* 🔥 Modal de Neuquén CORREGIDO */}
+                {/* Modal de Neuquén */}
                 <Dialog open={showNeuquenModal} onOpenChange={(open) => !open && cerrarModal("NEUQUEN", setShowNeuquenModal)}>
                     <DialogContent
                         className="max-w-4xl max-h-[80vh] overflow-y-auto"
@@ -1054,10 +1134,10 @@ export default function ExtractosPage() {
                                                             value={numero}
                                                             onChange={(e) => handleNeuquenNumberChange(turno, index, e.target.value)}
                                                             className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
-                                                                ? "border-green-300 bg-green-50"
-                                                                : numero.length > 0
-                                                                    ? "border-yellow-300 bg-yellow-50"
-                                                                    : "border-gray-300"
+                                                                    ? "border-green-300 bg-green-50"
+                                                                    : numero.length > 0
+                                                                        ? "border-yellow-300 bg-yellow-50"
+                                                                        : "border-gray-300"
                                                                 }`}
                                                             placeholder={`${index + 1}`}
                                                             maxLength={4}
@@ -1102,6 +1182,216 @@ export default function ExtractosPage() {
                                                 <CheckCircle className="h-4 w-4 mr-2" />
                                                 Confirmar (
                                                 {getTurnosPendientes("NEUQUEN").filter((turno) => isTurnoCompleto(turno, neuquenData)).length}{" "}
+                                                turnos listos)
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+                            </>
+                        )}
+                    </DialogContent>
+                </Dialog>
+
+                {/* Modal de Santa Fe */}
+                <Dialog open={showSantaFeModal} onOpenChange={(open) => !open && cerrarModal("SANTA", setShowSantaFeModal)}>
+                    <DialogContent
+                        className="max-w-4xl max-h-[80vh] overflow-y-auto"
+                        onPointerDownOutside={(e) => e.preventDefault()}
+                    >
+                        <DialogHeader>
+                            <DialogTitle className="text-lg font-bold text-center">
+                                Tipear Resultados - SANTA FE ({format(selectedDate, "dd/MM/yyyy", { locale: es })})
+                            </DialogTitle>
+                        </DialogHeader>
+                        {getTurnosPendientes("SANTA").length === 0 ? (
+                            <div className="text-center py-8">
+                                <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                                <p className="text-lg font-semibold text-green-700">
+                                    ¡Todos los turnos de SANTA FE ya están guardados!
+                                </p>
+                                <p className="text-sm text-gray-600 mt-2">No hay turnos pendientes para tipear.</p>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="space-y-6">
+                                    {getTurnosPendientes("SANTA").map((turno) => {
+                                        const numerosCompletados = contarNumerosCompletados(turno, santaFeData)
+                                        const turnoCompleto = isTurnoCompleto(turno, santaFeData)
+                                        return (
+                                            <div key={turno} className="border rounded-lg p-4">
+                                                <div className="flex justify-between items-center mb-3">
+                                                    <Label className="text-sm font-semibold">{turno}</Label>
+                                                    <div className="flex items-center gap-2">
+                                                        <span
+                                                            className={`text-xs px-2 py-1 rounded ${turnoCompleto ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
+                                                                }`}
+                                                        >
+                                                            {numerosCompletados}/20
+                                                        </span>
+                                                        {turnoCompleto && <CheckCircle className="h-4 w-4 text-green-500" />}
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-10 gap-2">
+                                                    {santaFeData[turno].map((numero, index) => (
+                                                        <Input
+                                                            key={index}
+                                                            type="text"
+                                                            value={numero}
+                                                            onChange={(e) => handleSantaFeNumberChange(turno, index, e.target.value)}
+                                                            className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
+                                                                    ? "border-green-300 bg-green-50"
+                                                                    : numero.length > 0
+                                                                        ? "border-yellow-300 bg-yellow-50"
+                                                                        : "border-gray-300"
+                                                                }`}
+                                                            placeholder={`${index + 1}`}
+                                                            maxLength={4}
+                                                            data-provincia="SANTA"
+                                                            data-turno={turno}
+                                                            data-index={index}
+                                                        />
+                                                    ))}
+                                                </div>
+                                                {!turnoCompleto && numerosCompletados > 0 && (
+                                                    <p className="text-xs text-yellow-600 mt-2">
+                                                        Faltan {20 - numerosCompletados} números de 4 dígitos para completar este turno
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                                <div className="flex justify-end gap-2 pt-4 border-t">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => cerrarModal("SANTA", setShowSantaFeModal)}
+                                        disabled={isSavingSantaFe}
+                                    >
+                                        Cancelar
+                                    </Button>
+                                    <Button
+                                        onClick={handleConfirmarSantaFe}
+                                        disabled={
+                                            isSavingSantaFe ||
+                                            getTurnosPendientes("SANTA").filter((turno) => isTurnoCompleto(turno, santaFeData)).length === 0
+                                        }
+                                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
+                                    >
+                                        {isSavingSantaFe ? (
+                                            <>
+                                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                                Guardando...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <CheckCircle className="h-4 w-4 mr-2" />
+                                                Confirmar (
+                                                {getTurnosPendientes("SANTA").filter((turno) => isTurnoCompleto(turno, santaFeData)).length}{" "}
+                                                turnos listos)
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+                            </>
+                        )}
+                    </DialogContent>
+                </Dialog>
+
+                {/* Modal de Misiones */}
+                <Dialog open={showMisionesModal} onOpenChange={(open) => !open && cerrarModal("MISION", setShowMisionesModal)}>
+                    <DialogContent
+                        className="max-w-4xl max-h-[80vh] overflow-y-auto"
+                        onPointerDownOutside={(e) => e.preventDefault()}
+                    >
+                        <DialogHeader>
+                            <DialogTitle className="text-lg font-bold text-center">
+                                Tipear Resultados - MISIONES ({format(selectedDate, "dd/MM/yyyy", { locale: es })})
+                            </DialogTitle>
+                        </DialogHeader>
+                        {getTurnosPendientes("MISION").length === 0 ? (
+                            <div className="text-center py-8">
+                                <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                                <p className="text-lg font-semibold text-green-700">
+                                    ¡Todos los turnos de MISIONES ya están guardados!
+                                </p>
+                                <p className="text-sm text-gray-600 mt-2">No hay turnos pendientes para tipear.</p>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="space-y-6">
+                                    {getTurnosPendientes("MISION").map((turno) => {
+                                        const numerosCompletados = contarNumerosCompletados(turno, misionesData)
+                                        const turnoCompleto = isTurnoCompleto(turno, misionesData)
+                                        return (
+                                            <div key={turno} className="border rounded-lg p-4">
+                                                <div className="flex justify-between items-center mb-3">
+                                                    <Label className="text-sm font-semibold">{turno}</Label>
+                                                    <div className="flex items-center gap-2">
+                                                        <span
+                                                            className={`text-xs px-2 py-1 rounded ${turnoCompleto ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
+                                                                }`}
+                                                        >
+                                                            {numerosCompletados}/20
+                                                        </span>
+                                                        {turnoCompleto && <CheckCircle className="h-4 w-4 text-green-500" />}
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-10 gap-2">
+                                                    {misionesData[turno].map((numero, index) => (
+                                                        <Input
+                                                            key={index}
+                                                            type="text"
+                                                            value={numero}
+                                                            onChange={(e) => handleMisionesNumberChange(turno, index, e.target.value)}
+                                                            className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
+                                                                    ? "border-green-300 bg-green-50"
+                                                                    : numero.length > 0
+                                                                        ? "border-yellow-300 bg-yellow-50"
+                                                                        : "border-gray-300"
+                                                                }`}
+                                                            placeholder={`${index + 1}`}
+                                                            maxLength={4}
+                                                            data-provincia="MISION"
+                                                            data-turno={turno}
+                                                            data-index={index}
+                                                        />
+                                                    ))}
+                                                </div>
+                                                {!turnoCompleto && numerosCompletados > 0 && (
+                                                    <p className="text-xs text-yellow-600 mt-2">
+                                                        Faltan {20 - numerosCompletados} números de 4 dígitos para completar este turno
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                                <div className="flex justify-end gap-2 pt-4 border-t">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => cerrarModal("MISION", setShowMisionesModal)}
+                                        disabled={isSavingMisiones}
+                                    >
+                                        Cancelar
+                                    </Button>
+                                    <Button
+                                        onClick={handleConfirmarMisiones}
+                                        disabled={
+                                            isSavingMisiones ||
+                                            getTurnosPendientes("MISION").filter((turno) => isTurnoCompleto(turno, misionesData)).length === 0
+                                        }
+                                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
+                                    >
+                                        {isSavingMisiones ? (
+                                            <>
+                                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                                Guardando...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <CheckCircle className="h-4 w-4 mr-2" />
+                                                Confirmar (
+                                                {getTurnosPendientes("MISION").filter((turno) => isTurnoCompleto(turno, misionesData)).length}{" "}
                                                 turnos listos)
                                             </>
                                         )}
