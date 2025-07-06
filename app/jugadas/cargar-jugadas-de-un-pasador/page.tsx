@@ -95,6 +95,9 @@ export default function CargarJugadas() {
     const [secuenciaCounter, setSecuenciaCounter] = useState(10000)
     const [isLoading, setIsLoading] = useState(false)
 
+    // NUEVO: Estado para manejar la secuencia actual
+    const [secuenciaActual, setSecuenciaActual] = useState<string>("")
+
     // Estados para repetir jugada
     const [isRepeatDialogOpen, setIsRepeatDialogOpen] = useState(false)
     const [secuenciaBuscar, setSecuenciaBuscar] = useState("")
@@ -172,13 +175,28 @@ export default function CargarJugadas() {
         }
     }
 
+    // FUNCIÓN CORREGIDA: Solo incrementar cuando realmente se guarde
     const incrementSecuenciaCounter = useCallback(() => {
-        setSecuenciaCounter((prevCounter) => {
-            const newCounter = prevCounter + 1
-            localStorage.setItem("secuenciaCounter", newCounter.toString())
-            return newCounter
-        })
-    }, [])
+        const newCounter = secuenciaCounter + 1
+        setSecuenciaCounter(newCounter)
+        localStorage.setItem("secuenciaCounter", newCounter.toString())
+        return newCounter
+    }, [secuenciaCounter])
+
+    // FUNCIÓN CORREGIDA: Generar secuencia sin incrementar el contador
+    const generarSecuenciaTemporal = useCallback(() => {
+        const secuencia = secuenciaCounter.toString().padStart(9, "0")
+        console.log("🔢 Secuencia temporal generada:", secuencia)
+        return secuencia
+    }, [secuenciaCounter])
+
+    // FUNCIÓN CORREGIDA: Confirmar y usar la secuencia definitivamente
+    const confirmarSecuencia = useCallback(() => {
+        const nuevaSecuencia = incrementSecuenciaCounter().toString().padStart(9, "0")
+        setSecuenciaActual(nuevaSecuencia)
+        console.log("✅ Secuencia confirmada y guardada:", nuevaSecuencia)
+        return nuevaSecuencia
+    }, [incrementSecuenciaCounter])
 
     const calcularTotalMonto = useCallback(() => {
         const total = jugadas.reduce((sum, jugada) => {
@@ -217,23 +235,19 @@ export default function CargarJugadas() {
         return format(fecha, "dd/MM/yy HH:mm")
     }
 
-    const generarSecuencia = () => {
-        const secuencia = secuenciaCounter.toString().padStart(9, "0")
-        incrementSecuenciaCounter()
-        return secuencia
-    }
-
+    // FUNCIÓN CORREGIDA: Generar ticket con secuencia temporal
     const generarTicket = (jugadasParaTicket: Jugada[]) => {
         const pasadorSeleccionado = pasadores.find((p) => p.id === selectedPasador)
         if (!pasadorSeleccionado) {
             toast.error("Pasador no encontrado")
-            return
+            return ""
         }
 
         let ticketContent = ""
         const fechaHora = formatDate(new Date())
         const terminal = "72-0005"
-        const secuencia = generarSecuencia()
+        // USAR SECUENCIA TEMPORAL para el ticket
+        const secuencia = generarSecuenciaTemporal()
 
         ticketContent += "TICKET\n"
         ticketContent += `FECHA/HORA ${fechaHora}\n`
@@ -262,6 +276,8 @@ export default function CargarJugadas() {
 
         setTicketContent(ticketContent)
         setIsTicketDialogOpen(true)
+
+        // NO incrementar el contador aquí, solo devolver la secuencia temporal
         return secuencia
     }
 
@@ -280,7 +296,6 @@ export default function CargarJugadas() {
             }
 
             console.log("🔍 Obteniendo jugadas del pasador:", pasadorDoc.nombre)
-
             const nombreColeccion = `JUGADAS DE ${pasadorDoc.nombre}`
             const jugadasCollection = collection(db, nombreColeccion)
             const jugadasSnapshot = await getDocs(jugadasCollection)
@@ -311,6 +326,7 @@ export default function CargarJugadas() {
 
             console.log("📋 Jugadas encontradas:", jugadasList.length)
             console.log("📋 Jugadas filtradas:", jugadasFiltradas.length)
+
             setJugadasPasador(jugadasFiltradas)
 
             if (jugadasFiltradas.length === 0) {
@@ -333,7 +349,6 @@ export default function CargarJugadas() {
         setIsSearching(true)
         try {
             console.log("🔍 Iniciando búsqueda de secuencia:", secuenciaBuscar)
-
             let jugadasEncontradas: any[] = []
             let pasadorEncontrado = null
             let coleccionesRevisadas = 0
@@ -392,7 +407,6 @@ export default function CargarJugadas() {
             if (jugada.loteria) {
                 setSelectedSorteo(jugada.loteria)
             }
-
             if (jugada.provincias && jugada.provincias.length > 0) {
                 setSelectedLotteries(jugada.provincias)
             }
@@ -400,7 +414,6 @@ export default function CargarJugadas() {
             // Cargar las jugadas individuales
             if (jugada.jugadas && Array.isArray(jugada.jugadas)) {
                 const nuevasJugadas = createEmptyJugadas()
-
                 jugada.jugadas.forEach((jugadaItem: any, index: number) => {
                     if (index < TOTAL_FILAS) {
                         nuevasJugadas[index] = {
@@ -410,7 +423,6 @@ export default function CargarJugadas() {
                         }
                     }
                 })
-
                 setJugadas(nuevasJugadas)
             }
 
@@ -441,7 +453,6 @@ export default function CargarJugadas() {
             if (jugadaSeleccionada.loteria) {
                 setSelectedSorteo(jugadaSeleccionada.loteria)
             }
-
             if (jugadaSeleccionada.provincias && jugadaSeleccionada.provincias.length > 0) {
                 setSelectedLotteries(jugadaSeleccionada.provincias)
             }
@@ -449,7 +460,6 @@ export default function CargarJugadas() {
             // Cargar las jugadas individuales
             if (jugadaSeleccionada.jugadas && Array.isArray(jugadaSeleccionada.jugadas)) {
                 const nuevasJugadas = createEmptyJugadas()
-
                 jugadaSeleccionada.jugadas.forEach((jugadaItem: any, index: number) => {
                     if (index < TOTAL_FILAS) {
                         nuevasJugadas[index] = {
@@ -459,7 +469,6 @@ export default function CargarJugadas() {
                         }
                     }
                 })
-
                 setJugadas(nuevasJugadas)
             }
 
@@ -491,6 +500,7 @@ export default function CargarJugadas() {
         return { resumen, total: Number(total) || 0 }
     }
 
+    // FUNCIÓN CORREGIDA: Guardar con secuencia única
     const guardarJugadas = async () => {
         if (jugadas.length === 0 || !selectedPasador || selectedLotteries.length === 0 || !selectedSorteo) {
             toast.error("Faltan datos para guardar las jugadas")
@@ -511,12 +521,39 @@ export default function CargarJugadas() {
                 return
             }
 
-            const secuencia = generarTicket(jugadasValidas)
+            // GENERAR TICKET PRIMERO (con secuencia temporal)
+            const secuenciaTemporal = generarTicket(jugadasValidas)
+
+            // Esperar a que el usuario confirme el ticket
+            // La función real de guardado se ejecutará cuando el usuario presione "Confirmar" en el ticket
+        } catch (error) {
+            console.error("Error al preparar las jugadas:", error)
+            toast.error("Error al preparar las jugadas")
+            setIsLoading(false)
+        }
+    }
+
+    // NUEVA FUNCIÓN: Confirmar y guardar definitivamente
+    const confirmarYGuardarJugadas = async () => {
+        try {
+            const pasadorSeleccionado = pasadores.find((p) => p.id === selectedPasador)
+            if (!pasadorSeleccionado) {
+                toast.error("Pasador no encontrado")
+                return
+            }
+
+            const jugadasValidas = jugadas.filter((j) => j.numero && j.posicion && j.importe)
+
+            // CONFIRMAR LA SECUENCIA DEFINITIVA (aquí se incrementa el contador)
+            const secuenciaDefinitiva = confirmarSecuencia()
+
+            console.log("💾 Guardando con secuencia definitiva:", secuenciaDefinitiva)
+
             const jugadasPasadorCollection = collection(db, `JUGADAS DE ${pasadorSeleccionado.nombre}`)
 
             const nuevaJugada = {
                 fechaHora: serverTimestamp(),
-                id: secuencia,
+                id: secuenciaDefinitiva,
                 jugadas: jugadasValidas.map((jugada) => ({
                     decompositionStep: 0,
                     fechaHora: new Date().toISOString(),
@@ -529,7 +566,7 @@ export default function CargarJugadas() {
                     originalPosicion: jugada.posicion,
                     posicion: jugada.posicion,
                     provincias: selectedLotteries,
-                    secuencia: secuencia,
+                    secuencia: secuenciaDefinitiva,
                     tipo: "NUEVA JUGADA",
                 })),
                 loteria: selectedSorteo,
@@ -538,16 +575,23 @@ export default function CargarJugadas() {
                 numeros: jugadasValidas.map((j) => j.numero),
                 pasadorId: selectedPasador,
                 provincias: selectedLotteries,
-                secuencia: secuencia,
+                secuencia: secuenciaDefinitiva,
                 tipo: "NUEVA JUGADA",
                 totalMonto: totalMonto,
             }
 
             await addDoc(jugadasPasadorCollection, nuevaJugada)
-            toast.success("Jugadas guardadas exitosamente")
+
+            console.log("✅ Jugada guardada exitosamente con secuencia:", secuenciaDefinitiva)
+            toast.success(`Jugada guardada exitosamente con secuencia: ${secuenciaDefinitiva}`)
+
+            // Limpiar formulario
             limpiarFormulario()
+
+            // Cerrar diálogo del ticket
+            setIsTicketDialogOpen(false)
         } catch (error) {
-            console.error("Error al guardar las jugadas:", error)
+            console.error("❌ Error al guardar las jugadas:", error)
             toast.error("Error al guardar las jugadas")
         } finally {
             setIsLoading(false)
@@ -559,6 +603,7 @@ export default function CargarJugadas() {
         setSelectedLotteries([])
         setSelectedSorteo("")
         setTotalMonto(0)
+        setSecuenciaActual("")
     }
 
     // Función para manejar la navegación con Enter
@@ -666,7 +711,6 @@ export default function CargarJugadas() {
                                         </SelectContent>
                                     </Select>
                                 </div>
-
                                 <div className="flex items-center gap-4">
                                     <Label htmlFor="pasador" className="min-w-[80px] text-blue-800 font-semibold">
                                         PASADOR:
@@ -709,6 +753,9 @@ export default function CargarJugadas() {
                                 <h3 className="text-lg font-semibold mb-2 text-blue-800 border-b-2 border-blue-300 pb-2 flex items-center">
                                     <Calculator className="h-5 w-5 mr-2 text-blue-600" />
                                     DATOS DE LA JUGADA
+                                    {secuenciaActual && (
+                                        <Badge className="ml-4 bg-green-100 text-green-800">Secuencia: {secuenciaActual}</Badge>
+                                    )}
                                 </h3>
                                 <div className="border border-blue-200 rounded-md overflow-auto max-h-[600px] shadow-md">
                                     <Table>
@@ -752,7 +799,7 @@ export default function CargarJugadas() {
                                         {isLoading ? (
                                             <>
                                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                Guardando...
+                                                Preparando...
                                             </>
                                         ) : (
                                             <>
@@ -767,7 +814,7 @@ export default function CargarJugadas() {
                     </CardContent>
                 </Card>
 
-                {/* Diálogo de ticket */}
+                {/* Diálogo de ticket CORREGIDO */}
                 <Dialog open={isTicketDialogOpen} onOpenChange={setIsTicketDialogOpen}>
                     <DialogContent className="bg-white border border-blue-200 shadow-xl max-w-md">
                         <DialogHeader>
@@ -778,51 +825,74 @@ export default function CargarJugadas() {
                         </div>
                         <DialogFooter className="flex justify-between">
                             <Button
-                                onClick={() => setIsTicketDialogOpen(false)}
+                                onClick={() => {
+                                    setIsTicketDialogOpen(false)
+                                    setIsLoading(false)
+                                }}
                                 variant="outline"
                                 className="border-red-300 text-red-700 hover:bg-red-50"
                             >
                                 <X className="mr-2 h-4 w-4" />
-                                Cerrar
+                                Cancelar
                             </Button>
-                            <Button
-                                onClick={() => {
-                                    const printWindow = window.open("", "", "width=300,height=600")
-                                    if (printWindow) {
-                                        printWindow.document.write(`
-                                            <html>
-                                                <head>
-                                                    <title>Ticket de Jugada</title>
-                                                    <style>
-                                                        body {
-                                                            font-family: 'Courier New', monospace;
-                                                            font-size: 12px;
-                                                            width: 80mm;
-                                                            margin: 0;
-                                                            padding: 10px;
-                                                        }
-                                                        pre {
-                                                            white-space: pre-wrap;
-                                                            margin: 0;
-                                                        }
-                                                    </style>
-                                                </head>
-                                                <body>
-                                                    <pre>${ticketContent}</pre>
-                                                </body>
-                                            </html>
-                                        `)
-                                        printWindow.document.close()
-                                        printWindow.focus()
-                                        printWindow.print()
-                                        printWindow.close()
-                                    }
-                                }}
-                                className="bg-gradient-to-r from-green-600 to-teal-700 hover:from-green-700 hover:to-teal-800 text-white"
-                            >
-                                <Printer className="mr-2 h-4 w-4" />
-                                Imprimir
-                            </Button>
+                            <div className="flex gap-2">
+                                <Button
+                                    onClick={() => {
+                                        const printWindow = window.open("", "", "width=300,height=600")
+                                        if (printWindow) {
+                                            printWindow.document.write(`
+                                                <html>
+                                                    <head>
+                                                        <title>Ticket de Jugada</title>
+                                                        <style>
+                                                            body {
+                                                                font-family: 'Courier New', monospace;
+                                                                font-size: 12px;
+                                                                width: 80mm;
+                                                                margin: 0;
+                                                                padding: 10px;
+                                                            }
+                                                            pre {
+                                                                white-space: pre-wrap;
+                                                                margin: 0;
+                                                            }
+                                                        </style>
+                                                    </head>
+                                                    <body>
+                                                        <pre>${ticketContent}</pre>
+                                                    </body>
+                                                </html>
+                                            `)
+                                            printWindow.document.close()
+                                            printWindow.focus()
+                                            printWindow.print()
+                                            printWindow.close()
+                                        }
+                                    }}
+                                    variant="outline"
+                                    className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                                >
+                                    <Printer className="mr-2 h-4 w-4" />
+                                    Imprimir
+                                </Button>
+                                <Button
+                                    onClick={confirmarYGuardarJugadas}
+                                    className="bg-gradient-to-r from-green-600 to-teal-700 hover:from-green-700 hover:to-teal-800 text-white"
+                                    disabled={isLoading}
+                                >
+                                    {isLoading ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Guardando...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Save className="mr-2 h-4 w-4" />
+                                            Confirmar y Guardar
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
@@ -840,7 +910,6 @@ export default function CargarJugadas() {
                                     </Badge>
                                 )}
                             </DialogTitle>
-
                             {/* Buscador por número de secuencia */}
                             <div className="mb-4">
                                 <Label className="text-sm font-medium mb-2 block">Buscar por número de secuencia:</Label>
@@ -940,7 +1009,6 @@ export default function CargarJugadas() {
                                                                     </Badge>
                                                                     <span className="text-sm font-medium">{resumen}</span>
                                                                 </div>
-
                                                                 <div className="text-xs text-gray-500 space-y-1">
                                                                     <div>📅 {formatearFecha(jugada.fechaFormateada || new Date())}</div>
                                                                     <div>🎯 {jugada.loteria || "N/A"}</div>
@@ -950,7 +1018,6 @@ export default function CargarJugadas() {
                                                                     <div>🔢 Secuencia: {jugada.secuencia}</div>
                                                                 </div>
                                                             </div>
-
                                                             <div className="text-right">
                                                                 <div className="text-lg font-bold text-green-600">${total.toFixed(2)}</div>
                                                                 {isSelected && (
