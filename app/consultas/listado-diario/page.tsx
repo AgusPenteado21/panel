@@ -860,13 +860,21 @@ export default function ListadoDiario() {
                     </div>
 
                     {/* Resumen de totales del módulo */}
-                    <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mt-4 p-3 bg-white rounded-lg border border-blue-200">
+                    <div className="grid grid-cols-2 md:grid-cols-7 gap-4 mt-4 p-3 bg-white rounded-lg border border-blue-200">
                         <div className="text-center">
                             <div className="text-xs text-gray-600">Saldo Actual</div>
                             <div
                                 className={`font-bold text-sm ${totalesModulo.saldoActual >= 0 ? "text-green-600" : "text-red-600"}`}
                             >
                                 {formatearMoneda(totalesModulo.saldoActual)}
+                            </div>
+                        </div>
+                        <div className="text-center">
+                            <div className="text-xs text-gray-600">Saldo Anterior</div>
+                            <div
+                                className={`font-bold text-sm ${totalesModulo.saldoAnterior >= 0 ? "text-blue-600" : "text-red-600"}`}
+                            >
+                                {formatearMoneda(totalesModulo.saldoAnterior)}
                             </div>
                         </div>
                         <div className="text-center">
@@ -984,6 +992,7 @@ export default function ListadoDiario() {
                                         <TableHeader className="bg-gradient-to-r from-blue-600 to-indigo-700">
                                             <TableRow>
                                                 <TableHead className="text-white font-bold">Pasador</TableHead>
+                                                <TableHead className="text-right text-white font-bold">Saldo Anterior</TableHead>
                                                 <TableHead className="text-right text-white font-bold">Saldo Actual</TableHead>
                                                 <TableHead className="text-right text-white font-bold">Saldo Total</TableHead>
                                                 <TableHead className="text-right text-white font-bold">Cobrado</TableHead>
@@ -1009,6 +1018,11 @@ export default function ListadoDiario() {
                                                                 <div className="text-sm text-gray-600">{pasador.nombre}</div>
                                                             </div>
                                                         </div>
+                                                    </TableCell>
+                                                    <TableCell
+                                                        className={`text-right font-semibold ${pasador.saldoAnterior >= 0 ? "text-blue-600" : "text-red-600"}`}
+                                                    >
+                                                        {formatearMoneda(pasador.saldoAnterior)}
                                                     </TableCell>
                                                     <TableCell
                                                         className={`text-right font-semibold ${pasador.saldoActual >= 0 ? "text-green-600" : "text-red-600"}`}
