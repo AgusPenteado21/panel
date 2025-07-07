@@ -141,7 +141,6 @@ const obtenerAciertosDesdeDB = async (fechaSeleccionada: Date): Promise<Record<s
     try {
         console.log("🔄 Obteniendo aciertos desde la base de datos...")
         const fechaString = format(fechaSeleccionada, "yyyy-MM-dd")
-
         const aciertosRef = collection(db, "aciertos")
         const aciertosSnapshot = await getDocs(aciertosRef)
         const aciertosData: Record<string, number> = {}
@@ -172,7 +171,6 @@ const obtenerSaldoAnterior = async (pasadorId: string, fechaSeleccionada: Date):
         const fechaAnterior = new Date(fechaSeleccionada)
         fechaAnterior.setDate(fechaAnterior.getDate() - 1)
         const fechaAnteriorStr = format(fechaAnterior, "yyyy-MM-dd")
-
         console.log(`🔍 Buscando saldo anterior para pasador ${pasadorId} en fecha ${fechaAnteriorStr}`)
 
         const saldosDiariosRef = collection(db, "saldos_diarios")
@@ -199,7 +197,7 @@ const obtenerSaldoAnterior = async (pasadorId: string, fechaSeleccionada: Date):
     }
 }
 
-// Función para calcular saldos con la lógica corregida
+// Función para calcular saldos con la lógica CORREGIDA
 const calcularSaldos = (
     saldoAnteriorOriginal: number,
     jugado: number,
@@ -208,7 +206,7 @@ const calcularSaldos = (
     pagos: number,
     cobros: number,
 ) => {
-    console.log(`📊 Calculando saldos:`)
+    console.log(`📊 Calculando saldos CORREGIDOS:`)
     console.log(`Saldo anterior original: ${saldoAnteriorOriginal}`)
     console.log(`Jugado: ${jugado}, Comisión: ${comision}, Premios: ${premios}`)
     console.log(`Pagos: ${pagos}, Cobros: ${cobros}`)
@@ -221,52 +219,45 @@ const calcularSaldos = (
     let saldoAnteriorFinal = saldoAnteriorOriginal
     let saldoActualFinal = saldoActualBase
 
-    // 3. PROCESAR PAGOS (se descuentan del saldo anterior PRIMERO)
+    // 3. PROCESAR PAGOS (se RESTAN del saldo - dinero que sale)
     if (pagos > 0) {
-        console.log(`💸 Procesando pagos: ${pagos}`)
-        if (saldoAnteriorFinal >= pagos) {
-            // El saldo anterior cubre todos los pagos
-            saldoAnteriorFinal -= pagos
-            console.log(`✅ Pagos cubiertos por saldo anterior. Saldo anterior restante: ${saldoAnteriorFinal}`)
-        } else {
-            // El saldo anterior no cubre todos los pagos
-            const excesoPagos = pagos - saldoAnteriorFinal
-            saldoAnteriorFinal = 0
-            saldoActualFinal -= excesoPagos
-            console.log(`⚠️ Saldo anterior agotado. Exceso de pagos (${excesoPagos}) descontado del saldo actual`)
-        }
-    }
-
-    // 4. PROCESAR COBROS (se descuentan del saldo total)
-    if (cobros > 0) {
-        console.log(`💰 Procesando cobros: ${cobros}`)
+        console.log(`💸 Procesando pagos (dinero que sale): ${pagos}`)
+        // Los pagos se descuentan del saldo total disponible
         const saldoTotalDisponible = saldoAnteriorFinal + saldoActualFinal
-        console.log(`Saldo total disponible: ${saldoAnteriorFinal} + ${saldoActualFinal} = ${saldoTotalDisponible}`)
 
-        if (saldoTotalDisponible >= cobros) {
-            // Hay suficiente saldo total para cubrir los cobros
-            // Primero cobramos del saldo actual, luego del anterior
-            if (saldoActualFinal >= cobros) {
-                saldoActualFinal -= cobros
-                console.log(`✅ Cobros cubiertos por saldo actual. Saldo actual restante: ${saldoActualFinal}`)
+        if (saldoTotalDisponible >= pagos) {
+            // Hay suficiente saldo para cubrir los pagos
+            // Primero descontamos del saldo anterior, luego del actual
+            if (saldoAnteriorFinal >= pagos) {
+                saldoAnteriorFinal -= pagos
+                console.log(`✅ Pagos cubiertos por saldo anterior. Saldo anterior restante: ${saldoAnteriorFinal}`)
             } else {
-                const excesoCobros = cobros - saldoActualFinal
-                saldoActualFinal = 0
-                saldoAnteriorFinal -= excesoCobros
-                console.log(`✅ Saldo actual agotado. Exceso de cobros (${excesoCobros}) descontado del saldo anterior`)
+                const excesoPagos = pagos - saldoAnteriorFinal
+                saldoAnteriorFinal = 0
+                saldoActualFinal -= excesoPagos
+                console.log(`⚠️ Saldo anterior agotado. Exceso de pagos (${excesoPagos}) descontado del saldo actual`)
             }
         } else {
             // No hay suficiente saldo total
-            const deficit = cobros - saldoTotalDisponible
+            const deficit = pagos - saldoTotalDisponible
             saldoAnteriorFinal = 0
             saldoActualFinal = -deficit
-            console.log(`❌ Saldo insuficiente. Déficit: ${deficit}`)
+            console.log(`❌ Saldo insuficiente para pagos. Déficit: ${deficit}`)
         }
+    }
+
+    // 4. PROCESAR COBROS (se SUMAN al saldo - dinero que entra) ✅ CORREGIDO
+    if (cobros > 0) {
+        console.log(`💰 Procesando cobros (dinero que entra): ${cobros}`)
+        // Los cobros se SUMAN al saldo total
+        saldoActualFinal += cobros
+        console.log(`✅ Cobros agregados al saldo actual. Nuevo saldo actual: ${saldoActualFinal}`)
     }
 
     // 5. Calcular saldo total final
     const saldoTotal = saldoAnteriorFinal + saldoActualFinal
-    console.log(`🎯 RESULTADO FINAL:`)
+
+    console.log(`🎯 RESULTADO FINAL CORREGIDO:`)
     console.log(`Saldo anterior: ${saldoAnteriorFinal}`)
     console.log(`Saldo actual: ${saldoActualFinal}`)
     console.log(`Saldo total: ${saldoTotal}`)
@@ -307,6 +298,7 @@ const guardarSaldosDiarios = async (pasador: Pasador, fecha: Date): Promise<bool
             },
             { merge: true },
         )
+
         return true
     } catch (error) {
         console.error(`❌ Error al guardar saldos diarios para ${pasador.nombre}:`, error)
@@ -357,6 +349,7 @@ export default function ListadoDiario() {
                 // Obtener pagos y cobros históricos
                 const pagosRef = collection(db, "pagos")
                 const cobrosRef = collection(db, "cobros")
+
                 const pagosQuery = query(pagosRef, where("pasadorId", "==", pasador.id), where("fecha", "==", fechaString))
                 const cobrosQuery = query(cobrosRef, where("pasadorId", "==", pasador.id), where("fecha", "==", fechaString))
 
@@ -377,7 +370,7 @@ export default function ListadoDiario() {
 
                 const comisionCalculada = (pasador.comisionPorcentaje / 100) * ventasOnlineAcumuladas
 
-                // Calcular saldos con la nueva lógica
+                // Calcular saldos con la nueva lógica CORREGIDA
                 const saldosCalculados = calcularSaldos(
                     pasador.saldoAnterior,
                     ventasOnlineAcumuladas,
@@ -448,7 +441,7 @@ export default function ListadoDiario() {
                     prevPasadores.map((pasador) => {
                         const nuevosAciertos = aciertosData[pasador.nombre.toLowerCase()] || 0
 
-                        // Calcular saldos con la nueva lógica
+                        // Calcular saldos con la nueva lógica CORREGIDA
                         const saldosCalculados = calcularSaldos(
                             pasador.saldoAnterior,
                             pasador.jugado,
@@ -524,7 +517,7 @@ export default function ListadoDiario() {
 
                     const comisionCalculada = (pasador.comisionPorcentaje / 100) * ventasOnlineAcumuladas
 
-                    // Calcular saldos con la nueva lógica
+                    // Calcular saldos con la nueva lógica CORREGIDA
                     const saldoAnteriorOriginal = await obtenerSaldoAnterior(pasador.id, fechaSeleccionada)
                     const saldosCalculados = calcularSaldos(
                         saldoAnteriorOriginal,
@@ -553,6 +546,7 @@ export default function ListadoDiario() {
 
                                 // Guardar en Firebase de forma asíncrona
                                 setTimeout(() => guardarSaldosDiarios(pasadorActualizado, fechaSeleccionada), 0)
+
                                 return pasadorActualizado
                             }
                             return p
@@ -655,12 +649,14 @@ export default function ListadoDiario() {
                 (a, b) => Number.parseInt(a) - Number.parseInt(b),
             )
             setModulos(modulosUnicos)
+
             if (modulosUnicos.length > 0 && !modulosUnicos.includes(moduloSeleccionado)) {
                 setModuloSeleccionado(modulosUnicos[0])
             }
 
             // 7. Solo configurar listeners en tiempo real si es hoy
             const esHoy = format(fechaSeleccionada, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd")
+
             if (esHoy) {
                 console.log("📅 Es hoy, configurando listeners en tiempo real...")
                 // Configurar listeners para datos en tiempo real
@@ -684,6 +680,7 @@ export default function ListadoDiario() {
             // Mostrar resumen de aciertos
             const totalAciertos = Object.keys(aciertosData).length
             const totalPremios = Object.values(aciertosData).reduce((sum: number, premio: number) => sum + premio, 0)
+
             if (totalAciertos > 0) {
                 toast.success(`✅ ${totalAciertos} pasadores con aciertos (Total: $${totalPremios.toLocaleString()})`, {
                     duration: 5000,
@@ -730,7 +727,7 @@ export default function ListadoDiario() {
                 pasadores.map(async (pasador) => {
                     const nuevosPremios = aciertosData[pasador.nombre.toLowerCase()] || 0
 
-                    // Calcular saldos con la nueva lógica
+                    // Calcular saldos con la nueva lógica CORREGIDA
                     const saldoAnteriorOriginal = await obtenerSaldoAnterior(pasador.id, fechaSeleccionada)
                     const saldosCalculados = calcularSaldos(
                         saldoAnteriorOriginal,
@@ -756,6 +753,7 @@ export default function ListadoDiario() {
 
             const totalAciertos = Object.keys(aciertosData).length
             const totalPremios = Object.values(aciertosData).reduce((sum: number, premio: number) => sum + premio, 0)
+
             if (totalAciertos > 0) {
                 toast.success(`✅ Aciertos actualizados: ${totalAciertos} pasadores (Total: $${totalPremios.toLocaleString()})`)
             } else {
@@ -826,7 +824,7 @@ export default function ListadoDiario() {
             <Navbar />
             <main className="container mx-auto p-4">
                 <h1 className="text-2xl font-bold text-blue-800 mb-4 border-b-2 border-blue-500 pb-2">
-                    Listado Diario - Lógica de Saldos Corregida ✅
+                    Listado Diario - Lógica de Cobros CORREGIDA ✅💰
                 </h1>
 
                 <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-md p-4 mb-4 border border-blue-200">
@@ -889,11 +887,11 @@ export default function ListadoDiario() {
                         </div>
                         <div className="text-center">
                             <div className="text-xs text-gray-600">Cobrado</div>
-                            <div className="font-bold text-sm text-blue-600">{formatearMoneda(totalesModulo.cobrado)}</div>
+                            <div className="font-bold text-sm text-green-600">{formatearMoneda(totalesModulo.cobrado)}</div>
                         </div>
                         <div className="text-center">
                             <div className="text-xs text-gray-600">Pagado</div>
-                            <div className="font-bold text-sm text-purple-600">{formatearMoneda(totalesModulo.pagado)}</div>
+                            <div className="font-bold text-sm text-red-600">{formatearMoneda(totalesModulo.pagado)}</div>
                         </div>
                         <div className="text-center">
                             <div className="text-xs text-gray-600">Total Ganado</div>
@@ -901,16 +899,14 @@ export default function ListadoDiario() {
                         </div>
                     </div>
 
-                    {/* Explicación de la nueva lógica */}
-                    <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                        <div className="text-xs text-yellow-800">
-                            <strong>💡 Lógica de Saldos:</strong>
-                            <br />💸 <strong>PAGOS:</strong> Se descuentan del saldo anterior PRIMERO, luego del saldo actual
-                            <br />💰 <strong>COBROS:</strong> Se descuentan del saldo total (anterior + actual)
-                            <br />📊 <strong>Ejemplo:</strong> Saldo ant: 800, Saldo act: 200 → Pago 800 = Saldo ant: 0, Saldo act:
-                            200
-                            <br />📊 <strong>Ejemplo:</strong> Saldo ant: 800, Saldo act: 200 → Cobro 1000 = Saldo ant: 0, Saldo act:
-                            0
+                    {/* Explicación de la nueva lógica CORREGIDA */}
+                    <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                        <div className="text-xs text-green-800">
+                            <strong>💡 Lógica de Saldos CORREGIDA:</strong>
+                            <br />💸 <strong>PAGOS:</strong> Se RESTAN del saldo (dinero que sale)
+                            <br />💰 <strong>COBROS:</strong> Se SUMAN al saldo (dinero que entra) ✅
+                            <br />📊 <strong>Ejemplo:</strong> Saldo: -7000, Cobro: 36200 = Saldo final: 29200 (positivo) ✅
+                            <br />📊 <strong>Ejemplo:</strong> Saldo: 1000, Pago: 500 = Saldo final: 500
                         </div>
                     </div>
                 </div>
@@ -926,7 +922,7 @@ export default function ListadoDiario() {
                         <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
                         <span className="text-green-600">
                             {format(fechaSeleccionada, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd")
-                                ? "Tiempo real ✅ | Lógica corregida 💰"
+                                ? "Tiempo real ✅ | Cobros corregidos 💰"
                                 : "Datos históricos 📚"}
                         </span>
                     </div>
@@ -1030,10 +1026,12 @@ export default function ListadoDiario() {
                                                         {formatearMoneda(pasador.saldoActual)}
                                                         {pasador.pagado > 0 && (
                                                             <div className="inline-block ml-1">
-                                                                <div
-                                                                    className="h-2 w-2 bg-green-500 rounded-full"
-                                                                    title="Pagos afectan saldo actual"
-                                                                ></div>
+                                                                <div className="h-2 w-2 bg-red-500 rounded-full" title="Pagos afectan saldo"></div>
+                                                            </div>
+                                                        )}
+                                                        {pasador.cobrado > 0 && (
+                                                            <div className="inline-block ml-1">
+                                                                <div className="h-2 w-2 bg-green-500 rounded-full" title="Cobros suman al saldo"></div>
                                                             </div>
                                                         )}
                                                     </TableCell>
@@ -1041,17 +1039,11 @@ export default function ListadoDiario() {
                                                         className={`text-right font-semibold ${pasador.saldoTotal >= 0 ? "text-green-600" : "text-red-600"}`}
                                                     >
                                                         {formatearMoneda(pasador.saldoTotal)}
-                                                        {pasador.cobrado > 0 && (
-                                                            <div className="inline-block ml-1">
-                                                                <div
-                                                                    className="h-2 w-2 bg-red-500 rounded-full"
-                                                                    title="Cobros afectan saldo total"
-                                                                ></div>
-                                                            </div>
-                                                        )}
                                                     </TableCell>
-                                                    <TableCell className="text-right text-blue-600">{formatearMoneda(pasador.cobrado)}</TableCell>
-                                                    <TableCell className="text-right text-purple-600">
+                                                    <TableCell className="text-right text-green-600 font-semibold">
+                                                        {formatearMoneda(pasador.cobrado)}
+                                                    </TableCell>
+                                                    <TableCell className="text-right text-red-600 font-semibold">
                                                         {formatearMoneda(pasador.pagado)}
                                                     </TableCell>
                                                     <TableCell className="text-right text-indigo-600">

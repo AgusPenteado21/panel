@@ -1031,10 +1031,10 @@ export default function ExtractosPage() {
                                                             value={numero}
                                                             onChange={(e) => handleTucumanNumberChange(turno, index, e.target.value)}
                                                             className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
-                                                                    ? "border-green-300 bg-green-50"
-                                                                    : numero.length > 0
-                                                                        ? "border-yellow-300 bg-yellow-50"
-                                                                        : "border-gray-300"
+                                                                ? "border-green-300 bg-green-50"
+                                                                : numero.length > 0
+                                                                    ? "border-yellow-300 bg-yellow-50"
+                                                                    : "border-gray-300"
                                                                 }`}
                                                             placeholder={`${index + 1}`}
                                                             maxLength={4}
@@ -1134,10 +1134,10 @@ export default function ExtractosPage() {
                                                             value={numero}
                                                             onChange={(e) => handleNeuquenNumberChange(turno, index, e.target.value)}
                                                             className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
-                                                                    ? "border-green-300 bg-green-50"
-                                                                    : numero.length > 0
-                                                                        ? "border-yellow-300 bg-yellow-50"
-                                                                        : "border-gray-300"
+                                                                ? "border-green-300 bg-green-50"
+                                                                : numero.length > 0
+                                                                    ? "border-yellow-300 bg-yellow-50"
+                                                                    : "border-gray-300"
                                                                 }`}
                                                             placeholder={`${index + 1}`}
                                                             maxLength={4}
@@ -1239,10 +1239,10 @@ export default function ExtractosPage() {
                                                             value={numero}
                                                             onChange={(e) => handleSantaFeNumberChange(turno, index, e.target.value)}
                                                             className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
-                                                                    ? "border-green-300 bg-green-50"
-                                                                    : numero.length > 0
-                                                                        ? "border-yellow-300 bg-yellow-50"
-                                                                        : "border-gray-300"
+                                                                ? "border-green-300 bg-green-50"
+                                                                : numero.length > 0
+                                                                    ? "border-yellow-300 bg-yellow-50"
+                                                                    : "border-gray-300"
                                                                 }`}
                                                             placeholder={`${index + 1}`}
                                                             maxLength={4}
@@ -1344,10 +1344,10 @@ export default function ExtractosPage() {
                                                             value={numero}
                                                             onChange={(e) => handleMisionesNumberChange(turno, index, e.target.value)}
                                                             className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
-                                                                    ? "border-green-300 bg-green-50"
-                                                                    : numero.length > 0
-                                                                        ? "border-yellow-300 bg-yellow-50"
-                                                                        : "border-gray-300"
+                                                                ? "border-green-300 bg-green-50"
+                                                                : numero.length > 0
+                                                                    ? "border-yellow-300 bg-yellow-50"
+                                                                    : "border-gray-300"
                                                                 }`}
                                                             placeholder={`${index + 1}`}
                                                             maxLength={4}
