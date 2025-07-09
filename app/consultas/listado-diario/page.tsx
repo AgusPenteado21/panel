@@ -306,7 +306,7 @@ const calcularSaldos = (
     pagos: number,
     cobros: number,
 ) => {
-    console.log(`🚨 FUNCIÓN calcularSaldos - DEBUGGING CRÍTICO:`)
+    console.log(`🚨 FUNCIÓN calcularSaldos - LÓGICA CORRECTA:`)
     console.log(`🔒 saldoAnteriorOriginal: ${saldoAnteriorOriginal}`)
     console.log(`📈 jugado: ${jugado}`)
     console.log(`💼 comision: ${comision}`)
@@ -317,45 +317,34 @@ const calcularSaldos = (
     // ✅ PASO 1: El saldo anterior se mantiene tal como está
     const saldoAnteriorFinal = saldoAnteriorOriginal
 
-    // ✅ PASO 2: El saldo actual SOLO incluye operaciones del día (SIN pagos ni cobros)
-    const saldoActualDelDia = jugado - comision - premios
+    // ✅ PASO 2: El saldo actual INCLUYE saldo anterior + operaciones del día
+    const operacionesDelDia = jugado - comision - premios
+    const saldoActualFinal = saldoAnteriorOriginal + operacionesDelDia
 
-    // ✅ PASO 3: El saldo total incluye TODO: anterior + actual + pagos - cobros
-    const saldoTotalFinal = saldoAnteriorFinal + saldoActualDelDia + pagos - cobros
+    // ✅ PASO 3: El saldo total incluye saldo actual + pagos - cobros
+    const saldoTotalFinal = saldoActualFinal + pagos - cobros
 
     console.log(`🧮 CÁLCULOS PASO A PASO:`)
-    console.log(`   Saldo Actual = ${jugado} - ${comision} - ${premios} = ${saldoActualDelDia}`)
-    console.log(
-        `   Saldo Total = ${saldoAnteriorFinal} + ${saldoActualDelDia} + ${pagos} - ${cobros} = ${saldoTotalFinal}`,
-    )
+    console.log(`   Operaciones del día = ${jugado} - ${comision} - ${premios} = ${operacionesDelDia}`)
+    console.log(`   Saldo Actual = ${saldoAnteriorOriginal} + ${operacionesDelDia} = ${saldoActualFinal}`)
+    console.log(`   Saldo Total = ${saldoActualFinal} + ${pagos} - ${cobros} = ${saldoTotalFinal}`)
 
     // ✅ VERIFICACIÓN CRÍTICA PARA HERNAN
     if (jugado === 146700 && comision === 44010 && premios === 0) {
-        console.log(`🚨 CASO HERNAN DETECTADO:`)
+        console.log(`🚨 CASO HERNAN DETECTADO - LÓGICA CORREGIDA:`)
         console.log(`   Saldo Anterior: ${saldoAnteriorOriginal}`)
-        console.log(`   Jugado: ${jugado}`)
-        console.log(`   Comisión: ${comision}`)
-        console.log(`   Premios: ${premios}`)
-        console.log(`   Pagos: ${pagos}`)
-        console.log(`   Cobros: ${cobros}`)
+        console.log(`   Operaciones del día: ${jugado} - ${comision} - ${premios} = ${operacionesDelDia}`)
+        console.log(`   Saldo Actual: ${saldoAnteriorOriginal} + ${operacionesDelDia} = ${saldoActualFinal}`)
+        console.log(`   Saldo Total: ${saldoActualFinal} + ${pagos} - ${cobros} = ${saldoTotalFinal}`)
         console.log(`   `)
-        console.log(`   FÓRMULA COMPLETA:`)
-        console.log(`   Saldo Actual = ${jugado} - ${comision} - ${premios} = ${saldoActualDelDia}`)
-        console.log(`   Saldo Total = ${saldoAnteriorOriginal} + ${saldoActualDelDia} + ${pagos} - ${cobros}`)
-        console.log(
-            `   Saldo Total = ${saldoAnteriorOriginal} + ${saldoActualDelDia} + ${pagos} - ${cobros} = ${saldoTotalFinal}`,
-        )
-        console.log(`   `)
-        console.log(`   RESULTADO ESPERADO:`)
-        console.log(`   - Saldo Actual: ${saldoActualDelDia} (debería ser 102,690)`)
-        console.log(
-            `   - Saldo Total: ${saldoTotalFinal} (debería ser ${saldoAnteriorOriginal} + 102,690 + ${pagos} - ${cobros})`,
-        )
+        console.log(`   🔄 PARA MAÑANA:`)
+        console.log(`   - El saldo anterior de mañana será: ${saldoTotalFinal}`)
+        console.log(`   - El saldo actual de mañana incluirá: ${saldoTotalFinal} + operaciones de mañana`)
     }
 
     return {
         saldoAnterior: saldoAnteriorFinal,
-        saldoActual: saldoActualDelDia,
+        saldoActual: saldoActualFinal,
         saldoTotal: saldoTotalFinal,
         saldoFinal: saldoTotalFinal,
     }
@@ -935,12 +924,11 @@ export default function ListadoDiario() {
 
                     <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
                         <div className="text-xs text-green-800">
-                            <strong>✅ LÓGICA CORREGIDA:</strong>
+                            <strong>✅ LÓGICA CORRECTA DEFINITIVA:</strong>
                             <br />🔒 <strong>Saldo Anterior:</strong> Se mantiene sin cambios del día anterior
-                            <br />📊 <strong>Saldo Actual:</strong> SOLO operaciones del día (Jugado - Comisión - Premios)
-                            <br />💯 <strong>Saldo Total:</strong> Anterior + Actual + Pagos - Cobros
-                            <br />
-                            ⚠️ <strong>Los pagos y cobros NO afectan el saldo actual, solo el saldo total</strong>
+                            <br />📊 <strong>Saldo Actual:</strong> Saldo Anterior + Operaciones del día (Jugado - Comisión - Premios)
+                            <br />💯 <strong>Saldo Total:</strong> Saldo Actual + Pagos - Cobros
+                            <br />🔄 <strong>PARA MAÑANA:</strong> El Saldo Total de hoy = Saldo Anterior de mañana
                             <br />💰 <strong>Pagos se SUMAN</strong> (dinero que entra) | 💸 <strong>Cobros se RESTAN</strong> (dinero
                             que sale)
                         </div>
@@ -1031,7 +1019,7 @@ export default function ListadoDiario() {
                                                         className={`text-right font-semibold ${pasador.saldoActual >= 0 ? "text-green-600" : "text-red-600"}`}
                                                     >
                                                         {formatearMoneda(pasador.saldoActual)}
-                                                        <div className="text-xs text-gray-500">Solo operaciones del día</div>
+                                                        <div className="text-xs text-gray-500">Saldo Anterior + Operaciones</div>
                                                     </TableCell>
                                                     <TableCell
                                                         className={`text-right font-bold ${pasador.saldoTotal >= 0 ? "text-purple-700" : "text-red-600"}`}

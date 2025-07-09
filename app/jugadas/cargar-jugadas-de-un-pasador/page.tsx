@@ -1,5 +1,4 @@
 "use client"
-
 import { useState, useEffect, useCallback, useRef, type KeyboardEvent } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -8,7 +7,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+    DialogDescription,
+} from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { db } from "@/lib/firebase"
@@ -16,7 +22,7 @@ import { collection, getDocs, addDoc, serverTimestamp, query, where } from "fire
 import { format } from "date-fns"
 import toast from "react-hot-toast"
 import Navbar from "@/app/components/Navbar"
-import { Loader2, Save, Printer, X, Calculator, RotateCcw, Search } from "lucide-react"
+import { Loader2, Save, Printer, Calculator, RotateCcw, Search, AlertTriangle, CheckCircle } from "lucide-react"
 
 interface Pasador {
     id: string
@@ -73,10 +79,8 @@ const provinceAbbreviations: { [key: string]: string } = {
     MISION: "MIS",
 }
 
-// Número total de filas de jugadas
 const TOTAL_FILAS = 100
 
-// Crear un array de 100 jugadas vacías para inicializar el estado
 const createEmptyJugadas = () => {
     return Array(TOTAL_FILAS)
         .fill(null)
@@ -92,11 +96,9 @@ export default function CargarJugadas() {
     const [totalMonto, setTotalMonto] = useState(0)
     const [ticketContent, setTicketContent] = useState<string>("")
     const [isTicketDialogOpen, setIsTicketDialogOpen] = useState(false)
-    const [secuenciaCounter, setSecuenciaCounter] = useState(10000)
     const [isLoading, setIsLoading] = useState(false)
-
-    // NUEVO: Estado para manejar la secuencia actual
     const [secuenciaActual, setSecuenciaActual] = useState<string>("")
+    const [debugInfo, setDebugInfo] = useState<string>("")
 
     // Estados para repetir jugada
     const [isRepeatDialogOpen, setIsRepeatDialogOpen] = useState(false)
@@ -106,16 +108,12 @@ export default function CargarJugadas() {
     const [isLoadingJugadas, setIsLoadingJugadas] = useState(false)
     const [jugadaSeleccionada, setJugadaSeleccionada] = useState<JugadaFirebase | null>(null)
 
-    // Crear un array para almacenar las referencias a los inputs
     const inputRefs = useRef<HTMLInputElement[][]>([])
 
-    // Inicializar el array de referencias
     useEffect(() => {
-        // Asegurarse de que tenemos 100 filas de jugadas
         if (jugadas.length < TOTAL_FILAS) {
             setJugadas(createEmptyJugadas())
         }
-        // Inicializar las referencias
         inputRefs.current = Array(TOTAL_FILAS)
             .fill(0)
             .map(() => Array(3).fill(null))
@@ -147,56 +145,50 @@ export default function CargarJugadas() {
     ]
 
     useEffect(() => {
+        console.log("🚀 INICIANDO APLICACIÓN - CARGAR JUGADAS")
+        setDebugInfo("Iniciando aplicación...")
         fetchPasadores()
-        loadSecuenciaCounter()
     }, [])
 
     const fetchPasadores = async () => {
         try {
+            console.log("🔄 Iniciando carga de pasadores...")
+            setDebugInfo("Cargando pasadores desde Firebase...")
             const pasadoresCollection = collection(db, "pasadores")
             const pasadoresSnapshot = await getDocs(pasadoresCollection)
-            const pasadoresList = pasadoresSnapshot.docs.map((doc) => ({
-                id: doc.id,
-                displayId: doc.data().displayId,
-                nombre: doc.data().nombre,
-                nombreFantasia: doc.data().nombreFantasia,
-            }))
+
+            const pasadoresList = pasadoresSnapshot.docs.map((doc) => {
+                const data = doc.data()
+                return {
+                    id: doc.id,
+                    displayId: data.displayId,
+                    nombre: data.nombre,
+                    nombreFantasia: data.nombreFantasia,
+                }
+            })
+
             setPasadores(pasadoresList)
+            setDebugInfo(`✅ ${pasadoresList.length} pasadores cargados`)
+            console.log(`✅ ${pasadoresList.length} pasadores cargados exitosamente`)
         } catch (error) {
-            console.error("Error fetching pasadores:", error)
-            toast.error("Error al cargar los pasadores")
+            console.error("❌ ERROR al cargar pasadores:", error)
+            setDebugInfo(`❌ Error al cargar pasadores: ${error instanceof Error ? error.message : String(error)}`)
+            toast.error(`Error al cargar los pasadores: ${error instanceof Error ? error.message : String(error)}`)
         }
     }
 
-    const loadSecuenciaCounter = () => {
-        const storedCounter = localStorage.getItem("secuenciaCounter")
-        if (storedCounter) {
-            setSecuenciaCounter(Number.parseInt(storedCounter))
-        }
-    }
+    // ✅ FUNCIÓN SIMPLIFICADA: Generar secuencia única
+    const generarSecuenciaUnica = (): string => {
+        const ahora = new Date()
+        const timestamp = ahora.getTime()
+        const random = Math.floor(Math.random() * 999)
+        const secuencia = `${timestamp}${random.toString().padStart(3, "0")}`
 
-    // FUNCIÓN CORREGIDA: Solo incrementar cuando realmente se guarde
-    const incrementSecuenciaCounter = useCallback(() => {
-        const newCounter = secuenciaCounter + 1
-        setSecuenciaCounter(newCounter)
-        localStorage.setItem("secuenciaCounter", newCounter.toString())
-        return newCounter
-    }, [secuenciaCounter])
+        console.log("🔢 Secuencia generada:", secuencia)
+        setDebugInfo(`✅ Secuencia generada: ${secuencia}`)
 
-    // FUNCIÓN CORREGIDA: Generar secuencia sin incrementar el contador
-    const generarSecuenciaTemporal = useCallback(() => {
-        const secuencia = secuenciaCounter.toString().padStart(9, "0")
-        console.log("🔢 Secuencia temporal generada:", secuencia)
         return secuencia
-    }, [secuenciaCounter])
-
-    // FUNCIÓN CORREGIDA: Confirmar y usar la secuencia definitivamente
-    const confirmarSecuencia = useCallback(() => {
-        const nuevaSecuencia = incrementSecuenciaCounter().toString().padStart(9, "0")
-        setSecuenciaActual(nuevaSecuencia)
-        console.log("✅ Secuencia confirmada y guardada:", nuevaSecuencia)
-        return nuevaSecuencia
-    }, [incrementSecuenciaCounter])
+    }
 
     const calcularTotalMonto = useCallback(() => {
         const total = jugadas.reduce((sum, jugada) => {
@@ -204,6 +196,7 @@ export default function CargarJugadas() {
             return sum + importe * selectedLotteries.length
         }, 0)
         setTotalMonto(total)
+        console.log("💰 Total monto calculado:", total)
     }, [jugadas, selectedLotteries])
 
     useEffect(() => {
@@ -235,19 +228,66 @@ export default function CargarJugadas() {
         return format(fecha, "dd/MM/yy HH:mm")
     }
 
-    // FUNCIÓN CORREGIDA: Generar ticket con secuencia temporal
-    const generarTicket = (jugadasParaTicket: Jugada[]) => {
+    const validarDatosParaGuardar = () => {
+        console.log("🔍 === INICIANDO VALIDACIÓN DE DATOS ===")
+        setDebugInfo("Validando datos...")
+
+        if (!selectedPasador) {
+            console.log("❌ Validación falló: No hay pasador seleccionado")
+            setDebugInfo("❌ Error: No hay pasador seleccionado")
+            toast.error("❌ Debe seleccionar un pasador")
+            return false
+        }
+
+        if (!selectedSorteo) {
+            console.log("❌ Validación falló: No hay sorteo seleccionado")
+            setDebugInfo("❌ Error: No hay sorteo seleccionado")
+            toast.error("❌ Debe seleccionar un sorteo")
+            return false
+        }
+
+        if (selectedLotteries.length === 0) {
+            console.log("❌ Validación falló: No hay loterías seleccionadas")
+            setDebugInfo("❌ Error: No hay loterías seleccionadas")
+            toast.error("❌ Debe seleccionar al menos una lotería")
+            return false
+        }
+
+        const jugadasValidas = jugadas.filter((j) => j.numero && j.posicion && j.importe)
+        if (jugadasValidas.length === 0) {
+            console.log("❌ Validación falló: No hay jugadas válidas")
+            setDebugInfo("❌ Error: No hay jugadas válidas")
+            toast.error("❌ No hay jugadas válidas para guardar")
+            return false
+        }
+
+        if (totalMonto <= 0) {
+            console.log("❌ Validación falló: Monto total inválido")
+            setDebugInfo("❌ Error: Monto total inválido")
+            toast.error("❌ El monto total debe ser mayor a 0")
+            return false
+        }
+
+        console.log("✅ Validación exitosa - Todos los datos son correctos")
+        setDebugInfo("✅ Validación exitosa")
+        return true
+    }
+
+    // ✅ FUNCIÓN SIMPLIFICADA: Generar ticket
+    const generarTicket = (jugadasParaTicket: Jugada[], secuenciaUnica: string) => {
+        console.log("🎫 === GENERANDO TICKET ===")
+        setDebugInfo("Generando ticket...")
+
         const pasadorSeleccionado = pasadores.find((p) => p.id === selectedPasador)
         if (!pasadorSeleccionado) {
-            toast.error("Pasador no encontrado")
+            console.log("❌ Error: Pasador no encontrado")
+            setDebugInfo("❌ Error: Pasador no encontrado")
             return ""
         }
 
         let ticketContent = ""
         const fechaHora = formatDate(new Date())
         const terminal = "72-0005"
-        // USAR SECUENCIA TEMPORAL para el ticket
-        const secuencia = generarSecuenciaTemporal()
 
         ticketContent += "TICKET\n"
         ticketContent += `FECHA/HORA ${fechaHora}\n`
@@ -258,7 +298,7 @@ export default function CargarJugadas() {
 
         const loteriaAbreviada = lotteryAbbreviations[selectedSorteo] || selectedSorteo
         ticketContent += `${loteriaAbreviada}\n`
-        ticketContent += `SECUENCIA  ${secuencia}\n`
+        ticketContent += `SECUENCIA  ${secuenciaUnica}\n`
 
         const provinciasSet = new Set(selectedLotteries.map((l) => provinceAbbreviations[l] || l))
         ticketContent += `LOTERIAS: ${Array.from(provinciasSet).join(" ")}\n`
@@ -268,17 +308,122 @@ export default function CargarJugadas() {
             const numero = jugada.numero.padStart(4, " ")
             const posicion = jugada.posicion.padStart(2, " ")
             const importe = Number.parseFloat(jugada.importe) || 0
-            ticketContent += `${numero}  ${posicion}   $${importe.toFixed(2)}\n`
+            const linea = `${numero}  ${posicion}   $${importe.toFixed(2)}`
+            ticketContent += linea + "\n"
         })
 
         ticketContent += "-".repeat(32) + "\n"
         ticketContent += `TOTAL: $${totalMonto.toFixed(2)}`.padStart(32) + "\n"
 
-        setTicketContent(ticketContent)
-        setIsTicketDialogOpen(true)
+        console.log("✅ Ticket generado exitosamente")
+        setDebugInfo(`✅ Ticket generado - Secuencia: ${secuenciaUnica}`)
 
-        // NO incrementar el contador aquí, solo devolver la secuencia temporal
-        return secuencia
+        return ticketContent
+    }
+
+    // ✅ FUNCIÓN PRINCIPAL SIMPLIFICADA: Guardar jugadas
+    const guardarJugadas = async () => {
+        console.log("🚀 === INICIANDO PROCESO DE GUARDADO SIMPLIFICADO ===")
+        setDebugInfo("🚀 Iniciando guardado...")
+
+        try {
+            setIsLoading(true)
+
+            // Paso 1: Validar datos
+            if (!validarDatosParaGuardar()) {
+                setIsLoading(false)
+                return
+            }
+
+            // Paso 2: Obtener datos necesarios
+            const pasadorSeleccionado = pasadores.find((p) => p.id === selectedPasador)
+            if (!pasadorSeleccionado) {
+                throw new Error("Pasador no encontrado")
+            }
+
+            const jugadasValidas = jugadas.filter((j) => j.numero && j.posicion && j.importe)
+            console.log("📋 Jugadas válidas para procesar:", jugadasValidas.length)
+
+            // Paso 3: Generar secuencia única
+            const secuenciaUnica = generarSecuenciaUnica()
+            setSecuenciaActual(secuenciaUnica)
+
+            // Paso 4: Generar ticket
+            const ticketGenerado = generarTicket(jugadasValidas, secuenciaUnica)
+            setTicketContent(ticketGenerado)
+
+            // Paso 5: Preparar datos para Firebase (ESTRUCTURA SIMPLIFICADA)
+            const nuevaJugada = {
+                fechaHora: serverTimestamp(),
+                id: secuenciaUnica,
+                jugadas: jugadasValidas.map((jugada) => ({
+                    numero: jugada.numero,
+                    posicion: jugada.posicion,
+                    importe: jugada.importe,
+                    montoTotal: Number.parseFloat(jugada.importe),
+                })),
+                loteria: selectedSorteo,
+                monto: totalMonto.toFixed(2),
+                numeros: jugadasValidas.map((j) => j.numero),
+                pasadorId: selectedPasador,
+                provincias: selectedLotteries,
+                secuencia: secuenciaUnica,
+                tipo: "NUEVA JUGADA",
+                totalMonto: totalMonto,
+            }
+
+            console.log("📤 Objeto para Firebase:")
+            console.log(JSON.stringify(nuevaJugada, null, 2))
+
+            // Paso 6: Guardar en Firebase
+            const nombreColeccion = `JUGADAS DE ${pasadorSeleccionado.nombre}`
+            console.log("📁 Guardando en colección:", nombreColeccion)
+            setDebugInfo(`💾 Guardando en: ${nombreColeccion}`)
+
+            const jugadasPasadorCollection = collection(db, nombreColeccion)
+            const docRef = await addDoc(jugadasPasadorCollection, nuevaJugada)
+
+            console.log("✅ === DOCUMENTO CREADO EXITOSAMENTE ===")
+            console.log("🆔 ID del documento:", docRef.id)
+            console.log("📍 Path completo:", docRef.path)
+
+            // Paso 7: Mostrar ticket y limpiar
+            setDebugInfo(`✅ ¡GUARDADO EXITOSO! Secuencia: ${secuenciaUnica}`)
+            toast.success(`🎉 ¡Jugada guardada exitosamente!\nSecuencia: ${secuenciaUnica}\nID: ${docRef.id}`)
+
+            setIsTicketDialogOpen(true)
+        } catch (error) {
+            console.error("❌ === ERROR CRÍTICO AL GUARDAR ===")
+            console.error("Error:", error)
+
+            let mensajeError = "Error desconocido al guardar"
+            if (error instanceof Error) {
+                mensajeError = error.message
+                if (error.message.includes("permission-denied")) {
+                    mensajeError = "Sin permisos para escribir en Firebase"
+                } else if (error.message.includes("network")) {
+                    mensajeError = "Error de conexión a Firebase"
+                }
+            }
+
+            setDebugInfo(`❌ ERROR: ${mensajeError}`)
+            toast.error(`❌ Error al guardar: ${mensajeError}`)
+        } finally {
+            console.log("🔄 Finalizando proceso de guardado...")
+            setIsLoading(false)
+        }
+    }
+
+    const limpiarFormulario = () => {
+        console.log("🧹 Limpiando formulario...")
+        setJugadas(createEmptyJugadas())
+        setSelectedLotteries([])
+        setSelectedSorteo("")
+        setTotalMonto(0)
+        setSecuenciaActual("")
+        setDebugInfo("🧹 Formulario limpiado")
+        setIsTicketDialogOpen(false)
+        console.log("✅ Formulario limpiado")
     }
 
     const obtenerJugadasDelPasador = async () => {
@@ -313,11 +458,9 @@ export default function CargarJugadas() {
                 } as JugadaFirebase
             })
 
-            // Filtrar solo jugadas de tipo "NUEVA JUGADA"
             const tiposPermitidos = ["NUEVA JUGADA"]
             const jugadasFiltradas = jugadasList.filter((jugada) => jugada.tipo && tiposPermitidos.includes(jugada.tipo))
 
-            // Ordenar por fecha más reciente primero
             jugadasFiltradas.sort((a, b) => {
                 const fechaA = a.fechaFormateada || new Date(0)
                 const fechaB = b.fechaFormateada || new Date(0)
@@ -326,7 +469,6 @@ export default function CargarJugadas() {
 
             console.log("📋 Jugadas encontradas:", jugadasList.length)
             console.log("📋 Jugadas filtradas:", jugadasFiltradas.length)
-
             setJugadasPasador(jugadasFiltradas)
 
             if (jugadasFiltradas.length === 0) {
@@ -351,18 +493,13 @@ export default function CargarJugadas() {
             console.log("🔍 Iniciando búsqueda de secuencia:", secuenciaBuscar)
             let jugadasEncontradas: any[] = []
             let pasadorEncontrado = null
-            let coleccionesRevisadas = 0
 
             for (const pasador of pasadores) {
                 const nombreColeccion = `JUGADAS DE ${pasador.nombre}`
-                console.log(`🔎 Buscando en colección: "${nombreColeccion}"`)
-
                 try {
                     const jugadasCollection = collection(db, nombreColeccion)
                     const q = query(jugadasCollection, where("secuencia", "==", secuenciaBuscar))
                     const querySnapshot = await getDocs(q)
-
-                    coleccionesRevisadas++
 
                     if (!querySnapshot.empty) {
                         const docs = querySnapshot.docs.map((doc) => {
@@ -379,13 +516,10 @@ export default function CargarJugadas() {
             }
 
             if (jugadasEncontradas.length === 0 || !pasadorEncontrado) {
-                toast.error(
-                    `No se encontró ninguna jugada con la secuencia "${secuenciaBuscar}". Se revisaron ${coleccionesRevisadas} colecciones.`,
-                )
+                toast.error(`No se encontró ninguna jugada con la secuencia "${secuenciaBuscar}".`)
                 return
             }
 
-            // Filtrar solo los tipos permitidos
             const tiposPermitidos = ["NUEVA JUGADA"]
             const jugadasFiltradas = jugadasEncontradas.filter((jugada) => tiposPermitidos.includes(jugada.tipo))
 
@@ -394,32 +528,26 @@ export default function CargarJugadas() {
                 return
             }
 
-            // Limpiar jugadas actuales
             limpiarFormulario()
-
-            // Configurar pasador
             setSelectedPasador(pasadorEncontrado.id)
 
-            // Procesar la jugada encontrada
             const jugada = jugadasFiltradas[0]
-
-            // Configurar sorteo y provincias
             if (jugada.loteria) {
                 setSelectedSorteo(jugada.loteria)
             }
+
             if (jugada.provincias && jugada.provincias.length > 0) {
                 setSelectedLotteries(jugada.provincias)
             }
 
-            // Cargar las jugadas individuales
             if (jugada.jugadas && Array.isArray(jugada.jugadas)) {
                 const nuevasJugadas = createEmptyJugadas()
                 jugada.jugadas.forEach((jugadaItem: any, index: number) => {
                     if (index < TOTAL_FILAS) {
                         nuevasJugadas[index] = {
-                            numero: jugadaItem.numero || jugadaItem.originalNumero || "",
-                            posicion: jugadaItem.posicion || jugadaItem.originalPosicion || "",
-                            importe: jugadaItem.monto || jugadaItem.montoTotal?.toString() || "",
+                            numero: jugadaItem.numero || "",
+                            posicion: jugadaItem.posicion || "",
+                            importe: jugadaItem.importe || jugadaItem.montoTotal?.toString() || "",
                         }
                     }
                 })
@@ -445,38 +573,33 @@ export default function CargarJugadas() {
 
         try {
             console.log("🎯 Cargando jugada seleccionada:", jugadaSeleccionada.secuencia)
-
-            // Limpiar formulario
             limpiarFormulario()
 
-            // Configurar sorteo y provincias
             if (jugadaSeleccionada.loteria) {
                 setSelectedSorteo(jugadaSeleccionada.loteria)
             }
+
             if (jugadaSeleccionada.provincias && jugadaSeleccionada.provincias.length > 0) {
                 setSelectedLotteries(jugadaSeleccionada.provincias)
             }
 
-            // Cargar las jugadas individuales
             if (jugadaSeleccionada.jugadas && Array.isArray(jugadaSeleccionada.jugadas)) {
                 const nuevasJugadas = createEmptyJugadas()
                 jugadaSeleccionada.jugadas.forEach((jugadaItem: any, index: number) => {
                     if (index < TOTAL_FILAS) {
                         nuevasJugadas[index] = {
-                            numero: jugadaItem.numero || jugadaItem.originalNumero || "",
-                            posicion: jugadaItem.posicion || jugadaItem.originalPosicion || "",
-                            importe: jugadaItem.monto || jugadaItem.montoTotal?.toString() || "",
+                            numero: jugadaItem.numero || "",
+                            posicion: jugadaItem.posicion || "",
+                            importe: jugadaItem.importe || jugadaItem.montoTotal?.toString() || "",
                         }
                     }
                 })
                 setJugadas(nuevasJugadas)
             }
 
-            // Cerrar el diálogo
             setIsRepeatDialogOpen(false)
             setJugadaSeleccionada(null)
             setJugadasPasador([])
-
             toast.success("Jugada cargada exitosamente. Puede modificarla y guardarla nuevamente.")
         } catch (error) {
             console.error("❌ Error al cargar jugada:", error)
@@ -500,133 +623,22 @@ export default function CargarJugadas() {
         return { resumen, total: Number(total) || 0 }
     }
 
-    // FUNCIÓN CORREGIDA: Guardar con secuencia única
-    const guardarJugadas = async () => {
-        if (jugadas.length === 0 || !selectedPasador || selectedLotteries.length === 0 || !selectedSorteo) {
-            toast.error("Faltan datos para guardar las jugadas")
-            return
-        }
-
-        try {
-            setIsLoading(true)
-            const pasadorSeleccionado = pasadores.find((p) => p.id === selectedPasador)
-            if (!pasadorSeleccionado) {
-                toast.error("Pasador no encontrado")
-                return
-            }
-
-            const jugadasValidas = jugadas.filter((j) => j.numero && j.posicion && j.importe)
-            if (jugadasValidas.length === 0) {
-                toast.error("No hay jugadas válidas para guardar")
-                return
-            }
-
-            // GENERAR TICKET PRIMERO (con secuencia temporal)
-            const secuenciaTemporal = generarTicket(jugadasValidas)
-
-            // Esperar a que el usuario confirme el ticket
-            // La función real de guardado se ejecutará cuando el usuario presione "Confirmar" en el ticket
-        } catch (error) {
-            console.error("Error al preparar las jugadas:", error)
-            toast.error("Error al preparar las jugadas")
-            setIsLoading(false)
-        }
-    }
-
-    // NUEVA FUNCIÓN: Confirmar y guardar definitivamente
-    const confirmarYGuardarJugadas = async () => {
-        try {
-            const pasadorSeleccionado = pasadores.find((p) => p.id === selectedPasador)
-            if (!pasadorSeleccionado) {
-                toast.error("Pasador no encontrado")
-                return
-            }
-
-            const jugadasValidas = jugadas.filter((j) => j.numero && j.posicion && j.importe)
-
-            // CONFIRMAR LA SECUENCIA DEFINITIVA (aquí se incrementa el contador)
-            const secuenciaDefinitiva = confirmarSecuencia()
-
-            console.log("💾 Guardando con secuencia definitiva:", secuenciaDefinitiva)
-
-            const jugadasPasadorCollection = collection(db, `JUGADAS DE ${pasadorSeleccionado.nombre}`)
-
-            const nuevaJugada = {
-                fechaHora: serverTimestamp(),
-                id: secuenciaDefinitiva,
-                jugadas: jugadasValidas.map((jugada) => ({
-                    decompositionStep: 0,
-                    fechaHora: new Date().toISOString(),
-                    loteria: selectedSorteo,
-                    monto: jugada.importe,
-                    montoTotal: Number.parseFloat(jugada.importe),
-                    numero: jugada.numero,
-                    numeros: [jugada.numero],
-                    originalNumero: jugada.numero,
-                    originalPosicion: jugada.posicion,
-                    posicion: jugada.posicion,
-                    provincias: selectedLotteries,
-                    secuencia: secuenciaDefinitiva,
-                    tipo: "NUEVA JUGADA",
-                })),
-                loteria: selectedSorteo,
-                monto: totalMonto.toFixed(2),
-                numero: jugadasValidas[0].numero,
-                numeros: jugadasValidas.map((j) => j.numero),
-                pasadorId: selectedPasador,
-                provincias: selectedLotteries,
-                secuencia: secuenciaDefinitiva,
-                tipo: "NUEVA JUGADA",
-                totalMonto: totalMonto,
-            }
-
-            await addDoc(jugadasPasadorCollection, nuevaJugada)
-
-            console.log("✅ Jugada guardada exitosamente con secuencia:", secuenciaDefinitiva)
-            toast.success(`Jugada guardada exitosamente con secuencia: ${secuenciaDefinitiva}`)
-
-            // Limpiar formulario
-            limpiarFormulario()
-
-            // Cerrar diálogo del ticket
-            setIsTicketDialogOpen(false)
-        } catch (error) {
-            console.error("❌ Error al guardar las jugadas:", error)
-            toast.error("Error al guardar las jugadas")
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
-    const limpiarFormulario = () => {
-        setJugadas(createEmptyJugadas())
-        setSelectedLotteries([])
-        setSelectedSorteo("")
-        setTotalMonto(0)
-        setSecuenciaActual("")
-    }
-
-    // Función para manejar la navegación con Enter
     const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>, rowIndex: number, colIndex: number) => {
         if (e.key === "Enter") {
             e.preventDefault()
-            // Determinar el siguiente campo para enfocar
             let nextRow = rowIndex
             let nextCol = colIndex + 1
 
-            // Si estamos en la última columna, pasar a la primera columna de la siguiente fila
             if (nextCol > 2) {
                 nextCol = 0
                 nextRow = rowIndex + 1
             }
 
-            // Si llegamos al final de todas las filas, volver al primer campo
             if (nextRow >= jugadas.length) {
                 nextRow = 0
                 nextCol = 0
             }
 
-            // Enfocar el siguiente campo
             const nextInput = inputRefs.current[nextRow]?.[nextCol]
             if (nextInput) {
                 nextInput.focus()
@@ -634,18 +646,14 @@ export default function CargarJugadas() {
         }
     }
 
-    // Función para guardar la referencia del input
     const setInputRef = (el: HTMLInputElement | null, rowIndex: number, colIndex: number) => {
         if (el && inputRefs.current[rowIndex]) {
             inputRefs.current[rowIndex][colIndex] = el
         }
     }
 
-    // Generar las filas de jugadas para asegurar que siempre haya 100
     const renderJugadasRows = () => {
-        // Asegurarse de que tenemos 100 filas
         const filasJugadas = jugadas.length < TOTAL_FILAS ? createEmptyJugadas() : jugadas
-
         return filasJugadas.map((jugada, rowIndex) => (
             <TableRow
                 key={rowIndex}
@@ -687,19 +695,40 @@ export default function CargarJugadas() {
         <div className="min-h-screen bg-gradient-to-b from-blue-50 to-indigo-50">
             <Navbar />
             <div className="container mx-auto p-4">
+                {/* Panel de Debug */}
+                <Card className="mb-4 border-orange-200 bg-orange-50">
+                    <CardHeader className="bg-orange-100">
+                        <CardTitle className="text-orange-800 flex items-center">
+                            <AlertTriangle className="h-5 w-5 mr-2" />🔧 Debug Panel - Sistema Simplificado
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                        <div className="bg-white p-3 rounded border font-mono text-sm">{debugInfo || "Esperando acción..."}</div>
+                        {secuenciaActual && (
+                            <div className="mt-2 bg-green-50 p-3 rounded border border-green-200">
+                                <div className="flex items-center text-green-800">
+                                    <CheckCircle className="h-4 w-4 mr-2" />
+                                    <span className="font-bold">Secuencia Actual:</span>
+                                    <span className="ml-2 font-mono">{secuenciaActual}</span>
+                                </div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
                 <Card className="shadow-xl border border-blue-200">
                     <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white">
-                        <CardTitle className="text-2xl font-bold text-center">PASAR JUGADAS QUINIELA</CardTitle>
+                        <CardTitle className="text-2xl font-bold text-center">✅ CARGAR JUGADAS - SISTEMA SIMPLIFICADO</CardTitle>
                     </CardHeader>
                     <CardContent className="pt-6">
                         <div className="space-y-6">
-                            <div className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-blue-50 rounded-lg border border-blue-200 shadow-sm">
-                                <div className="flex items-center gap-4">
+                            <div className="flex flex-col lg:flex-row lg:items-center gap-4 p-4 bg-blue-50 rounded-lg border border-blue-200 shadow-sm">
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-1">
                                     <Label htmlFor="sorteo" className="min-w-[80px] text-blue-800 font-semibold">
                                         SORTEO:
                                     </Label>
                                     <Select value={selectedSorteo} onValueChange={setSelectedSorteo}>
-                                        <SelectTrigger id="sorteo" className="w-[200px] border-blue-300 focus:ring-blue-500">
+                                        <SelectTrigger id="sorteo" className="w-full sm:w-[200px] border-blue-300 focus:ring-blue-500">
                                             <SelectValue placeholder="Seleccionar horario" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -711,18 +740,21 @@ export default function CargarJugadas() {
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div className="flex items-center gap-4">
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-1">
                                     <Label htmlFor="pasador" className="min-w-[80px] text-blue-800 font-semibold">
                                         PASADOR:
                                     </Label>
                                     <Select value={selectedPasador} onValueChange={setSelectedPasador}>
-                                        <SelectTrigger id="pasador" className="w-[200px] border-blue-300 focus:ring-blue-500">
+                                        <SelectTrigger id="pasador" className="w-full sm:w-[280px] border-blue-300 focus:ring-blue-500">
                                             <SelectValue placeholder="Seleccionar pasador" />
                                         </SelectTrigger>
-                                        <SelectContent>
+                                        <SelectContent className="w-[280px]">
                                             {pasadores.map((pasador) => (
-                                                <SelectItem key={pasador.id} value={pasador.id}>
-                                                    {`${pasador.displayId} - ${pasador.nombreFantasia || pasador.nombre}`}
+                                                <SelectItem key={pasador.id} value={pasador.id} className="w-full">
+                                                    <div className="flex justify-between items-center w-full">
+                                                        <span className="font-medium">{pasador.displayId}</span>
+                                                        <span className="text-gray-600 ml-2">{pasador.nombreFantasia || pasador.nombre}</span>
+                                                    </div>
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
@@ -793,18 +825,17 @@ export default function CargarJugadas() {
                                     </Button>
                                     <Button
                                         onClick={guardarJugadas}
-                                        className="bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white shadow-md transition-all duration-200 transform hover:scale-105"
+                                        className="bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800 text-white shadow-md transition-all duration-200 transform hover:scale-105"
                                         disabled={isLoading}
                                     >
                                         {isLoading ? (
                                             <>
                                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                Preparando...
+                                                Guardando...
                                             </>
                                         ) : (
                                             <>
-                                                <Save className="mr-2 h-4 w-4" />
-                                                Cargar Jugadas
+                                                <Save className="mr-2 h-4 w-4" />✅ Guardar Jugadas
                                             </>
                                         )}
                                     </Button>
@@ -814,85 +845,72 @@ export default function CargarJugadas() {
                     </CardContent>
                 </Card>
 
-                {/* Diálogo de ticket CORREGIDO */}
+                {/* DIÁLOGO DE TICKET SIMPLIFICADO */}
                 <Dialog open={isTicketDialogOpen} onOpenChange={setIsTicketDialogOpen}>
                     <DialogContent className="bg-white border border-blue-200 shadow-xl max-w-md">
                         <DialogHeader>
-                            <DialogTitle className="text-blue-800 text-center">Ticket de Jugada</DialogTitle>
+                            <DialogTitle className="text-blue-800 text-center">✅ JUGADA GUARDADA EXITOSAMENTE</DialogTitle>
+                            <DialogDescription className="text-center text-gray-600">
+                                Su jugada ha sido guardada correctamente en Firebase
+                            </DialogDescription>
                         </DialogHeader>
                         <div className="bg-blue-50 p-4 rounded-md border border-blue-200">
                             <pre className="whitespace-pre-wrap font-mono text-sm">{ticketContent}</pre>
                         </div>
+                        {secuenciaActual && (
+                            <div className="bg-green-50 p-3 rounded-md border border-green-200">
+                                <div className="flex items-center text-green-800">
+                                    <CheckCircle className="h-4 w-4 mr-2" />
+                                    <span className="text-sm">
+                                        <strong>Secuencia:</strong> {secuenciaActual}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
                         <DialogFooter className="flex justify-between">
                             <Button
                                 onClick={() => {
-                                    setIsTicketDialogOpen(false)
-                                    setIsLoading(false)
+                                    const printWindow = window.open("", "", "width=300,height=600")
+                                    if (printWindow) {
+                                        printWindow.document.write(`
+                                            <html>
+                                              <head>
+                                                <title>Ticket de Jugada</title>
+                                                <style>
+                                                  body {
+                                                    font-family: 'Courier New', monospace;
+                                                    font-size: 12px;
+                                                    width: 80mm;
+                                                    margin: 0;
+                                                    padding: 10px;
+                                                  }
+                                                  pre {
+                                                    white-space: pre-wrap;
+                                                    margin: 0;
+                                                  }
+                                                </style>
+                                              </head>
+                                              <body>
+                                                <pre>${ticketContent}</pre>
+                                              </body>
+                                            </html>
+                                        `)
+                                        printWindow.document.close()
+                                        printWindow.focus()
+                                        printWindow.print()
+                                        printWindow.close()
+                                    }
                                 }}
                                 variant="outline"
-                                className="border-red-300 text-red-700 hover:bg-red-50"
+                                className="border-blue-300 text-blue-700 hover:bg-blue-50"
                             >
-                                <X className="mr-2 h-4 w-4" />
-                                Cancelar
+                                <Printer className="mr-2 h-4 w-4" />
+                                Imprimir
                             </Button>
-                            <div className="flex gap-2">
-                                <Button
-                                    onClick={() => {
-                                        const printWindow = window.open("", "", "width=300,height=600")
-                                        if (printWindow) {
-                                            printWindow.document.write(`
-                                                <html>
-                                                    <head>
-                                                        <title>Ticket de Jugada</title>
-                                                        <style>
-                                                            body {
-                                                                font-family: 'Courier New', monospace;
-                                                                font-size: 12px;
-                                                                width: 80mm;
-                                                                margin: 0;
-                                                                padding: 10px;
-                                                            }
-                                                            pre {
-                                                                white-space: pre-wrap;
-                                                                margin: 0;
-                                                            }
-                                                        </style>
-                                                    </head>
-                                                    <body>
-                                                        <pre>${ticketContent}</pre>
-                                                    </body>
-                                                </html>
-                                            `)
-                                            printWindow.document.close()
-                                            printWindow.focus()
-                                            printWindow.print()
-                                            printWindow.close()
-                                        }
-                                    }}
-                                    variant="outline"
-                                    className="border-blue-300 text-blue-700 hover:bg-blue-50"
-                                >
-                                    <Printer className="mr-2 h-4 w-4" />
-                                    Imprimir
-                                </Button>
-                                <Button
-                                    onClick={confirmarYGuardarJugadas}
-                                    className="bg-gradient-to-r from-green-600 to-teal-700 hover:from-green-700 hover:to-teal-800 text-white"
-                                    disabled={isLoading}
-                                >
-                                    {isLoading ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            Guardando...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Save className="mr-2 h-4 w-4" />
-                                            Confirmar y Guardar
-                                        </>
-                                    )}
-                                </Button>
-                            </div>
+                            <Button onClick={limpiarFormulario} className="bg-green-600 hover:bg-green-700 text-white">
+                                <CheckCircle className="mr-2 h-4 w-4" />
+                                Continuar
+                            </Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
@@ -910,7 +928,9 @@ export default function CargarJugadas() {
                                     </Badge>
                                 )}
                             </DialogTitle>
-                            {/* Buscador por número de secuencia */}
+                            <DialogDescription>
+                                Seleccione una jugada anterior para repetir o busque por número de secuencia
+                            </DialogDescription>
                             <div className="mb-4">
                                 <Label className="text-sm font-medium mb-2 block">Buscar por número de secuencia:</Label>
                                 <div className="flex gap-2">
@@ -926,58 +946,15 @@ export default function CargarJugadas() {
                                         variant="outline"
                                         className="border-blue-500 text-blue-600 bg-transparent"
                                     >
-                                        {isSearching ? (
-                                            <svg
-                                                className="animate-spin h-4 w-4"
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                            >
-                                                <circle
-                                                    className="opacity-25"
-                                                    cx="12"
-                                                    cy="12"
-                                                    r="10"
-                                                    stroke="currentColor"
-                                                    strokeWidth="4"
-                                                ></circle>
-                                                <path
-                                                    className="opacity-75"
-                                                    fill="currentColor"
-                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                                ></path>
-                                            </svg>
-                                        ) : (
-                                            <Search className="h-4 w-4" />
-                                        )}
+                                        {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                                     </Button>
                                 </div>
                             </div>
                         </DialogHeader>
-
                         <div className="space-y-4">
                             {isLoadingJugadas ? (
                                 <div className="flex items-center justify-center py-8">
-                                    <svg
-                                        className="animate-spin h-8 w-8 text-purple-600"
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                    >
-                                        <circle
-                                            className="opacity-25"
-                                            cx="12"
-                                            cy="12"
-                                            r="10"
-                                            stroke="currentColor"
-                                            strokeWidth="4"
-                                        ></circle>
-                                        <path
-                                            className="opacity-75"
-                                            fill="currentColor"
-                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                        ></path>
-                                    </svg>
+                                    <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
                                     <span className="ml-2">Cargando jugadas...</span>
                                 </div>
                             ) : jugadasPasador.length > 0 ? (
@@ -985,17 +962,16 @@ export default function CargarJugadas() {
                                     <Label className="text-sm font-medium mb-2 block">Seleccione la jugada que desea repetir:</Label>
                                     <ScrollArea className="h-[400px] rounded-md border p-2">
                                         <div className="space-y-2">
-                                            {jugadasPasador.map((jugada, index) => {
+                                            {jugadasPasador.map((jugada) => {
                                                 const { resumen, total } = obtenerResumenJugada(jugada)
                                                 const isSelected = jugadaSeleccionada?.id === jugada.id
-
                                                 return (
                                                     <div
                                                         key={jugada.id}
                                                         onClick={() => setJugadaSeleccionada(jugada)}
                                                         className={`p-3 rounded-lg border cursor-pointer transition-all ${isSelected
-                                                                ? "border-purple-500 bg-purple-50"
-                                                                : "border-gray-200 hover:border-purple-300 hover:bg-gray-50"
+                                                            ? "border-purple-500 bg-purple-50"
+                                                            : "border-gray-200 hover:border-purple-300 hover:bg-gray-50"
                                                             }`}
                                                     >
                                                         <div className="flex justify-between items-start">
@@ -1038,7 +1014,6 @@ export default function CargarJugadas() {
                                 </div>
                             )}
                         </div>
-
                         <DialogFooter className="flex justify-between">
                             <Button
                                 variant="outline"
