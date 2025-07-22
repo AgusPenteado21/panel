@@ -1,4 +1,5 @@
 "use client"
+
 import { useState, useEffect, useCallback, useRef, type KeyboardEvent } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -41,15 +42,36 @@ interface JugadaFirebase {
     id: string
     tipo?: string
     observacion?: string
-    fechaHora?: any
-    fechaFormateada?: Date
+    fechaHora?: any // Firebase Timestamp object
+    fechaFormateada?: Date // Converted Date object for client-side use
     loteria?: string
     provincias?: string[]
     secuencia?: string
     totalMonto?: number
-    monto?: string
-    numeros?: string[]
-    jugadas?: any[]
+    monto?: string // Top-level monto (string)
+    numero?: string // Top-level numero (from first jugada)
+    numeros?: string[] // Top-level array of all numbers
+    jugadas?: Array<{
+        decompositionStep?: number // Added for Flutter compatibility
+        fechaHora?: string // ISO string for Flutter compatibility
+        loteria?: string
+        monto?: string // From Flutter saves
+        montoTotal?: number // From Next.js saves (individual jugada total)
+        numero: string
+        numeros?: string[] // Array containing just this jugada's number
+        originalNumero?: string
+        originalPosicion?: string
+        posicion: string
+        provincias?: string[]
+        redoblonas?: Array<{
+            numero: string
+            posicion: string
+            importe?: string
+            monto?: string
+        }>
+        secuencia?: string
+        tipo?: string
+    }>
     pasadorId?: string
     [key: string]: any
 }
@@ -99,7 +121,6 @@ export default function CargarJugadas() {
     const [isLoading, setIsLoading] = useState(false)
     const [secuenciaActual, setSecuenciaActual] = useState<string>("")
     const [debugInfo, setDebugInfo] = useState<string>("")
-
     // Estados para repetir jugada
     const [isRepeatDialogOpen, setIsRepeatDialogOpen] = useState(false)
     const [secuenciaBuscar, setSecuenciaBuscar] = useState("")
@@ -156,7 +177,6 @@ export default function CargarJugadas() {
             setDebugInfo("Cargando pasadores desde Firebase...")
             const pasadoresCollection = collection(db, "pasadores")
             const pasadoresSnapshot = await getDocs(pasadoresCollection)
-
             const pasadoresList = pasadoresSnapshot.docs.map((doc) => {
                 const data = doc.data()
                 return {
@@ -166,7 +186,6 @@ export default function CargarJugadas() {
                     nombreFantasia: data.nombreFantasia,
                 }
             })
-
             setPasadores(pasadoresList)
             setDebugInfo(`✅ ${pasadoresList.length} pasadores cargados`)
             console.log(`✅ ${pasadoresList.length} pasadores cargados exitosamente`)
@@ -183,10 +202,8 @@ export default function CargarJugadas() {
         const timestamp = ahora.getTime()
         const random = Math.floor(Math.random() * 999)
         const secuencia = `${timestamp}${random.toString().padStart(3, "0")}`
-
         console.log("🔢 Secuencia generada:", secuencia)
         setDebugInfo(`✅ Secuencia generada: ${secuencia}`)
-
         return secuencia
     }
 
@@ -231,28 +248,24 @@ export default function CargarJugadas() {
     const validarDatosParaGuardar = () => {
         console.log("🔍 === INICIANDO VALIDACIÓN DE DATOS ===")
         setDebugInfo("Validando datos...")
-
         if (!selectedPasador) {
             console.log("❌ Validación falló: No hay pasador seleccionado")
             setDebugInfo("❌ Error: No hay pasador seleccionado")
             toast.error("❌ Debe seleccionar un pasador")
             return false
         }
-
         if (!selectedSorteo) {
             console.log("❌ Validación falló: No hay sorteo seleccionado")
             setDebugInfo("❌ Error: No hay sorteo seleccionado")
             toast.error("❌ Debe seleccionar un sorteo")
             return false
         }
-
         if (selectedLotteries.length === 0) {
             console.log("❌ Validación falló: No hay loterías seleccionadas")
             setDebugInfo("❌ Error: No hay loterías seleccionadas")
             toast.error("❌ Debe seleccionar al menos una lotería")
             return false
         }
-
         const jugadasValidas = jugadas.filter((j) => j.numero && j.posicion && j.importe)
         if (jugadasValidas.length === 0) {
             console.log("❌ Validación falló: No hay jugadas válidas")
@@ -260,14 +273,12 @@ export default function CargarJugadas() {
             toast.error("❌ No hay jugadas válidas para guardar")
             return false
         }
-
         if (totalMonto <= 0) {
             console.log("❌ Validación falló: Monto total inválido")
             setDebugInfo("❌ Error: Monto total inválido")
             toast.error("❌ El monto total debe ser mayor a 0")
             return false
         }
-
         console.log("✅ Validación exitosa - Todos los datos son correctos")
         setDebugInfo("✅ Validación exitosa")
         return true
@@ -277,33 +288,27 @@ export default function CargarJugadas() {
     const generarTicket = (jugadasParaTicket: Jugada[], secuenciaUnica: string) => {
         console.log("🎫 === GENERANDO TICKET ===")
         setDebugInfo("Generando ticket...")
-
         const pasadorSeleccionado = pasadores.find((p) => p.id === selectedPasador)
         if (!pasadorSeleccionado) {
             console.log("❌ Error: Pasador no encontrado")
             setDebugInfo("❌ Error: Pasador no encontrado")
             return ""
         }
-
         let ticketContent = ""
         const fechaHora = formatDate(new Date())
-        const terminal = "72-0005"
-
+        const terminal = "72-0005" // Hardcoded as per Flutter example
         ticketContent += "TICKET\n"
         ticketContent += `FECHA/HORA ${fechaHora}\n`
         ticketContent += `TERMINAL   ${terminal}\n`
         ticketContent += `PASADOR    ${pasadorSeleccionado.nombre}\n`
         ticketContent += `SORTEO     ${selectedSorteo}\n`
         ticketContent += "-".repeat(32) + "\n"
-
         const loteriaAbreviada = lotteryAbbreviations[selectedSorteo] || selectedSorteo
         ticketContent += `${loteriaAbreviada}\n`
         ticketContent += `SECUENCIA  ${secuenciaUnica}\n`
-
         const provinciasSet = new Set(selectedLotteries.map((l) => provinceAbbreviations[l] || l))
         ticketContent += `LOTERIAS: ${Array.from(provinciasSet).join(" ")}\n`
         ticketContent += "NUMERO UBIC   IMPORTE\n"
-
         jugadasParaTicket.forEach((jugada) => {
             const numero = jugada.numero.padStart(4, " ")
             const posicion = jugada.posicion.padStart(2, " ")
@@ -311,13 +316,10 @@ export default function CargarJugadas() {
             const linea = `${numero}  ${posicion}   $${importe.toFixed(2)}`
             ticketContent += linea + "\n"
         })
-
         ticketContent += "-".repeat(32) + "\n"
         ticketContent += `TOTAL: $${totalMonto.toFixed(2)}`.padStart(32) + "\n"
-
         console.log("✅ Ticket generado exitosamente")
         setDebugInfo(`✅ Ticket generado - Secuencia: ${secuenciaUnica}`)
-
         return ticketContent
     }
 
@@ -325,22 +327,18 @@ export default function CargarJugadas() {
     const guardarJugadas = async () => {
         console.log("🚀 === INICIANDO PROCESO DE GUARDADO SIMPLIFICADO ===")
         setDebugInfo("🚀 Iniciando guardado...")
-
         try {
             setIsLoading(true)
-
             // Paso 1: Validar datos
             if (!validarDatosParaGuardar()) {
                 setIsLoading(false)
                 return
             }
-
             // Paso 2: Obtener datos necesarios
             const pasadorSeleccionado = pasadores.find((p) => p.id === selectedPasador)
             if (!pasadorSeleccionado) {
                 throw new Error("Pasador no encontrado")
             }
-
             const jugadasValidas = jugadas.filter((j) => j.numero && j.posicion && j.importe)
             console.log("📋 Jugadas válidas para procesar:", jugadasValidas.length)
 
@@ -352,26 +350,42 @@ export default function CargarJugadas() {
             const ticketGenerado = generarTicket(jugadasValidas, secuenciaUnica)
             setTicketContent(ticketGenerado)
 
-            // Paso 5: Preparar datos para Firebase (ESTRUCTURA SIMPLIFICADA)
-            const nuevaJugada = {
-                fechaHora: serverTimestamp(),
-                id: secuenciaUnica,
-                jugadas: jugadasValidas.map((jugada) => ({
-                    numero: jugada.numero,
-                    posicion: jugada.posicion,
-                    importe: jugada.importe,
-                    montoTotal: Number.parseFloat(jugada.importe),
-                })),
-                loteria: selectedSorteo,
-                monto: totalMonto.toFixed(2),
-                numeros: jugadasValidas.map((j) => j.numero),
-                pasadorId: selectedPasador,
-                provincias: selectedLotteries,
-                secuencia: secuenciaUnica,
-                tipo: "NUEVA JUGADA",
-                totalMonto: totalMonto,
-            }
+            // Paso 5: Preparar datos para Firebase con la estructura detallada
+            const now = new Date()
+            const isoFechaHora = now.toISOString() // Formato ISO para fechaHora anidada
+            const tipoJugada = "NUEVA JUGADA"
 
+            const jugadasAnidadas = jugadasValidas.map((jugadaItem) => ({
+                decompositionStep: 1, // Hardcoded as per example, adjust if logic exists
+                fechaHora: isoFechaHora,
+                loteria: selectedSorteo,
+                monto: jugadaItem.importe, // Monto de la jugada individual como string
+                montoTotal: Number.parseFloat(jugadaItem.importe) * selectedLotteries.length, // Monto total de esta jugada individual por loterías
+                numero: jugadaItem.numero,
+                numeros: [jugadaItem.numero], // Array con el número de la jugada individual
+                originalNumero: jugadaItem.numero, // Asumiendo que es el mismo por ahora
+                originalPosicion: jugadaItem.posicion, // Asumiendo que es el mismo por ahora
+                posicion: jugadaItem.posicion,
+                provincias: selectedLotteries,
+                redoblonas: [], // Vacío si no hay UI para redoblonas
+                secuencia: secuenciaUnica,
+                tipo: tipoJugada,
+            }))
+
+            const nuevaJugada = {
+                fechaHora: serverTimestamp(), // Timestamp de Firebase para el nivel superior
+                id: secuenciaUnica, // Usar secuencia como ID para facilitar búsqueda
+                jugadas: jugadasAnidadas, // Array de jugadas con la estructura detallada
+                loteria: selectedSorteo,
+                monto: totalMonto.toFixed(2), // Monto total de la transacción como string
+                numero: jugadasValidas.length > 0 ? jugadasValidas[0].numero : "", // Número de la primera jugada válida
+                numeros: jugadasValidas.map((j) => j.numero), // Array de todos los números de las jugadas
+                pasadorId: selectedPasador,
+                provincias: selectedLotteries, // Loterías seleccionadas
+                secuencia: secuenciaUnica,
+                tipo: tipoJugada, // Tipo de jugada
+                totalMonto: totalMonto, // Monto total de la transacción como number
+            }
             console.log("📤 Objeto para Firebase:")
             console.log(JSON.stringify(nuevaJugada, null, 2))
 
@@ -379,10 +393,8 @@ export default function CargarJugadas() {
             const nombreColeccion = `JUGADAS DE ${pasadorSeleccionado.nombre}`
             console.log("📁 Guardando en colección:", nombreColeccion)
             setDebugInfo(`💾 Guardando en: ${nombreColeccion}`)
-
             const jugadasPasadorCollection = collection(db, nombreColeccion)
             const docRef = await addDoc(jugadasPasadorCollection, nuevaJugada)
-
             console.log("✅ === DOCUMENTO CREADO EXITOSAMENTE ===")
             console.log("🆔 ID del documento:", docRef.id)
             console.log("📍 Path completo:", docRef.path)
@@ -390,12 +402,10 @@ export default function CargarJugadas() {
             // Paso 7: Mostrar ticket y limpiar
             setDebugInfo(`✅ ¡GUARDADO EXITOSO! Secuencia: ${secuenciaUnica}`)
             toast.success(`🎉 ¡Jugada guardada exitosamente!\nSecuencia: ${secuenciaUnica}\nID: ${docRef.id}`)
-
             setIsTicketDialogOpen(true)
         } catch (error) {
             console.error("❌ === ERROR CRÍTICO AL GUARDAR ===")
             console.error("Error:", error)
-
             let mensajeError = "Error desconocido al guardar"
             if (error instanceof Error) {
                 mensajeError = error.message
@@ -405,7 +415,6 @@ export default function CargarJugadas() {
                     mensajeError = "Error de conexión a Firebase"
                 }
             }
-
             setDebugInfo(`❌ ERROR: ${mensajeError}`)
             toast.error(`❌ Error al guardar: ${mensajeError}`)
         } finally {
@@ -431,7 +440,6 @@ export default function CargarJugadas() {
             toast.error("Por favor, seleccione un pasador primero.")
             return
         }
-
         setIsLoadingJugadas(true)
         try {
             const pasadorDoc = pasadores.find((p) => p.id === selectedPasador)
@@ -439,26 +447,30 @@ export default function CargarJugadas() {
                 toast.error("Pasador no encontrado.")
                 return
             }
-
             console.log("🔍 Obteniendo jugadas del pasador:", pasadorDoc.nombre)
             const nombreColeccion = `JUGADAS DE ${pasadorDoc.nombre}`
             const jugadasCollection = collection(db, nombreColeccion)
             const jugadasSnapshot = await getDocs(jugadasCollection)
-
             const jugadasList: JugadaFirebase[] = jugadasSnapshot.docs.map((doc) => {
                 const data = doc.data()
                 return {
                     id: doc.id,
                     ...data,
-                    fechaFormateada: data.fechaHora
-                        ? data.fechaHora.toDate
-                            ? data.fechaHora.toDate()
-                            : new Date(data.fechaHora)
-                        : new Date(),
+                    // Convertir Timestamp de Firebase a Date de forma robusta
+                    fechaFormateada:
+                        data.fechaHora && typeof data.fechaHora.toDate === "function" ? data.fechaHora.toDate() : new Date(), // Fallback si no es un Timestamp válido
                 } as JugadaFirebase
             })
 
-            const tiposPermitidos = ["NUEVA JUGADA"]
+            // Incluir todos los tipos de jugada para la carga (si se guardan desde Flutter o Next.js)
+            const tiposPermitidos = [
+                "NUEVA JUGADA",
+                "Jugada con redoblona",
+                "NUEVA EXACTA",
+                "NUEVA TRIPLONA",
+                "NUEVA QUINTINA",
+                "NUEVA BORRATINA",
+            ]
             const jugadasFiltradas = jugadasList.filter((jugada) => jugada.tipo && tiposPermitidos.includes(jugada.tipo))
 
             jugadasFiltradas.sort((a, b) => {
@@ -466,13 +478,11 @@ export default function CargarJugadas() {
                 const fechaB = b.fechaFormateada || new Date(0)
                 return fechaB.getTime() - fechaA.getTime()
             })
-
-            console.log("📋 Jugadas encontradas:", jugadasList.length)
-            console.log("📋 Jugadas filtradas:", jugadasFiltradas.length)
+            console.log("📋 Jugadas encontradas (total):", jugadasList.length)
+            console.log("📋 Jugadas filtradas (tipos permitidos):", jugadasFiltradas.length)
             setJugadasPasador(jugadasFiltradas)
-
             if (jugadasFiltradas.length === 0) {
-                toast.error(`No se encontraron jugadas anteriores de tipo "NUEVA JUGADA" para ${pasadorDoc.nombre}.`)
+                toast.error(`No se encontraron jugadas anteriores de tipos permitidos para ${pasadorDoc.nombre}.`)
             }
         } catch (error) {
             console.error("❌ Error al obtener jugadas:", error)
@@ -487,31 +497,65 @@ export default function CargarJugadas() {
             toast.error("Por favor, ingrese un número de secuencia.")
             return
         }
-
         setIsSearching(true)
         try {
             console.log("🔍 Iniciando búsqueda de secuencia:", secuenciaBuscar)
-            let jugadasEncontradas: any[] = []
+            let jugadasEncontradas: JugadaFirebase[] = []
             let pasadorEncontrado = null
 
-            for (const pasador of pasadores) {
-                const nombreColeccion = `JUGADAS DE ${pasador.nombre}`
-                try {
-                    const jugadasCollection = collection(db, nombreColeccion)
-                    const q = query(jugadasCollection, where("secuencia", "==", secuenciaBuscar))
-                    const querySnapshot = await getDocs(q)
-
-                    if (!querySnapshot.empty) {
-                        const docs = querySnapshot.docs.map((doc) => {
-                            const data = doc.data()
-                            return { id: doc.id, ...data }
-                        })
-                        jugadasEncontradas = docs
-                        pasadorEncontrado = pasador
-                        break
+            // Si ya hay un pasador seleccionado, buscar solo en su colección
+            if (selectedPasador) {
+                const currentPasador = pasadores.find((p) => p.id === selectedPasador)
+                if (currentPasador) {
+                    const nombreColeccion = `JUGADAS DE ${currentPasador.nombre}`
+                    try {
+                        const jugadasCollection = collection(db, nombreColeccion)
+                        const q = query(jugadasCollection, where("secuencia", "==", secuenciaBuscar))
+                        const querySnapshot = await getDocs(q)
+                        if (!querySnapshot.empty) {
+                            jugadasEncontradas = querySnapshot.docs.map((doc) => {
+                                const data = doc.data()
+                                return {
+                                    id: doc.id,
+                                    ...data,
+                                    fechaFormateada:
+                                        data.fechaHora && typeof data.fechaHora.toDate === "function"
+                                            ? data.fechaHora.toDate()
+                                            : new Date(),
+                                } as JugadaFirebase
+                            })
+                            pasadorEncontrado = currentPasador
+                        }
+                    } catch (error) {
+                        console.error(`❌ Error al buscar en colección "${nombreColeccion}":`, error)
                     }
-                } catch (error) {
-                    console.error(`❌ Error al buscar en colección "${nombreColeccion}":`, error)
+                }
+            } else {
+                // Si no hay pasador seleccionado, buscar en todas las colecciones de pasadores
+                for (const pasador of pasadores) {
+                    const nombreColeccion = `JUGADAS DE ${pasador.nombre}`
+                    try {
+                        const jugadasCollection = collection(db, nombreColeccion)
+                        const q = query(jugadasCollection, where("secuencia", "==", secuenciaBuscar))
+                        const querySnapshot = await getDocs(q)
+                        if (!querySnapshot.empty) {
+                            jugadasEncontradas = querySnapshot.docs.map((doc) => {
+                                const data = doc.data()
+                                return {
+                                    id: doc.id,
+                                    ...data,
+                                    fechaFormateada:
+                                        data.fechaHora && typeof data.fechaHora.toDate === "function"
+                                            ? data.fechaHora.toDate()
+                                            : new Date(),
+                                } as JugadaFirebase
+                            })
+                            pasadorEncontrado = pasador
+                            break // Detener la búsqueda una vez encontrada
+                        }
+                    } catch (error) {
+                        console.error(`❌ Error al buscar en colección "${nombreColeccion}":`, error)
+                    }
                 }
             }
 
@@ -520,22 +564,31 @@ export default function CargarJugadas() {
                 return
             }
 
-            const tiposPermitidos = ["NUEVA JUGADA"]
-            const jugadasFiltradas = jugadasEncontradas.filter((jugada) => tiposPermitidos.includes(jugada.tipo))
+            // Incluir todos los tipos de jugada para la carga
+            const tiposPermitidos = [
+                "NUEVA JUGADA",
+                "Jugada con redoblona",
+                "NUEVA EXACTA",
+                "NUEVA TRIPLONA",
+                "NUEVA QUINTINA",
+                "NUEVA BORRATINA",
+            ]
+            const jugadasFiltradas = jugadasEncontradas.filter(
+                (jugada) => jugada.tipo && tiposPermitidos.includes(jugada.tipo),
+            )
 
             if (jugadasFiltradas.length === 0) {
-                toast.error(`La jugada con secuencia "${secuenciaBuscar}" no es de tipo "NUEVA JUGADA".`)
+                toast.error(`La jugada con secuencia "${secuenciaBuscar}" no es de un tipo permitido.`)
                 return
             }
 
             limpiarFormulario()
             setSelectedPasador(pasadorEncontrado.id)
+            const jugada = jugadasFiltradas[0] // Tomar la primera jugada encontrada
 
-            const jugada = jugadasFiltradas[0]
             if (jugada.loteria) {
                 setSelectedSorteo(jugada.loteria)
             }
-
             if (jugada.provincias && jugada.provincias.length > 0) {
                 setSelectedLotteries(jugada.provincias)
             }
@@ -547,10 +600,20 @@ export default function CargarJugadas() {
                         nuevasJugadas[index] = {
                             numero: jugadaItem.numero || "",
                             posicion: jugadaItem.posicion || "",
-                            importe: jugadaItem.importe || jugadaItem.montoTotal?.toString() || "",
+                            // Priorizar 'importe' (Next.js) o 'monto' (Flutter), luego 'montoTotal'
+                            importe: jugadaItem.importe || jugadaItem.monto || jugadaItem.montoTotal?.toString() || "",
                         }
                     }
                 })
+                setJugadas(nuevasJugadas)
+            } else {
+                // Si el documento no tiene un array 'jugadas' (ej. jugadas simples antiguas)
+                const nuevasJugadas = createEmptyJugadas()
+                nuevasJugadas[0] = {
+                    numero: jugada.numero || "",
+                    posicion: jugada.posicion || "",
+                    importe: jugada.monto || jugada.totalMonto?.toString() || "", // Usar monto o totalMonto del nivel superior
+                }
                 setJugadas(nuevasJugadas)
             }
 
@@ -570,7 +633,6 @@ export default function CargarJugadas() {
             toast.error("Por favor, seleccione una jugada para repetir.")
             return
         }
-
         try {
             console.log("🎯 Cargando jugada seleccionada:", jugadaSeleccionada.secuencia)
             limpiarFormulario()
@@ -578,7 +640,6 @@ export default function CargarJugadas() {
             if (jugadaSeleccionada.loteria) {
                 setSelectedSorteo(jugadaSeleccionada.loteria)
             }
-
             if (jugadaSeleccionada.provincias && jugadaSeleccionada.provincias.length > 0) {
                 setSelectedLotteries(jugadaSeleccionada.provincias)
             }
@@ -590,10 +651,20 @@ export default function CargarJugadas() {
                         nuevasJugadas[index] = {
                             numero: jugadaItem.numero || "",
                             posicion: jugadaItem.posicion || "",
-                            importe: jugadaItem.importe || jugadaItem.montoTotal?.toString() || "",
+                            // Priorizar 'importe' (Next.js) o 'monto' (Flutter), luego 'montoTotal'
+                            importe: jugadaItem.importe || jugadaItem.monto || jugadaItem.montoTotal?.toString() || "",
                         }
                     }
                 })
+                setJugadas(nuevasJugadas)
+            } else {
+                // Si el documento no tiene un array 'jugadas' (ej. jugadas simples antiguas)
+                const nuevasJugadas = createEmptyJugadas()
+                nuevasJugadas[0] = {
+                    numero: jugadaSeleccionada.numero || "",
+                    posicion: jugadaSeleccionada.posicion || "",
+                    importe: jugadaSeleccionada.monto || jugadaSeleccionada.totalMonto?.toString() || "", // Usar monto o totalMonto del nivel superior
+                }
                 setJugadas(nuevasJugadas)
             }
 
@@ -610,16 +681,15 @@ export default function CargarJugadas() {
     const obtenerResumenJugada = (jugada: JugadaFirebase) => {
         let resumen = ""
         let total = 0
-
         if (jugada.jugadas && Array.isArray(jugada.jugadas)) {
             const cantidad = jugada.jugadas.length
             resumen = `${cantidad} Jugada(s)`
             total = jugada.totalMonto || Number.parseFloat(jugada.monto || "0") || 0
         } else {
-            resumen = "Jugada"
+            // Para jugadas antiguas que no tienen el array 'jugadas'
+            resumen = `1 Jugada (${jugada.numero || "N/A"})`
             total = jugada.totalMonto || Number.parseFloat(jugada.monto || "0") || 0
         }
-
         return { resumen, total: Number(total) || 0 }
     }
 
@@ -715,7 +785,6 @@ export default function CargarJugadas() {
                         )}
                     </CardContent>
                 </Card>
-
                 <Card className="shadow-xl border border-blue-200">
                     <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white">
                         <CardTitle className="text-2xl font-bold text-center">✅ CARGAR JUGADAS - SISTEMA SIMPLIFICADO</CardTitle>
@@ -761,7 +830,6 @@ export default function CargarJugadas() {
                                     </Select>
                                 </div>
                             </div>
-
                             <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200 shadow-sm">
                                 <Label className="mb-3 block text-indigo-800 font-semibold">LOTERÍAS:</Label>
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -780,7 +848,6 @@ export default function CargarJugadas() {
                                     ))}
                                 </div>
                             </div>
-
                             <div>
                                 <h3 className="text-lg font-semibold mb-2 text-blue-800 border-b-2 border-blue-300 pb-2 flex items-center">
                                     <Calculator className="h-5 w-5 mr-2 text-blue-600" />
@@ -803,7 +870,6 @@ export default function CargarJugadas() {
                                     </Table>
                                 </div>
                             </div>
-
                             <div className="flex justify-between items-center p-4 bg-blue-50 rounded-lg border border-blue-200 shadow-sm">
                                 <div className="text-xl font-bold text-blue-800">
                                     Total: <span className="text-green-600">${totalMonto.toFixed(2)}</span>
@@ -844,7 +910,6 @@ export default function CargarJugadas() {
                         </div>
                     </CardContent>
                 </Card>
-
                 {/* DIÁLOGO DE TICKET SIMPLIFICADO */}
                 <Dialog open={isTicketDialogOpen} onOpenChange={setIsTicketDialogOpen}>
                     <DialogContent className="bg-white border border-blue-200 shadow-xl max-w-md">
@@ -873,28 +938,28 @@ export default function CargarJugadas() {
                                     const printWindow = window.open("", "", "width=300,height=600")
                                     if (printWindow) {
                                         printWindow.document.write(`
-                                            <html>
+                                          <html>
                                               <head>
-                                                <title>Ticket de Jugada</title>
-                                                <style>
-                                                  body {
-                                                    font-family: 'Courier New', monospace;
-                                                    font-size: 12px;
-                                                    width: 80mm;
-                                                    margin: 0;
-                                                    padding: 10px;
-                                                  }
-                                                  pre {
-                                                    white-space: pre-wrap;
-                                                    margin: 0;
-                                                  }
-                                                </style>
+                                                  <title>Ticket de Jugada</title>
+                                                  <style>
+                                                      body {
+                                                          font-family: 'Courier New', monospace;
+                                                          font-size: 12px;
+                                                          width: 80mm;
+                                                          margin: 0;
+                                                          padding: 10px;
+                                                      }
+                                                      pre {
+                                                          white-space: pre-wrap;
+                                                          margin: 0;
+                                                      }
+                                                  </style>
                                               </head>
                                               <body>
-                                                <pre>${ticketContent}</pre>
+                                                  <pre>${ticketContent}</pre>
                                               </body>
-                                            </html>
-                                        `)
+                                          </html>
+                                      `)
                                         printWindow.document.close()
                                         printWindow.focus()
                                         printWindow.print()
@@ -914,7 +979,6 @@ export default function CargarJugadas() {
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
-
                 {/* Diálogo para repetir jugada anterior */}
                 <Dialog open={isRepeatDialogOpen} onOpenChange={setIsRepeatDialogOpen}>
                     <DialogContent className="max-w-2xl max-h-[80vh]">
@@ -970,8 +1034,8 @@ export default function CargarJugadas() {
                                                         key={jugada.id}
                                                         onClick={() => setJugadaSeleccionada(jugada)}
                                                         className={`p-3 rounded-lg border cursor-pointer transition-all ${isSelected
-                                                            ? "border-purple-500 bg-purple-50"
-                                                            : "border-gray-200 hover:border-purple-300 hover:bg-gray-50"
+                                                                ? "border-purple-500 bg-purple-50"
+                                                                : "border-gray-200 hover:border-purple-300 hover:bg-gray-50"
                                                             }`}
                                                     >
                                                         <div className="flex justify-between items-start">
