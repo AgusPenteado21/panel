@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { format, startOfDay, endOfDay } from "date-fns"
 import { es } from "date-fns/locale"
-import { CalendarIcon, Loader2, RefreshCw } from "lucide-react"
+import { CalendarIcon, Loader2, RefreshCw } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import Navbar from "@/app/components/Navbar"
 import { Button } from "@/components/ui/button"
@@ -136,25 +136,24 @@ const SelectorFecha = ({
     </div>
 )
 
-// ✅ FUNCIÓN PARA OBTENER SOLO EL COBRO MÁS GRANDE DEL DÍA
-const obtenerPagosCobros = async (
+// ✅ FUNCIÓN PARA CONFIGURAR LISTENERS DE PAGOS Y COBROS
+const configurarListenerPagosCobros = (
     pasadorId: string,
     fechaString: string,
-): Promise<{ pagos: number; cobros: number }> => {
-    try {
-        const pagosRef = collection(db, "pagos")
-        const cobrosRef = collection(db, "cobros")
+    onUpdate: (pagos: number, cobros: number) => void
+): (() => void)[] => {
+    const pagosRef = collection(db, "pagos")
+    const cobrosRef = collection(db, "cobros")
 
-        const pagosQuery = query(pagosRef, where("pasadorId", "==", pasadorId), where("fecha", "==", fechaString))
-        const cobrosQuery = query(cobrosRef, where("pasadorId", "==", pasadorId), where("fecha", "==", fechaString))
+    const pagosQuery = query(pagosRef, where("pasadorId", "==", pasadorId), where("fecha", "==", fechaString))
+    const cobrosQuery = query(cobrosRef, where("pasadorId", "==", pasadorId), where("fecha", "==", fechaString))
 
-        const [pagosSnapshot, cobrosSnapshot] = await Promise.all([getDocs(pagosQuery), getDocs(cobrosQuery)])
+    let currentPagos = 0
+    let currentCobros = 0 // This will store the largest cobro
 
+    const unsubscribePagos = onSnapshot(pagosQuery, (snapshot) => {
         let totalPagos = 0
-        let cobroMasGrande = 0
-
-        // SUMAR TODOS LOS PAGOS
-        pagosSnapshot.forEach((doc) => {
+        snapshot.forEach((doc) => {
             const monto = doc.data().monto
             if (typeof monto === "number") {
                 totalPagos += monto
@@ -165,9 +164,16 @@ const obtenerPagosCobros = async (
                 }
             }
         })
+        currentPagos = totalPagos
+        console.log(`🔄 Pagos actualizados para ${pasadorId} en ${fechaString}: ${currentPagos}`)
+        onUpdate(currentPagos, currentCobros)
+    }, (error) => {
+        console.error(`❌ Error en listener de pagos para ${pasadorId}:`, error)
+    })
 
-        // TOMAR SOLO EL COBRO MÁS GRANDE
-        cobrosSnapshot.forEach((doc) => {
+    const unsubscribeCobros = onSnapshot(cobrosQuery, (snapshot) => {
+        let cobroMasGrande = 0
+        snapshot.forEach((doc) => {
             const monto = doc.data().monto
             let montoNumerico = 0
             if (typeof monto === "number") {
@@ -180,13 +186,14 @@ const obtenerPagosCobros = async (
                 cobroMasGrande = montoNumerico
             }
         })
+        currentCobros = cobroMasGrande
+        console.log(`🔄 Cobros actualizados para ${pasadorId} en ${fechaString}: ${currentCobros}`)
+        onUpdate(currentPagos, currentCobros)
+    }, (error) => {
+        console.error(`❌ Error en listener de cobros para ${pasadorId}:`, error)
+    })
 
-        console.log(`💰 Pagos: ${totalPagos}, 💸 Cobro más grande: ${cobroMasGrande}`)
-        return { pagos: totalPagos, cobros: cobroMasGrande }
-    } catch (error) {
-        console.error(`❌ Error al obtener pagos/cobros:`, error)
-        return { pagos: 0, cobros: 0 }
-    }
+    return [unsubscribePagos, unsubscribeCobros]
 }
 
 // Función para obtener aciertos desde la base de datos
@@ -196,7 +203,6 @@ const obtenerAciertosDesdeDB = async (fechaSeleccionada: Date): Promise<Record<s
         const fechaString = format(fechaSeleccionada, "yyyy-MM-dd")
         const aciertosRef = collection(db, "aciertos")
         const aciertosSnapshot = await getDocs(aciertosRef)
-
         const aciertosData: Record<string, number> = {}
         aciertosSnapshot.forEach((doc) => {
             const data = doc.data()
@@ -223,7 +229,6 @@ const obtenerSaldoAnterior = async (pasadorId: string, fechaSeleccionada: Date):
         const fechaAnterior = new Date(fechaSeleccionada)
         fechaAnterior.setDate(fechaAnterior.getDate() - 1)
         const fechaAnteriorStr = format(fechaAnterior, "yyyy-MM-dd")
-
         console.log(`🔍 DEBUGGING SÚPER DETALLADO - Pasador: ${pasadorId}`)
         console.log(`📅 Fecha actual: ${format(fechaSeleccionada, "yyyy-MM-dd")}`)
         console.log(`📅 Fecha anterior buscada: ${fechaAnteriorStr}`)
@@ -247,7 +252,6 @@ const obtenerSaldoAnterior = async (pasadorId: string, fechaSeleccionada: Date):
             console.log(`   - comision_pasador: ${data.comision_pasador}`)
             console.log(`   - total_ganado: ${data.total_ganado}`)
             console.log(`   - timestamp: ${data.timestamp}`)
-
             const saldoAnterior = data.saldo_total || data.saldo_final || 0
             console.log(`✅ Usando saldo_total: ${saldoAnterior}`)
             return saldoAnterior
@@ -273,15 +277,11 @@ const calcularSaldos = (
     console.log(
         `🧮 Calculando saldos para: Saldo Cierre Día Anterior: ${saldoCierreDiaAnterior}, Jugado: ${jugado}, Comisión: ${comision}, Premios: ${premios}, Pagos: ${pagosInmutables}, Cobros: ${cobrosInmutables}`,
     )
-
     // ✅ Saldo Actual: Representa el movimiento neto del día, comenzando desde 0.
     const saldoActualDelDia = jugado - comision - premios
-
     // ✅ Saldo Total: Es el saldo acumulado, incluyendo el saldo del día anterior y las operaciones del día actual (incluyendo pagos/cobros).
     const saldoTotalCalculado = saldoCierreDiaAnterior + saldoActualDelDia + pagosInmutables - cobrosInmutables
-
     console.log(`📊 Resultado: Saldo Actual (del día): ${saldoActualDelDia}, Saldo Total: ${saldoTotalCalculado}`)
-
     return {
         saldoAnterior: saldoCierreDiaAnterior, // Se mantiene como el saldo de cierre del día anterior
         saldoActual: saldoActualDelDia, // Este es el nuevo "saldoActual" (movimiento neto del día)
@@ -410,30 +410,57 @@ export default function ListadoDiario() {
                         }
                     })
 
-                    // ✅ OBTENER PAGOS Y COBROS (UNA SOLA VEZ)
-                    const cacheKey = `${pasador.id}_${fechaString}`
-                    let pagosCobros = pagosCobrosCache.current.get(cacheKey)
-                    if (!pagosCobros) {
-                        pagosCobros = await obtenerPagosCobros(pasador.id, fechaString)
-                        pagosCobrosCache.current.set(cacheKey, pagosCobros)
-                    }
+                    // ✅ OBTENER PAGOS Y COBROS (UNA SOLA VEZ para datos históricos)
+                    const pagosRef = collection(db, "pagos")
+                    const cobrosRef = collection(db, "cobros")
+                    const pagosQuery = query(pagosRef, where("pasadorId", "==", pasador.id), where("fecha", "==", fechaString))
+                    const cobrosQuery = query(cobrosRef, where("pasadorId", "==", pasador.id), where("fecha", "==", fechaString))
+
+                    const [pagosSnapshot, cobrosSnapshot] = await Promise.all([getDocs(pagosQuery), getDocs(cobrosQuery)])
+
+                    let totalPagos = 0
+                    pagosSnapshot.forEach((doc) => {
+                        const monto = doc.data().monto
+                        if (typeof monto === "number") {
+                            totalPagos += monto
+                        } else if (typeof monto === "string") {
+                            const montoNumerico = Number.parseFloat(monto)
+                            if (!isNaN(montoNumerico)) {
+                                totalPagos += montoNumerico
+                            }
+                        }
+                    })
+
+                    let cobroMasGrande = 0
+                    cobrosSnapshot.forEach((doc) => {
+                        const monto = doc.data().monto
+                        let montoNumerico = 0
+                        if (typeof monto === "number") {
+                            montoNumerico = monto
+                        } else if (typeof monto === "string") {
+                            montoNumerico = Number.parseFloat(monto)
+                            if (isNaN(montoNumerico)) montoNumerico = 0
+                        }
+                        if (montoNumerico > cobroMasGrande) {
+                            cobroMasGrande = montoNumerico
+                        }
+                    })
 
                     const comisionCalculada = (pasador.comisionPorcentaje / 100) * ventasOnlineAcumuladas
-
                     const saldosCalculados = calcularSaldos(
                         pasador.saldoAnterior, // Saldo de cierre del día anterior
                         ventasOnlineAcumuladas,
                         comisionCalculada,
                         pasador.premioTotal,
-                        pagosCobros.pagos, // ✅ VALOR INMUTABLE
-                        pagosCobros.cobros, // ✅ VALOR INMUTABLE
+                        totalPagos, // ✅ VALOR OBTENIDO DE LA DB
+                        cobroMasGrande, // ✅ VALOR OBTENIDO DE LA DB
                     )
 
                     return {
                         ...pasador,
                         jugado: ventasOnlineAcumuladas,
-                        pagado: pagosCobros.pagos, // ✅ VALOR INMUTABLE
-                        cobrado: pagosCobros.cobros, // ✅ VALOR INMUTABLE
+                        pagado: totalPagos, // ✅ VALOR OBTENIDO DE LA DB
+                        cobrado: cobroMasGrande, // ✅ VALOR OBTENIDO DE LA DB
                         comisionPasador: comisionCalculada,
                         ...saldosCalculados,
                     }
@@ -450,7 +477,6 @@ export default function ListadoDiario() {
     const configurarListenerAciertos = useCallback(() => {
         const aciertosRef = collection(db, "aciertos")
         const fechaString = format(fechaSeleccionada, "yyyy-MM-dd")
-
         const unsubscribeAciertos = onSnapshot(aciertosRef, (aciertosSnapshot) => {
             console.log("🔄 Detectado cambio en aciertos, actualizando...")
             try {
@@ -461,6 +487,7 @@ export default function ListadoDiario() {
                         const pasadorNombre = data[fechaString].aciertos?.[0]?.pasador || ""
                         const totalGanado = data[fechaString].totalGanado || 0
                         if (pasadorNombre && totalGanado > 0) {
+                            console.log(`💰 Aciertos encontrados para ${pasadorNombre} en ${fechaString}: $${totalGanado}`)
                             aciertosData[pasadorNombre.toLowerCase()] = totalGanado
                         }
                     }
@@ -469,23 +496,22 @@ export default function ListadoDiario() {
                 setPasadores((prevPasadores) =>
                     prevPasadores.map((pasador) => {
                         const nuevosAciertos = aciertosData[pasador.nombre.toLowerCase()] || 0
-
-                        // ✅ USAR PAGOS/COBROS EXACTOS DEL CACHE
+                        // ✅ USAR PAGOS/COBROS EXACTOS DEL CACHE (actualizados por sus propios listeners)
                         const cacheKey = `${pasador.id}_${fechaString}`
                         const pagosCobros = pagosCobrosCache.current.get(cacheKey) || {
                             pagos: pasador.pagado,
                             cobros: pasador.cobrado,
                         }
 
+                        const comisionCalculada = (pasador.comisionPorcentaje / 100) * pasador.jugado
                         const saldosCalculados = calcularSaldos(
                             pasador.saldoAnterior, // Saldo de cierre del día anterior
                             pasador.jugado,
-                            pasador.comisionPasador,
+                            comisionCalculada,
                             nuevosAciertos,
-                            pagosCobros.pagos, // ✅ INMUTABLE
-                            pagosCobros.cobros, // ✅ INMUTABLE
+                            pagosCobros.pagos, // ✅ INMUTABLE (desde cache/listener)
+                            pagosCobros.cobros, // ✅ INMUTABLE (desde cache/listener)
                         )
-
                         return {
                             ...pasador,
                             premioTotal: nuevosAciertos,
@@ -508,13 +534,15 @@ export default function ListadoDiario() {
         (pasador: Pasador) => {
             const jugadasRef = collection(db, `JUGADAS DE ${pasador.nombre}`)
             const fechaString = format(fechaSeleccionada, "yyyy-MM-dd")
-
             const jugadasQuery = query(
                 jugadasRef,
                 where("fechaHora", ">=", startOfDay(fechaSeleccionada)),
                 where("fechaHora", "<=", endOfDay(fechaSeleccionada)),
             )
 
+            const unsubscribers: (() => void)[] = []
+
+            // Listener para jugadas
             const unsubscribeJugadas = onSnapshot(jugadasQuery, async (jugadasSnapshot) => {
                 let ventasOnlineAcumuladas = 0
                 jugadasSnapshot.forEach((docSnapshot) => {
@@ -524,35 +552,69 @@ export default function ListadoDiario() {
                     }
                 })
 
-                try {
-                    // ✅ USAR PAGOS/COBROS DEL CACHE
+                // Obtener pagos/cobros del cache (serán actualizados por sus propios listeners)
+                const cacheKey = `${pasador.id}_${fechaString}`
+                const pagosCobros = pagosCobrosCache.current.get(cacheKey) || {
+                    pagos: pasador.pagado, // Fallback to current pasador state if not in cache yet
+                    cobros: pasador.cobrado,
+                }
+
+                const comisionCalculada = (pasador.comisionPorcentaje / 100) * ventasOnlineAcumuladas
+                const saldosCalculados = calcularSaldos(
+                    pasador.saldoAnterior,
+                    ventasOnlineAcumuladas,
+                    comisionCalculada,
+                    pasador.premioTotal,
+                    pagosCobros.pagos,
+                    pagosCobros.cobros,
+                )
+
+                setPasadores((prevPasadores) =>
+                    prevPasadores.map((p) => {
+                        if (p.id === pasador.id) {
+                            const pasadorActualizado = {
+                                ...p,
+                                jugado: ventasOnlineAcumuladas,
+                                pagado: pagosCobros.pagos, // Use cached/updated value
+                                cobrado: pagosCobros.cobros, // Use cached/updated value
+                                comisionPasador: comisionCalculada,
+                                ...saldosCalculados,
+                            }
+                            setTimeout(() => guardarSaldosDiarios(pasadorActualizado, fechaSeleccionada), 0)
+                            return pasadorActualizado
+                        }
+                        return p
+                    }),
+                )
+            }, (error) => {
+                console.error(`Error en listener de jugadas para ${pasador.nombre}:`, error)
+            })
+            unsubscribers.push(unsubscribeJugadas)
+
+            // Listener para pagos y cobros
+            const pagosCobrosUnsubscribers = configurarListenerPagosCobros(
+                pasador.id,
+                fechaString,
+                (newPagos, newCobros) => {
                     const cacheKey = `${pasador.id}_${fechaString}`
-                    let pagosCobros = pagosCobrosCache.current.get(cacheKey)
-                    if (!pagosCobros) {
-                        pagosCobros = await obtenerPagosCobros(pasador.id, fechaString)
-                        pagosCobrosCache.current.set(cacheKey, pagosCobros)
-                    }
-
-                    const comisionCalculada = (pasador.comisionPorcentaje / 100) * ventasOnlineAcumuladas
-
-                    const saldosCalculados = calcularSaldos(
-                        pasador.saldoAnterior, // Saldo de cierre del día anterior
-                        ventasOnlineAcumuladas,
-                        comisionCalculada,
-                        pasador.premioTotal,
-                        pagosCobros.pagos, // ✅ INMUTABLE
-                        pagosCobros.cobros, // ✅ INMUTABLE
-                    )
+                    pagosCobrosCache.current.set(cacheKey, { pagos: newPagos, cobros: newCobros })
 
                     setPasadores((prevPasadores) =>
                         prevPasadores.map((p) => {
                             if (p.id === pasador.id) {
+                                const comisionCalculada = (pasador.comisionPorcentaje / 100) * p.jugado // Use current 'jugado'
+                                const saldosCalculados = calcularSaldos(
+                                    p.saldoAnterior,
+                                    p.jugado,
+                                    comisionCalculada,
+                                    p.premioTotal,
+                                    newPagos, // Use new values
+                                    newCobros, // Use new values
+                                )
                                 const pasadorActualizado = {
                                     ...p,
-                                    jugado: ventasOnlineAcumuladas,
-                                    pagado: pagosCobros!.pagos, // ✅ INMUTABLE
-                                    cobrado: pagosCobros!.cobros, // ✅ INMUTABLE
-                                    comisionPasador: comisionCalculada,
+                                    pagado: newPagos,
+                                    cobrado: newCobros,
                                     ...saldosCalculados,
                                 }
                                 setTimeout(() => guardarSaldosDiarios(pasadorActualizado, fechaSeleccionada), 0)
@@ -561,11 +623,11 @@ export default function ListadoDiario() {
                             return p
                         }),
                     )
-                } catch (error) {
-                    console.error(`Error al obtener datos en tiempo real para ${pasador.nombre}:`, error)
                 }
-            })
-            return () => unsubscribeJugadas()
+            )
+            unsubscribers.push(...pagosCobrosUnsubscribers)
+
+            return () => unsubscribers.forEach(unsub => unsub())
         },
         [fechaSeleccionada],
     )
@@ -573,7 +635,6 @@ export default function ListadoDiario() {
     const manejarBusqueda = useCallback(async () => {
         setEstaCargando(true)
         setError(null)
-
         // ✅ LIMPIAR CACHE DE PAGOS/COBROS AL CAMBIAR FECHA
         pagosCobrosCache.current.clear()
         console.log("🗑️ Cache de pagos/cobros limpiado")
@@ -585,12 +646,11 @@ export default function ListadoDiario() {
             console.log(`🚀 INICIANDO BÚSQUEDA para fecha: ${format(fechaSeleccionada, "yyyy-MM-dd")}`)
             const pasadoresRef = collection(db, "pasadores")
             const pasadoresSnapshot = await getDocs(pasadoresRef)
-
             const listaPasadores: Pasador[] = []
+
             for (const docSnapshot of pasadoresSnapshot.docs) {
                 const data = docSnapshot.data()
                 const saldoAnteriorReal = await obtenerSaldoAnterior(docSnapshot.id, fechaSeleccionada)
-
                 listaPasadores.push({
                     id: docSnapshot.id,
                     displayId:
@@ -667,7 +727,6 @@ export default function ListadoDiario() {
 
             setUltimaActualizacion(new Date())
             console.log("✅ Búsqueda completada exitosamente")
-
             const totalAciertos = Object.keys(aciertosData).length
             const totalPremios = Object.values(aciertosData).reduce((sum: number, premio: number) => sum + premio, 0)
             if (totalAciertos > 0) {
@@ -709,23 +768,22 @@ export default function ListadoDiario() {
             setPasadores((prevPasadores) =>
                 prevPasadores.map((pasador) => {
                     const nuevosPremios = aciertosData[pasador.nombre.toLowerCase()] || 0
-
-                    // ✅ USAR PAGOS/COBROS EXACTOS DEL CACHE
+                    // ✅ USAR PAGOS/COBROS EXACTOS DEL CACHE (actualizados por sus propios listeners)
                     const cacheKey = `${pasador.id}_${fechaString}`
                     const pagosCobros = pagosCobrosCache.current.get(cacheKey) || {
                         pagos: pasador.pagado,
                         cobros: pasador.cobrado,
                     }
 
+                    const comisionCalculada = (pasador.comisionPorcentaje / 100) * pasador.jugado
                     const saldosCalculados = calcularSaldos(
                         pasador.saldoAnterior, // Saldo de cierre del día anterior
                         pasador.jugado,
-                        pasador.comisionPasador,
+                        comisionCalculada,
                         nuevosPremios,
-                        pagosCobros.pagos, // ✅ INMUTABLE
-                        pagosCobros.cobros, // ✅ INMUTABLE
+                        pagosCobros.pagos, // ✅ INMUTABLE (desde cache/listener)
+                        pagosCobros.cobros, // ✅ INMUTABLE (desde cache/listener)
                     )
-
                     return {
                         ...pasador,
                         premioTotal: nuevosPremios,
@@ -735,7 +793,6 @@ export default function ListadoDiario() {
                     }
                 }),
             )
-
             const totalAciertos = Object.keys(aciertosData).length
             const totalPremios = Object.values(aciertosData).reduce((sum: number, premio: number) => sum + premio, 0)
             if (totalAciertos > 0) {

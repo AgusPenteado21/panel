@@ -108,6 +108,7 @@ const elementosMenu: MenuItem[] = [
             "listado totales de pasadores por día",
             "consulta de saldo",
             "listado diario",
+            "ranking de planillas",
         ],
     },
 ]
