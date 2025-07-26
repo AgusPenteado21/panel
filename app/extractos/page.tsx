@@ -6,7 +6,21 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, RefreshCcw, CalendarIcon, FileText, Edit, CheckCircle, XCircle, Trash2, Printer, Download, AlertTriangle, Info, Keyboard } from 'lucide-react'
+import {
+    Loader2,
+    RefreshCcw,
+    CalendarIcon,
+    FileText,
+    Edit,
+    CheckCircle,
+    XCircle,
+    Trash2,
+    Printer,
+    Download,
+    AlertTriangle,
+    Info,
+    Keyboard,
+} from "lucide-react"
 import * as XLSX from "xlsx"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -86,16 +100,17 @@ const BACKEND_PROVINCE_MAP: { [key: string]: string } = {
     "ENTRE RIOS": "ENTRE RIOS",
     CORRIENTES: "CORRIENTES",
     CHACO: "CHACO",
-    CHUBUT: "CHUBUT",
-    FORMOSA: "FORMOSA",
-    JUJUY: "JUJUY",
-    "LA PAMPA": "LA PAMPA",
-    "LA RIOJA": "LA RIOJA",
-    "RIO NEGRO": "RIO NEGRO",
-    SALTA: "SALTA",
+    // "CHUBUT", // Eliminado
+    // "FORMOSA", // Eliminado
+    // "JUJUY", // Eliminado
+    // "LA PAMPA", // Eliminado
+    // "LA RIOJA", // Eliminado
+    "RIO NEGRO": "RIO NEGRO", // Re-agregado
+    // "SALTA", // Eliminado
     "SAN JUAN": "SAN JUAN",
-    "SAN LUIS": "SAN LUIS",
-    "TIERRA DEL FUEGO": "TIERRA DEL FUEGO",
+    // "SAN LUIS", // Eliminado
+    // "TIERRA DEL FUEGO", // Eliminado
+    // "CIUDAD", // Eliminado
 }
 
 // Lista de loterías que tienen botones y modales dedicados
@@ -111,17 +126,8 @@ const ALL_LOTERIAS_TO_DISPLAY = [
     "ENTRE RIOS",
     "CORRIENTES",
     "CHACO",
-    // "CHUBUT", // Eliminado
-    // "FORMOSA", // Eliminado
-    // "JUJUY", // Eliminado
-    // "LA PAMPA", // Eliminado
-    // "LA RIOJA", // Eliminado
     "RIO NEGRO", // Re-agregado
-    // "SALTA", // Eliminado
     "SAN JUAN",
-    // "SAN LUIS", // Eliminado
-    // "TIERRA DEL FUEGO", // Eliminado
-    // "CIUDAD", // Eliminado
 ].sort() // Ordenar alfabéticamente para consistencia
 
 // Filtrar las loterías que ya tienen botones dedicados para generar los dinámicos
@@ -239,7 +245,7 @@ export default function ExtractosPage() {
                 const dateParam = format(date, "yyyy-MM-dd")
                 const hoy = new Date()
                 const esHoy = format(date, "yyyy-MM-dd") === format(hoy, "yyyy-MM-dd")
-                let apiUrl = `/api/extractos?date=${dateParam}`
+                let apiUrl = `${window.location.origin}/api/extractos?date=${dateParam}` // Usar ruta absoluta
                 if (esHoy || usarFechaForzada) {
                     apiUrl += "&forceRefresh=true"
                 }
@@ -445,12 +451,11 @@ export default function ExtractosPage() {
     const getTurnosPendientes = (provincia: string) => {
         const turnosYaGuardados = getTurnosYaGuardados(provincia)
         const diaSemana = getDay(selectedDate) // 0 = domingo, 1 = lunes, ..., 6 = sábado
-
         let todosTurnos: string[] = []
-
         if (provincia === "MONTEVIDEO") {
             todosTurnos = getTurnosDisponiblesMontevideo(selectedDate)
-        } else if (diaSemana === 0) { // Domingo
+        } else if (diaSemana === 0) {
+            // Domingo
             if (provincia === "SANTIAGO DEL ESTERO") {
                 todosTurnos = ["Matutina", "Vespertina"]
             } else {
@@ -460,7 +465,6 @@ export default function ExtractosPage() {
             // Para otras provincias y días que no son domingo, usar todos los turnos
             todosTurnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
         }
-
         const pendientes = todosTurnos.filter((turno) => !turnosYaGuardados.includes(turno))
         console.log(
             `DEBUG ${provincia}: Todos los turnos: ${todosTurnos}, Ya guardados: ${turnosYaGuardados}, Pendientes: ${pendientes}`,
@@ -497,7 +501,7 @@ export default function ExtractosPage() {
             console.log(`🗓️ Guardando con fecha seleccionada: ${fecha}`)
 
             // Obtener los turnos que deberían estar disponibles para la provincia y fecha seleccionada
-            const turnosDisponiblesParaGuardar = getTurnosPendientes(provincia);
+            const turnosDisponiblesParaGuardar = getTurnosPendientes(provincia)
 
             // Filtrar los turnos que tienen datos completos y están disponibles para guardar
             const turnosConDatos = turnosDisponiblesParaGuardar.filter((turno) => {
@@ -511,8 +515,10 @@ export default function ExtractosPage() {
                 setError("Debe completar TODOS los 20 números de 4 dígitos para cada turno que desee guardar")
                 return
             }
+
             console.log(`🔄 Guardando turnos de ${provincia}:`, turnosConDatos)
             let turnosGuardadosExitosamente = 0
+
             // Enviar cada turno por separado
             for (const turno of turnosConDatos) {
                 const numerosCompletos = data[turno].map((num) => num.trim())
@@ -521,10 +527,16 @@ export default function ExtractosPage() {
                 if (!todosCompletos) {
                     throw new Error(`El turno ${turno} tiene números incompletos. Todos deben ser de 4 dígitos.`)
                 }
+
                 // Mapear el nombre de la lotería para el backend si es necesario
                 const provinciaParaBackend = BACKEND_PROVINCE_MAP[provincia.toUpperCase()] || provincia
                 console.log(`📤 Enviando ${provinciaParaBackend} ${turno} para fecha ${fecha}:`, numerosCompletos)
-                const response = await fetch("/api/extractos", {
+
+                // *** CAMBIO CLAVE AQUÍ: Usar window.location.origin para la URL absoluta ***
+                const apiUrl = `${window.location.origin}/api/extractos`
+                console.log(`API URL para POST: ${apiUrl}`)
+
+                const response = await fetch(apiUrl, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -536,19 +548,24 @@ export default function ExtractosPage() {
                         numeros: numerosCompletos,
                     }),
                 })
+
                 const responseData = await response.json()
                 console.log(`📥 Respuesta ${provinciaParaBackend} ${turno}:`, responseData)
+
                 if (!response.ok) {
+                    console.error(`Error en la respuesta del servidor para ${provinciaParaBackend} ${turno}:`, responseData)
                     throw new Error(
                         `Error al guardar ${turno}: ${responseData.error || responseData.detalles || response.statusText}`,
                     )
                 }
                 if (!responseData.success) {
+                    console.error(`Respuesta no exitosa del servidor para ${provinciaParaBackend} ${turno}:`, responseData)
                     throw new Error(`Error al guardar ${turno}: ${responseData.error || "Respuesta no exitosa del servidor"}`)
                 }
                 turnosGuardadosExitosamente++
                 console.log(`✅ ${provinciaParaBackend} ${turno} guardado exitosamente para ${fecha}`)
             }
+
             // Si llegamos aquí, todos los turnos se guardaron exitosamente
             console.log(`🎉 ${turnosGuardadosExitosamente} turnos de ${provincia} guardados exitosamente para ${fecha}`)
             // Limpiar solo los turnos que se guardaron
@@ -620,28 +637,37 @@ export default function ExtractosPage() {
             console.log(`🗓️ Guardando con fecha seleccionada: ${fecha}`)
 
             // Obtener los turnos que deberían estar disponibles para la lotería y fecha seleccionada
-            const turnosDisponiblesParaGuardar = getTurnosPendientes(currentGenericLoteria);
+            const turnosDisponiblesParaGuardar = getTurnosPendientes(currentGenericLoteria)
 
             const turnosConDatos = turnosDisponiblesParaGuardar.filter((turno) => {
                 const numerosDelTurno = currentGenericLoteriaData[turno]
                 const numerosCompletos = numerosDelTurno.filter((num) => num.trim().length === 4 && /^\d{4}$/.test(num.trim()))
                 return numerosCompletos.length === 20
             })
+
             if (turnosConDatos.length === 0) {
                 setError("Debe completar TODOS los 20 números de 4 dígitos para cada turno que desee guardar")
                 return
             }
+
             console.log(`🔄 Guardando turnos de ${currentGenericLoteria}:`, turnosConDatos)
             let turnosGuardadosExitosamente = 0
+
             for (const turno of turnosConDatos) {
                 const numerosCompletos = currentGenericLoteriaData[turno].map((num) => num.trim())
                 const todosCompletos = numerosCompletos.every((num) => /^\d{4}$/.test(num))
                 if (!todosCompletos) {
                     throw new Error(`El turno ${turno} tiene números incompletos. Todos deben ser de 4 dígitos.`)
                 }
+
                 const provinciaParaBackend = BACKEND_PROVINCE_MAP[currentGenericLoteria.toUpperCase()] || currentGenericLoteria
                 console.log(`📤 Enviando ${provinciaParaBackend} ${turno} para fecha ${fecha}:`, numerosCompletos)
-                const response = await fetch("/api/extractos", {
+
+                // *** CAMBIO CLAVE AQUÍ: Usar window.location.origin para la URL absoluta ***
+                const apiUrl = `${window.location.origin}/api/extractos`
+                console.log(`API URL para POST: ${apiUrl}`)
+
+                const response = await fetch(apiUrl, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -653,19 +679,24 @@ export default function ExtractosPage() {
                         numeros: numerosCompletos,
                     }),
                 })
+
                 const responseData = await response.json()
                 console.log(`📥 Respuesta ${provinciaParaBackend} ${turno}:`, responseData)
+
                 if (!response.ok) {
+                    console.error(`Error en la respuesta del servidor para ${provinciaParaBackend} ${turno}:`, responseData)
                     throw new Error(
                         `Error al guardar ${turno}: ${responseData.error || responseData.detalles || response.statusText}`,
                     )
                 }
                 if (!responseData.success) {
+                    console.error(`Respuesta no exitosa del servidor para ${provinciaParaBackend} ${turno}:`, responseData)
                     throw new Error(`Error al guardar ${turno}: ${responseData.error || "Respuesta no exitosa del servidor"}`)
                 }
                 turnosGuardadosExitosamente++
                 console.log(`✅ ${provinciaParaBackend} ${turno} guardado exitosamente para ${fecha}`)
             }
+
             console.log(
                 `🎉 ${turnosGuardadosExitosamente} turnos de ${currentGenericLoteria} guardados exitosamente para ${fecha}`,
             )
@@ -788,7 +819,10 @@ export default function ExtractosPage() {
             setIsLoading(true)
             setError(null)
             setDebugInfo("Obteniendo fecha forzada de Argentina...")
-            const response = await fetch("/api/extractos/forzar-fecha", {
+            const apiUrl = `${window.location.origin}/api/extractos/forzar-fecha` // Usar ruta absoluta
+            console.log(`API URL para forzar fecha: ${apiUrl}`)
+
+            const response = await fetch(apiUrl, {
                 method: "GET",
                 headers: {
                     "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -918,12 +952,13 @@ export default function ExtractosPage() {
     const getMensajeDisponibilidad = (loteria: string) => {
         const diaSemana = getDay(selectedDate) // 0 = domingo, 1 = lunes, ..., 6 = sábado
         const nombreDia = format(selectedDate, "EEEE", { locale: es })
-
         if (loteria === "MONTEVIDEO") {
             return getMensajeDisponibilidadMontevideo()
-        } else if (loteria === "SANTIAGO DEL ESTERO" && diaSemana === 0) { // Domingo
+        } else if (loteria === "SANTIAGO DEL ESTERO" && diaSemana === 0) {
+            // Domingo
             return `Los domingos, solo Matutina y Vespertina disponibles para Santiago.`
-        } else if (diaSemana === 0) { // Cualquier otra lotería en domingo
+        } else if (diaSemana === 0) {
+            // Cualquier otra lotería en domingo
             return `Los domingos no hay sorteos para ${loteria}.`
         } else {
             return `Todos los turnos disponibles para ${loteria}`
@@ -1535,10 +1570,10 @@ export default function ExtractosPage() {
                                                             value={numero}
                                                             onChange={(e) => handleTucumanNumberChange(turno, index, e.target.value)}
                                                             className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
-                                                                ? "border-green-300 bg-green-50"
-                                                                : numero.length > 0
-                                                                    ? "border-yellow-300 bg-yellow-50"
-                                                                    : "border-gray-300"
+                                                                    ? "border-green-300 bg-green-50"
+                                                                    : numero.length > 0
+                                                                        ? "border-yellow-300 bg-yellow-50"
+                                                                        : "border-gray-300"
                                                                 }`}
                                                             placeholder={`${index + 1}`}
                                                             maxLength={4}
@@ -1637,10 +1672,10 @@ export default function ExtractosPage() {
                                                             value={numero}
                                                             onChange={(e) => handleNeuquenNumberChange(turno, index, e.target.value)}
                                                             className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
-                                                                ? "border-green-300 bg-green-50"
-                                                                : numero.length > 0
-                                                                    ? "border-yellow-300 bg-yellow-50"
-                                                                    : "border-gray-300"
+                                                                    ? "border-green-300 bg-green-50"
+                                                                    : numero.length > 0
+                                                                        ? "border-yellow-300 bg-yellow-50"
+                                                                        : "border-gray-300"
                                                                 }`}
                                                             placeholder={`${index + 1}`}
                                                             maxLength={4}
@@ -1741,10 +1776,10 @@ export default function ExtractosPage() {
                                                             value={numero}
                                                             onChange={(e) => handleSantaFeNumberChange(turno, index, e.target.value)}
                                                             className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
-                                                                ? "border-green-300 bg-green-50"
-                                                                : numero.length > 0
-                                                                    ? "border-yellow-300 bg-yellow-50"
-                                                                    : "border-gray-300"
+                                                                    ? "border-green-300 bg-green-50"
+                                                                    : numero.length > 0
+                                                                        ? "border-yellow-300 bg-yellow-50"
+                                                                        : "border-gray-300"
                                                                 }`}
                                                             placeholder={`${index + 1}`}
                                                             maxLength={4}
@@ -1849,10 +1884,10 @@ export default function ExtractosPage() {
                                                             value={numero}
                                                             onChange={(e) => handleMisionesNumberChange(turno, index, e.target.value)}
                                                             className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
-                                                                ? "border-green-300 bg-green-50"
-                                                                : numero.length > 0
-                                                                    ? "border-yellow-300 bg-yellow-50"
-                                                                    : "border-gray-300"
+                                                                    ? "border-green-300 bg-green-50"
+                                                                    : numero.length > 0
+                                                                        ? "border-yellow-300 bg-yellow-50"
+                                                                        : "border-gray-300"
                                                                 }`}
                                                             placeholder={`${index + 1}`}
                                                             maxLength={4}
@@ -1968,10 +2003,10 @@ export default function ExtractosPage() {
                                                             value={numero}
                                                             onChange={(e) => handleSantiagoNumberChange(turno, index, e.target.value)}
                                                             className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
-                                                                ? "border-green-300 bg-green-50"
-                                                                : numero.length > 0
-                                                                    ? "border-yellow-300 bg-yellow-50"
-                                                                    : "border-gray-300"
+                                                                    ? "border-green-300 bg-green-50"
+                                                                    : numero.length > 0
+                                                                        ? "border-yellow-300 bg-yellow-50"
+                                                                        : "border-gray-300"
                                                                 }`}
                                                             placeholder={`${index + 1}`}
                                                             maxLength={4}
@@ -2087,10 +2122,10 @@ export default function ExtractosPage() {
                                                             value={numero}
                                                             onChange={(e) => handleMontevideoNumberChange(turno, index, e.target.value)}
                                                             className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
-                                                                ? "border-green-300 bg-green-50"
-                                                                : numero.length > 0
-                                                                    ? "border-yellow-300 bg-yellow-50"
-                                                                    : "border-gray-300"
+                                                                    ? "border-green-300 bg-green-50"
+                                                                    : numero.length > 0
+                                                                        ? "border-yellow-300 bg-yellow-50"
+                                                                        : "border-gray-300"
                                                                 }`}
                                                             placeholder={`${index + 1}`}
                                                             maxLength={4}
@@ -2210,10 +2245,10 @@ export default function ExtractosPage() {
                                                                 handleGenericNumberChange(currentGenericLoteria, turno, index, e.target.value)
                                                             }
                                                             className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
-                                                                ? "border-green-300 bg-green-50"
-                                                                : numero.length > 0
-                                                                    ? "border-yellow-300 bg-yellow-50"
-                                                                    : "border-gray-300"
+                                                                    ? "border-green-300 bg-green-50"
+                                                                    : numero.length > 0
+                                                                        ? "border-yellow-300 bg-yellow-50"
+                                                                        : "border-gray-300"
                                                                 }`}
                                                             placeholder={`${index + 1}`}
                                                             maxLength={4}
