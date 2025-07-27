@@ -159,13 +159,13 @@ function detectarEntorno(): string {
     const railwayRegion = process.env.RAILWAY_REGION || "unknown"
     const railwayService = process.env.RAILWAY_SERVICE_NAME || "unknown"
     console.log(`🌍 ENTORNO DETECTADO:`)
-    console.log(`  - NODE_ENV: ${entorno}`)
-    console.log(`  - Railway: ${esRailway}`)
-    console.log(`  - Railway Region: ${railwayRegion}`)
-    console.log(`  - Railway Service: ${railwayService}`)
-    console.log(`  - Vercel: ${esVercel}`)
-    console.log(`  - TZ: ${process.env.TZ || "No definida"}`)
-    console.log(`  - Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
+    console.log(`  - NODE_ENV: ${entorno}`)
+    console.log(`  - Railway: ${esRailway}`)
+    console.log(`  - Railway Region: ${railwayRegion}`)
+    console.log(`  - Railway Service: ${railwayService}`)
+    console.log(`  - Vercel: ${esVercel}`)
+    console.log(`  - TZ: ${process.env.TZ || "No definida"}`)
+    console.log(`  - Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
     return esRailway ? "railway" : esVercel ? "vercel" : "local"
 }
 
@@ -275,23 +275,23 @@ function esSorteoFinalizado(turno: string, fecha: Date): boolean {
     // 🔥 LOGS DETALLADOS PARA DEBUG
     console.log(`⏰ VERIFICANDO SORTEO: ${turno}`)
     console.log(
-        `  - Hora actual: ${ahora.getHours()}:${ahora.getMinutes().toString().padStart(2, "0")} (${tiempoActual} min)`,
+        `  - Hora actual: ${ahora.getHours()}:${ahora.getMinutes().toString().padStart(2, "0")} (${tiempoActual} min)`,
     )
     console.log(
-        `  - Hora sorteo: ${Math.floor(tiempoSorteo / 60)}:${(tiempoSorteo % 60).toString().padStart(2, "0")} (${tiempoSorteo} min)`,
+        `  - Hora sorteo: ${Math.floor(tiempoSorteo / 60)}:${(tiempoSorteo % 60).toString().padStart(2, "0")} (${tiempoSorteo} min)`,
     )
-    console.log(`  - Fecha consulta: ${formatearFechaArgentina(fecha, "dd/MM/yyyy")}`)
-    console.log(`  - Hoy Argentina: ${formatearFechaArgentina(hoyArgentina, "dd/MM/yyyy")}`)
+    console.log(`  - Fecha consulta: ${formatearFechaArgentina(fecha, "dd/MM/yyyy")}`)
+    console.log(`  - Hoy Argentina: ${formatearFechaArgentina(hoyArgentina, "dd/MM/yyyy")}`)
 
     if (isAfter(hoyArgentina, fecha)) {
-        console.log(`  ✅ FINALIZADO: Fecha pasada`)
+        console.log(`  ✅ FINALIZADO: Fecha pasada`)
         return true
     }
 
     // Considerar finalizado 30 minutos después de la hora del sorteo para mayor seguridad
     const finalizado = tiempoActual > tiempoSorteo + 30
     console.log(
-        `  ${finalizado ? "✅" : "⏰"} ${finalizado ? "FINALIZADO" : "PENDIENTE"}: ${tiempoActual} > ${tiempoSorteo + 30}`,
+        `  ${finalizado ? "✅" : "⏰"} ${finalizado ? "FINALIZADO" : "PENDIENTE"}: ${tiempoActual} > ${tiempoSorteo + 30}`,
     )
     return finalizado
 }
@@ -310,7 +310,7 @@ function extraerNumerosFormato5($: cheerio.CheerioAPI, turno: string, provincia:
         console.log(`📄 Segmento analizado: "${segmento.substring(0, 200)}..."`)
         // 🔥 PATRÓN CORREGIDO: Buscar secuencias como "1." seguido de espacios/saltos y luego números de 4-5 dígitos
         // Patrón: número + punto + espacios/saltos + número de 4-5 dígitos
-        const patronEspaciado = /(\d+)\.\s*\n?\s*(\d{4,5})/g
+        const patronEspaciado = /(\d+)\.\s*\s*(\d{4,5})/g
         const numerosEncontrados: string[] = []
         let matchPatron: RegExpExecArray | null
         console.log(`🔍 Buscando patrón espaciado en segmento...`)
@@ -693,7 +693,8 @@ async function obtenerResultadoEspecifico(provincia: string, turno: string): Pro
             return null
         }
 
-        console.log(`\n🔍 PROCESANDO: ${provincia} - ${turno}`)
+        console.log(`
+🔍 PROCESANDO: ${provincia} - ${turno}`)
 
         // 🔥 RETRY LOGIC PARA RAILWAY
         let intentos = 0
@@ -789,7 +790,8 @@ async function obtenerResultadosConfiables(): Promise<Extracto[]> {
 
     // Procesar cada provincia (incluyendo las nuevas)
     for (const [provinciaKey, pizarraUrl] of Object.entries(URLS_PIZARRAS)) {
-        console.log(`\n🏛️ === PROVINCIA: ${provinciaKey} ===`)
+        console.log(`
+🏛️ === PROVINCIA: ${provinciaKey} ===`)
         const provinciaData = {
             loteria: provinciaKey === "NACION" ? "Nacional" : provinciaKey === "PROVINCIA" ? "Provincial" : provinciaKey,
             provincia: provinciaKey,
@@ -865,7 +867,8 @@ async function obtenerResultadosConfiables(): Promise<Extracto[]> {
         }
     }
 
-    console.log(`\n🏁 COMPLETADO SCRAPING: ${scrapedResults.length} resultados 100% CONFIABLES`)
+    console.log(`
+🏁 COMPLETADO SCRAPING: ${scrapedResults.length} resultados 100% CONFIABLES`)
     console.log(
         `📊 SCRAPED RESULTS:`,
         scrapedResults.map((r) => `${r.provincia}-${r.sorteo}`),

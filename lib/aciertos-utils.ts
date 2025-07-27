@@ -1089,11 +1089,12 @@ export const guardarAciertosEnFirestore = async (
 ): Promise<void> => {
     const fechaFormateada = format(fecha, "yyyy-MM-dd")
     const aciertosRef = collection(db, "aciertos")
-    const docId = `${nombrePasador}_${fechaFormateada}` // Usar nombrePasador y fecha como ID
+    const docId = `${nombrePasador}_${fechaFormateada}`
 
     const aciertosParaGuardar: any[] = []
     let totalGanado = 0.0
 
+    // Iterate and calculate totalGanado and aciertosParaGuardar
     for (const provinciaEntry of Object.values(aciertosAgrupados)) {
         for (const sorteoEntry of Object.values(provinciaEntry)) {
             for (const acierto of sorteoEntry) {
@@ -1120,8 +1121,8 @@ export const guardarAciertosEnFirestore = async (
                 totalGanado += premio
 
                 const aciertoDatos = {
-                    ...acierto, // Copy all existing fields
-                    id: acierto.id || Math.random().toString(36).substring(2, 11), // Generate a simple ID if not present
+                    ...acierto,
+                    id: acierto.id || Math.random().toString(36).substring(2, 11),
                     fecha: fecha, // Store as Date object
                     pasador: nombrePasador,
                     premio: premio,
@@ -1132,15 +1133,17 @@ export const guardarAciertosEnFirestore = async (
         }
     }
 
+    // This is the crucial part: ensure the document is updated correctly
+    // even if aciertosParaGuardar is empty.
     await setDoc(
         doc(aciertosRef, docId),
         {
             [fechaFormateada]: {
-                aciertos: aciertosParaGuardar,
+                aciertos: aciertosParaGuardar, // Will be empty array if no aciertos
                 totalAciertos: aciertosParaGuardar.length,
-                totalGanado: totalGanado,
+                totalGanado: totalGanado, // Will be 0 if no aciertos
                 ultimaActualizacion: Timestamp.now(),
-                pasadorId: nombrePasador, // Store pasador ID for easier querying
+                pasadorId: nombrePasador,
             },
         },
         { merge: true },

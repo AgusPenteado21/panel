@@ -1,5 +1,4 @@
 "use client"
-
 import type React from "react"
 import { useState, useCallback, useEffect } from "react"
 import Navbar from "../components/Navbar"
@@ -243,16 +242,13 @@ export default function ExtractosPage() {
                 setIsLoading(true)
                 setError(null)
                 setDebugInfo("Iniciando fetchExtractos")
-
                 const dateParam = format(date, "yyyy-MM-dd")
                 const hoy = new Date()
                 const esHoy = format(date, "yyyy-MM-dd") === format(hoy, "yyyy-MM-dd")
-
                 let apiUrl = `${window.location.origin}/api/extractos?date=${dateParam}` // Usar ruta absoluta
                 if (esHoy || usarFechaForzada) {
                     apiUrl += "&forceRefresh=true"
                 }
-
                 setDebugInfo((prev) => prev + `\nIntentando cargar datos de: ${apiUrl}`)
                 const response = await fetch(apiUrl, {
                     method: "GET",
@@ -264,14 +260,11 @@ export default function ExtractosPage() {
                     },
                 })
                 setDebugInfo((prev) => prev + `\nRespuesta recibida. Status: ${response.status}`)
-
                 if (!response.ok) {
                     throw new Error(`Error HTTP! status: ${response.status}`)
                 }
-
                 const data = await response.json()
                 setDebugInfo((prev) => prev + `\nDatos recibidos: ${JSON.stringify(data).substring(0, 200)}...`)
-
                 if (data && Array.isArray(data) && data.length > 0) {
                     const extractosConCamposAdicionales = data.map((extracto: any) => ({
                         ...extracto,
@@ -329,7 +322,6 @@ export default function ExtractosPage() {
             ...prev,
             [turno]: prev[turno].map((num, i) => (i === index ? numeroLimpio : num)),
         }))
-
         // Auto-focus al siguiente campo cuando se completen 4 dígitos
         if (numeroLimpio.length === 4) {
             const nextIndex = index + 1
@@ -390,7 +382,6 @@ export default function ExtractosPage() {
             ...prev,
             [turno]: prev[turno].map((num, i) => (i === index ? numeroLimpio : num)),
         }))
-
         if (numeroLimpio.length === 4) {
             const nextIndex = index + 1
             if (nextIndex < 20) {
@@ -442,7 +433,6 @@ export default function ExtractosPage() {
         const normalizedLoteriaBoton = loteriaBoton.toUpperCase()
         // Obtener todos los nombres posibles para esta lotería (incluyendo abreviaciones o nombres completos)
         const targetNames = LOTERIA_NAME_MAP[normalizedLoteriaBoton] || [normalizedLoteriaBoton]
-
         const turnosLoteria = extractos
             .filter((extracto) => {
                 const extractoLoteriaNormalizada = extracto.loteria.toUpperCase()
@@ -462,7 +452,6 @@ export default function ExtractosPage() {
         const turnosYaGuardados = getTurnosYaGuardados(provincia)
         const diaSemana = getDay(selectedDate) // 0 = domingo, 1 = lunes, ..., 6 = sábado
         let todosTurnos: string[] = []
-
         if (provincia === "MONTEVIDEO") {
             todosTurnos = getTurnosDisponiblesMontevideo(selectedDate)
         } else if (provincia === "SANTIAGO DEL ESTERO") {
@@ -483,7 +472,6 @@ export default function ExtractosPage() {
                 todosTurnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
             }
         }
-
         const pendientes = todosTurnos.filter((turno) => !turnosYaGuardados.includes(turno))
         console.log(
             `DEBUG ${provincia}: Todos los turnos: ${todosTurnos}, Ya guardados: ${turnosYaGuardados}, Pendientes: ${pendientes}`,
@@ -515,7 +503,6 @@ export default function ExtractosPage() {
         try {
             setIsSaving(true)
             setError(null)
-
             // Usar la fecha seleccionada
             const fecha = format(selectedDate, "dd/MM/yyyy", { locale: es })
             console.log(`🗓️ Guardando con fecha seleccionada: ${fecha}`)
@@ -553,8 +540,8 @@ export default function ExtractosPage() {
                 const provinciaParaBackend = BACKEND_PROVINCE_MAP[provincia.toUpperCase()] || provincia
                 console.log(`📤 Enviando ${provinciaParaBackend} ${turno} para fecha ${fecha}:`, numerosCompletos)
 
-                // *** CAMBIO CLAVE AQUÍ: Usar window.location.origin para la URL absoluta ***
-                const apiUrl = `${window.location.origin}/api/extractos`
+                // *** CAMBIO CLAVE AQUÍ: Usar ruta relativa en lugar de window.location.origin ***
+                const apiUrl = "/api/extractos"
                 console.log(`API URL para POST: ${apiUrl}`)
 
                 const response = await fetch(apiUrl, {
@@ -583,7 +570,6 @@ export default function ExtractosPage() {
                     console.error(`Respuesta no exitosa del servidor para ${provinciaParaBackend} ${turno}:`, responseData)
                     throw new Error(`Error al guardar ${turno}: ${responseData.error || "Respuesta no exitosa del servidor"}`)
                 }
-
                 turnosGuardadosExitosamente++
                 console.log(`✅ ${provinciaParaBackend} ${turno} guardado exitosamente para ${fecha}`)
             }
@@ -602,7 +588,6 @@ export default function ExtractosPage() {
 
             // Mostrar mensaje de éxito
             setError(null)
-
             // Refrescar datos inmediatamente
             console.log("🔄 Refrescando datos desde Firebase...")
             await fetchExtractos(selectedDate)
@@ -659,7 +644,6 @@ export default function ExtractosPage() {
         try {
             setIsSavingGenericLoteria(true)
             setError(null)
-
             const fecha = format(selectedDate, "dd/MM/yyyy", { locale: es })
             console.log(`🗓️ Guardando con fecha seleccionada: ${fecha}`)
 
@@ -682,7 +666,6 @@ export default function ExtractosPage() {
 
             for (const turno of turnosConDatos) {
                 const numerosCompletos = currentGenericLoteriaData[turno].map((num) => num.trim())
-
                 const todosCompletos = numerosCompletos.every((num) => /^\d{4}$/.test(num))
                 if (!todosCompletos) {
                     throw new Error(`El turno ${turno} tiene números incompletos. Todos deben ser de 4 dígitos.`)
@@ -691,8 +674,8 @@ export default function ExtractosPage() {
                 const provinciaParaBackend = BACKEND_PROVINCE_MAP[currentGenericLoteria.toUpperCase()] || currentGenericLoteria
                 console.log(`📤 Enviando ${provinciaParaBackend} ${turno} para fecha ${fecha}:`, numerosCompletos)
 
-                // *** CAMBIO CLAVE AQUÍ: Usar window.location.origin para la URL absoluta ***
-                const apiUrl = `${window.location.origin}/api/extractos`
+                // *** CAMBIO CLAVE AQUÍ: Usar ruta relativa en lugar de window.location.origin ***
+                const apiUrl = "/api/extractos"
                 console.log(`API URL para POST: ${apiUrl}`)
 
                 const response = await fetch(apiUrl, {
@@ -721,7 +704,6 @@ export default function ExtractosPage() {
                     console.error(`Respuesta no exitosa del servidor para ${provinciaParaBackend} ${turno}:`, responseData)
                     throw new Error(`Error al guardar ${turno}: ${responseData.error || "Respuesta no exitosa del servidor"}`)
                 }
-
                 turnosGuardadosExitosamente++
                 console.log(`✅ ${provinciaParaBackend} ${turno} guardado exitosamente para ${fecha}`)
             }
@@ -739,7 +721,6 @@ export default function ExtractosPage() {
             })
 
             setError(null)
-
             console.log("🔄 Refrescando datos desde Firebase...")
             await fetchExtractos(selectedDate)
             console.log("✅ Datos refrescados")
@@ -984,7 +965,6 @@ export default function ExtractosPage() {
     const getMensajeDisponibilidad = (loteria: string) => {
         const diaSemana = getDay(selectedDate) // 0 = domingo, 1 = lunes, ..., 6 = sábado
         const nombreDia = format(selectedDate, "EEEE", { locale: es })
-
         if (loteria === "MONTEVIDEO") {
             return getMensajeDisponibilidadMontevideo()
         } else if (loteria === "SANTIAGO DEL ESTERO") {
@@ -1403,14 +1383,12 @@ export default function ExtractosPage() {
                                 <AlertDescription className="text-xs sm:text-sm">{error}</AlertDescription>
                             </Alert>
                         )}
-
                         {extractos.length > 0 && (
                             <Alert variant="default" className="mb-4 bg-green-100 border-green-400 text-green-700 flex items-start">
                                 <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-green-600 flex-shrink-0 mt-0.5" />
                                 <AlertDescription className="text-xs sm:text-sm">{`Se cargaron ${extractos.length} extractos correctamente.`}</AlertDescription>
                             </Alert>
                         )}
-
                         {extractos.length === 0 && !isLoading && (
                             <Alert
                                 variant="default"
@@ -1422,7 +1400,6 @@ export default function ExtractosPage() {
                                 </AlertDescription>
                             </Alert>
                         )}
-
                         {usarFechaForzada && (
                             <Alert variant="default" className="mb-4 bg-blue-100 border-blue-400 text-blue-700 flex items-start">
                                 <Info className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -2353,6 +2330,100 @@ export default function ExtractosPage() {
                     </DialogContent>
                 </Dialog>
             </main>
+        </div>
+    )
+}
+
+interface ProvinciaModalProps {
+    provincia: string
+    data: ProvinciaData
+    setData: React.Dispatch<React.SetStateAction<ProvinciaData>>
+    handleNumberChange: (turno: string, index: number, value: string) => void
+    isSaving: boolean
+    onConfirm: () => void
+    onClose: () => void
+    getTurnosYaGuardados: (loteriaBoton: string) => string[]
+    getTurnosPendientes: (provincia: string) => string[]
+    isTurnoCompleto: (turno: string, data: ProvinciaData) => boolean
+    contarNumerosCompletados: (turno: string, data: ProvinciaData) => number
+    mensajeDisponibilidad?: string
+}
+
+const ProvinciaModal: React.FC<ProvinciaModalProps> = ({
+    provincia,
+    data,
+    setData,
+    handleNumberChange,
+    isSaving,
+    onConfirm,
+    onClose,
+    getTurnosYaGuardados,
+    getTurnosPendientes,
+    isTurnoCompleto,
+    contarNumerosCompletados,
+    mensajeDisponibilidad,
+}) => {
+    const turnosYaGuardados = getTurnosYaGuardados(provincia)
+    const turnosPendientes = getTurnosPendientes(provincia)
+    const todosTurnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
+    const turnosDisponibles = todosTurnos.filter((turno) => turnosPendientes.includes(turno))
+
+    return (
+        <div>
+            {mensajeDisponibilidad && (
+                <Alert variant="default" className="mb-4 bg-blue-100 border-blue-400 text-blue-700 flex items-start">
+                    <Info className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <AlertDescription className="text-xs sm:text-sm">{mensajeDisponibilidad}</AlertDescription>
+                </Alert>
+            )}
+            {turnosDisponibles.length === 0 ? (
+                <Alert variant="default" className="mb-4 bg-green-100 border-green-400 text-green-700 flex items-start">
+                    <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-green-600 flex-shrink-0 mt-0.5" />
+                    <AlertDescription className="text-xs sm:text-sm">
+                        Todos los turnos de {provincia} ya fueron tipeados para este día.
+                    </AlertDescription>
+                </Alert>
+            ) : (
+                <Alert variant="default" className="mb-4 bg-yellow-100 border-yellow-400 text-yellow-700 flex items-start">
+                    <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-yellow-600 flex-shrink-0 mt-0.5" />
+                    <AlertDescription className="text-xs sm:text-sm">
+                        {turnosPendientes.length} turnos pendientes de {provincia} para este día: {turnosPendientes.join(", ")}.
+                    </AlertDescription>
+                </Alert>
+            )}
+
+            {todosTurnos.map((turno) => (
+                <div key={turno} className="mb-4">
+                    <Label className="block font-medium text-gray-700 mb-2">{turno}</Label>
+                    <div className="grid grid-cols-5 gap-2">
+                        {Array.from({ length: 20 }).map((_, index) => (
+                            <Input
+                                key={index}
+                                type="text"
+                                placeholder={`${index + 1}`}
+                                value={data[turno][index] || ""}
+                                onChange={(e) => handleNumberChange(turno, index, e.target.value)}
+                                className="w-full text-center"
+                                data-provincia={provincia}
+                                data-turno={turno}
+                                data-index={index}
+                                maxLength={4}
+                            />
+                        ))}
+                    </div>
+                    <div className="mt-2 text-sm text-gray-500">{contarNumerosCompletados(turno, data)}/20 números completos</div>
+                </div>
+            ))}
+
+            <div className="flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={onClose}>
+                    Cancelar
+                </Button>
+                <Button type="button" onClick={onConfirm} disabled={isSaving}>
+                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    Guardar
+                </Button>
+            </div>
         </div>
     )
 }
