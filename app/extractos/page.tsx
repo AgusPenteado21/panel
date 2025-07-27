@@ -245,7 +245,9 @@ export default function ExtractosPage() {
                 const dateParam = format(date, "yyyy-MM-dd")
                 const hoy = new Date()
                 const esHoy = format(date, "yyyy-MM-dd") === format(hoy, "yyyy-MM-dd")
-                let apiUrl = `${window.location.origin}/api/extractos?date=${dateParam}` // Usar ruta absoluta
+                // Usar RAILWAY_STATIC_URL si está disponible, sino usar ruta relativa
+                const baseUrl = process.env.RAILWAY_STATIC_URL || ""
+                let apiUrl = `${baseUrl}/api/extractos?date=${dateParam}`
                 if (esHoy || usarFechaForzada) {
                     apiUrl += "&forceRefresh=true"
                 }
@@ -1588,7 +1590,8 @@ export default function ExtractosPage() {
                                                         <Input
                                                             key={index}
                                                             type="text"
-                                                            value={numero}
+                                                            placeholder={`${index + 1}`}
+                                                            value={tucumanData[turno][index] || ""}
                                                             onChange={(e) => handleTucumanNumberChange(turno, index, e.target.value)}
                                                             className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
                                                                     ? "border-green-300 bg-green-50"
@@ -1596,7 +1599,6 @@ export default function ExtractosPage() {
                                                                         ? "border-yellow-300 bg-yellow-50"
                                                                         : "border-gray-300"
                                                                 }`}
-                                                            placeholder={`${index + 1}`}
                                                             maxLength={4}
                                                             data-provincia="TUCUMAN"
                                                             data-turno={turno}
@@ -2329,6 +2331,16 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
+                {debugInfo && (
+                    <Card className="mt-4">
+                        <CardHeader>
+                            <CardTitle>Debug Info</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <pre className="text-xs">{debugInfo}</pre>
+                        </CardContent>
+                    </Card>
+                )}
             </main>
         </div>
     )
