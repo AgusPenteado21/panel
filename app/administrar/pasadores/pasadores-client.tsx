@@ -1,5 +1,4 @@
 "use client"
-
 import type React from "react"
 import { useState, useEffect } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -27,10 +26,11 @@ import {
     Key,
     Lock,
     Users,
+    Move,
 } from "lucide-react"
 import Navbar from "@/app/components/Navbar"
 import { db } from "@/lib/firebase"
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where } from "firebase/firestore"
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, writeBatch } from "firebase/firestore" // Importar writeBatch
 import { hash } from "bcryptjs"
 import { useToast } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
@@ -62,6 +62,7 @@ export default function PasadoresClient() {
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
     const [isBulkEditDialogOpen, setIsBulkEditDialogOpen] = useState(false)
     const [isChangePasswordDialogOpen, setIsChangePasswordDialogOpen] = useState(false)
+    const [isChangeModuleDialogOpen, setIsChangeModuleDialogOpen] = useState(false) // Nuevo estado para el diálogo de cambio de módulo
     const [editingPasador, setEditingPasador] = useState<Pasador | null>(null)
     const [editingComision, setEditingComision] = useState<number>(0)
     const [bulkComision, setBulkComision] = useState<number>(0)
@@ -69,8 +70,8 @@ export default function PasadoresClient() {
     const [isLoading, setIsLoading] = useState(false)
     const [modulosDisponibles, setModulosDisponibles] = useState<number[]>([])
     const [moduloSeleccionado, setModuloSeleccionado] = useState<number>(70)
+    const [newModuloForPasador, setNewModuloForPasador] = useState<string>("") // Estado para el nuevo módulo en el diálogo de cambio
     const [isCreateModuleDialogOpen, setIsCreateModuleDialogOpen] = useState(false)
-
     const { toast } = useToast()
 
     useEffect(() => {
@@ -180,48 +181,87 @@ export default function PasadoresClient() {
         }
     }
 
-    const obtenerSiguientePosicion = (pasadores: Pasador[], modulo: number) => {
-        const pasadoresEnModulo = pasadores.filter((p) => p.modulo === modulo)
-        return pasadoresEnModulo.length + 1
+    const obtenerSiguientePosicion = (pasadoresList: Pasador[], modulo: number) => {
+        const pasadoresEnModulo = pasadoresList.filter((p) => p.modulo === modulo)
+        const maxPosicion = pasadoresEnModulo.reduce((max, p) => Math.max(max, p.posicionEnModulo), 0)
+        return maxPosicion + 1
+    }
+
+    // Función para reindexar las posiciones de los pasadores dentro de un módulo
+    const reindexModule = async (moduleNumber: number) => {
+        const q = query(collection(db, "pasadores"), where("modulo", "==", moduleNumber))
+        const snapshot = await getDocs(q)
+        const pasadoresInModule = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as Pasador[]
+
+        pasadoresInModule.sort((a, b) => a.posicionEnModulo - b.posicionEnModulo)
+
+        const batch = writeBatch(db) // Correcto: usar writeBatch(db)
+        for (let i = 0; i < pasadoresInModule.length; i++) {
+            const pasador = pasadoresInModule[i]
+            const newPosicion = i + 1
+            const newDisplayId = `${moduleNumber}-${newPosicion.toString().padStart(4, "0")}`
+
+            if (pasador.posicionEnModulo !== newPosicion || pasador.displayId !== newDisplayId) {
+                const pasadorRef = doc(db, "pasadores", pasador.id)
+                batch.update(pasadorRef, {
+                    posicionEnModulo: newPosicion,
+                    displayId: newDisplayId,
+                })
+            }
+        }
+        await batch.commit()
     }
 
     const fetchPasadores = async () => {
-        const pasadoresCollection = collection(db, "pasadores")
-        const pasadoresSnapshot = await getDocs(pasadoresCollection)
-        const pasadoresList = pasadoresSnapshot.docs.map((doc) => {
-            const data = doc.data()
-            return {
-                id: doc.id,
-                displayId: data.displayId || `${data.modulo || 70}-${(data.posicionEnModulo || 1).toString().padStart(4, "0")}`,
-                nombre: data.nombre || "",
-                nombreFantasia: data.nombreFantasia || "",
-                comision: data.comision || 0,
-                deje: data.deje || false,
-                dejeComision: data.dejeComision || 0,
-                observaciones: data.observaciones || "",
-                username: data.username || "",
-                password: data.password || "",
-                bloqueado: data.bloqueado || false,
-                modulo: data.modulo || 70,
-                posicionEnModulo: data.posicionEnModulo || 1,
-            } as Pasador
-        })
-
-        // Ordenar por módulo y posición
-        pasadoresList.sort((a, b) => {
-            if (a.modulo !== b.modulo) {
-                return a.modulo - b.modulo
+        setIsLoading(true)
+        try {
+            const pasadoresCollection = collection(db, "pasadores")
+            const pasadoresSnapshot = await getDocs(pasadoresCollection)
+            const pasadoresList = pasadoresSnapshot.docs.map((doc) => {
+                const data = doc.data()
+                return {
+                    id: doc.id,
+                    displayId:
+                        data.displayId || `${data.modulo || 70}-${(data.posicionEnModulo || 1).toString().padStart(4, "0")}`,
+                    nombre: data.nombre || "",
+                    nombreFantasia: data.nombreFantasia || "",
+                    comision: data.comision || 0,
+                    deje: data.deje || false,
+                    dejeComision: data.dejeComision || 0,
+                    observaciones: data.observaciones || "",
+                    username: data.username || "",
+                    password: data.password || "",
+                    bloqueado: data.bloqueado || false,
+                    modulo: data.modulo || 70,
+                    posicionEnModulo: data.posicionEnModulo || 1,
+                } as Pasador
+            })
+            // Ordenar por módulo y posición
+            pasadoresList.sort((a, b) => {
+                if (a.modulo !== b.modulo) {
+                    return a.modulo - b.modulo
+                }
+                return a.posicionEnModulo - b.posicionEnModulo
+            })
+            setPasadores(pasadoresList)
+            // Calcular módulos disponibles
+            const modulos = calcularModulosDisponibles(pasadoresList)
+            setModulosDisponibles(modulos)
+            // Si el módulo seleccionado no está disponible, seleccionar el primero disponible
+            if (!modulos.includes(moduloSeleccionado) && modulos.length > 0) {
+                setModuloSeleccionado(modulos[0])
+            } else if (modulos.length === 0) {
+                setModuloSeleccionado(70) // Default to 70 if no modules exist
             }
-            return a.posicionEnModulo - b.posicionEnModulo
-        })
-
-        setPasadores(pasadoresList)
-        // Calcular módulos disponibles
-        const modulos = calcularModulosDisponibles(pasadoresList)
-        setModulosDisponibles(modulos)
-        // Si el módulo seleccionado no está disponible, seleccionar el primero disponible
-        if (!modulos.includes(moduloSeleccionado)) {
-            setModuloSeleccionado(modulos[0])
+        } catch (error) {
+            console.error("Error al cargar pasadores:", error)
+            toast({
+                title: "Error",
+                description: "No se pudieron cargar los pasadores.",
+                variant: "destructive",
+            })
+        } finally {
+            setIsLoading(false)
         }
     }
 
@@ -239,6 +279,7 @@ export default function PasadoresClient() {
 
         const nombreQuery = query(collection(db, "pasadores"), where("nombre", "==", nombre))
         const usernameQuery = query(collection(db, "pasadores"), where("username", "==", username))
+
         const [nombreSnapshot, usernameSnapshot] = await Promise.all([getDocs(nombreQuery), getDocs(usernameQuery)])
 
         if (!nombreSnapshot.empty) {
@@ -326,7 +367,6 @@ export default function PasadoresClient() {
                 ...editingPasador,
                 comision: editingComision,
             }
-
             try {
                 await updateDoc(doc(db, "pasadores", editingPasador.id), updatedPasador)
                 setIsEditDialogOpen(false)
@@ -353,19 +393,15 @@ export default function PasadoresClient() {
     const handleBulkUpdateComision = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault()
         setIsLoading(true)
-
         try {
             const updatePromises = selectedPasadores.map((pasadorId) =>
                 updateDoc(doc(db, "pasadores", pasadorId), { comision: bulkComision }),
             )
-
             await Promise.all(updatePromises)
-
             setIsBulkEditDialogOpen(false)
             setBulkComision(0)
             setSelectedPasadores([])
             await fetchPasadores()
-
             toast({
                 title: "Éxito",
                 description: `Comisión actualizada para ${selectedPasadores.length} pasador(es).`,
@@ -385,9 +421,20 @@ export default function PasadoresClient() {
     const handleDeletePasadores = async () => {
         setIsLoading(true)
         try {
+            const oldModulesToReindex = new Set<number>()
             for (const pasadorId of selectedPasadores) {
-                await deleteDoc(doc(db, "pasadores", pasadorId))
+                const pasadorToDelete = pasadores.find((p) => p.id === pasadorId)
+                if (pasadorToDelete) {
+                    oldModulesToReindex.add(pasadorToDelete.modulo)
+                    await deleteDoc(doc(db, "pasadores", pasadorId))
+                }
             }
+
+            // Reindex affected modules
+            for (const moduleNumber of Array.from(oldModulesToReindex)) {
+                await reindexModule(moduleNumber)
+            }
+
             setSelectedPasadores([])
             await fetchPasadores()
             toast({
@@ -413,7 +460,6 @@ export default function PasadoresClient() {
             const formData = new FormData(event.currentTarget)
             const newPassword = formData.get("newPassword") as string
             const hashedPassword = await hash(newPassword, 10)
-
             try {
                 await updateDoc(doc(db, "pasadores", editingPasador.id), { password: hashedPassword })
                 setIsChangePasswordDialogOpen(false)
@@ -455,6 +501,79 @@ export default function PasadoresClient() {
         }
     }
 
+    // Nueva función para manejar el cambio de módulo de un pasador
+    const handleChangeModule = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault()
+        if (!editingPasador) return
+
+        setIsLoading(true)
+        const formData = new FormData(event.currentTarget)
+        const newModulo = Number.parseInt(formData.get("newModulo") as string)
+        const oldModulo = editingPasador.modulo
+
+        if (newModulo === oldModulo) {
+            toast({
+                title: "Información",
+                description: "El pasador ya está en este módulo.",
+                variant: "default",
+            })
+            setIsLoading(false)
+            setIsChangeModuleDialogOpen(false)
+            return
+        }
+
+        // Verificar si el nuevo módulo está lleno
+        const pasadoresEnNuevoModulo = pasadores.filter((p) => p.modulo === newModulo)
+        if (pasadoresEnNuevoModulo.length >= PASADORES_POR_MODULO) {
+            toast({
+                title: "Error",
+                description: `El módulo ${newModulo} está lleno (máximo ${PASADORES_POR_MODULO} pasadores).`,
+                variant: "destructive",
+            })
+            setIsLoading(false)
+            return
+        }
+
+        try {
+            // 1. Obtener la siguiente posición en el nuevo módulo
+            const newPosicionEnModulo = obtenerSiguientePosicion(pasadores, newModulo)
+            const newDisplayId = `${newModulo}-${newPosicionEnModulo.toString().padStart(4, "0")}`
+
+            // 2. Actualizar el pasador en Firebase
+            await updateDoc(doc(db, "pasadores", editingPasador.id), {
+                modulo: newModulo,
+                posicionEnModulo: newPosicionEnModulo,
+                displayId: newDisplayId,
+            })
+
+            // 3. Reindexar el módulo antiguo (si no es el mismo)
+            if (oldModulo !== newModulo) {
+                await reindexModule(oldModulo)
+            }
+
+            // 4. Reindexar el nuevo módulo
+            await reindexModule(newModulo)
+
+            await fetchPasadores() // Refrescar todos los pasadores para reflejar los cambios
+            toast({
+                title: "Éxito",
+                description: `Pasador "${editingPasador.nombre}" movido al módulo ${newModulo} correctamente.`,
+            })
+            setIsChangeModuleDialogOpen(false)
+            setEditingPasador(null)
+            setNewModuloForPasador("")
+        } catch (error) {
+            console.error("Error al cambiar el módulo del pasador:", error)
+            toast({
+                title: "Error",
+                description: "No se pudo cambiar el módulo del pasador.",
+                variant: "destructive",
+            })
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
     const togglePasadorSelection = (pasadorId: string) => {
         setSelectedPasadores((prev) =>
             prev.includes(pasadorId) ? prev.filter((id) => id !== pasadorId) : [...prev, pasadorId],
@@ -487,11 +606,9 @@ export default function PasadoresClient() {
             Observaciones: p.observaciones,
             Estado: p.bloqueado ? "Bloqueado" : "Activo",
         }))
-
         const worksheet = XLSX.utils.json_to_sheet(worksheetData)
         XLSX.utils.book_append_sheet(workbook, worksheet, "Pasadores")
         XLSX.writeFile(workbook, "pasadores.xlsx")
-
         toast({
             title: "Éxito",
             description: "Archivo Excel generado y descargado correctamente.",
@@ -630,6 +747,24 @@ export default function PasadoresClient() {
                         >
                             <Pencil className="h-4 w-4 mr-2" />
                             Modificar
+                        </Button>
+
+                        {/* Nuevo botón para cambiar de módulo */}
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                if (selectedPasadores.length === 1) {
+                                    const pasadorToEdit = pasadores.find((p) => p.id === selectedPasadores[0])!
+                                    setEditingPasador(pasadorToEdit)
+                                    setNewModuloForPasador(pasadorToEdit.modulo.toString()) // Set current module as default
+                                    setIsChangeModuleDialogOpen(true)
+                                }
+                            }}
+                            disabled={selectedPasadores.length !== 1}
+                            className="border-teal-300 text-teal-700 hover:bg-teal-50 hover:border-teal-500"
+                        >
+                            <Move className="h-4 w-4 mr-2" />
+                            Cambiar Módulo
                         </Button>
 
                         <Button
@@ -917,6 +1052,7 @@ export default function PasadoresClient() {
                     </DialogContent>
                 </Dialog>
 
+                {/* Diálogo para cambiar contraseña */}
                 <Dialog open={isChangePasswordDialogOpen} onOpenChange={setIsChangePasswordDialogOpen}>
                     <DialogContent className="bg-white border border-blue-200 shadow-xl">
                         <DialogHeader>
@@ -954,6 +1090,61 @@ export default function PasadoresClient() {
                     </DialogContent>
                 </Dialog>
 
+                {/* Nuevo Diálogo para cambiar de módulo */}
+                <Dialog open={isChangeModuleDialogOpen} onOpenChange={setIsChangeModuleDialogOpen}>
+                    <DialogContent className="bg-white border border-teal-200 shadow-xl max-w-md">
+                        <DialogHeader>
+                            <DialogTitle className="text-teal-800">Cambiar Módulo de Pasador</DialogTitle>
+                            <DialogDescription>
+                                Mover a {editingPasador?.nombre} ({editingPasador?.displayId}) a un nuevo módulo.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <form className="grid gap-4 py-4" onSubmit={handleChangeModule}>
+                            <div className="grid gap-2">
+                                <Label htmlFor="newModulo" className="text-teal-700">
+                                    Nuevo Módulo
+                                </Label>
+                                <Select
+                                    name="newModulo"
+                                    value={newModuloForPasador}
+                                    onValueChange={setNewModuloForPasador}
+                                    disabled={isLoading}
+                                >
+                                    <SelectTrigger className="border-teal-200 focus:border-teal-500">
+                                        <SelectValue placeholder="Seleccionar nuevo módulo" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {modulosDisponibles.map((modulo) => {
+                                            const pasadoresEnModulo = pasadores.filter((p) => p.modulo === modulo).length
+                                            const espaciosDisponibles = PASADORES_POR_MODULO - pasadoresEnModulo
+                                            return (
+                                                <SelectItem key={modulo} value={modulo.toString()}>
+                                                    Módulo {modulo} ({espaciosDisponibles} espacios disponibles)
+                                                </SelectItem>
+                                            )
+                                        })}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <Button
+                                type="submit"
+                                disabled={isLoading || !newModuloForPasador}
+                                className="bg-gradient-to-r from-teal-600 to-cyan-700 hover:from-teal-700 hover:to-cyan-800 text-white"
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Moviendo...
+                                    </>
+                                ) : (
+                                    "Mover Pasador"
+                                )}
+                            </Button>
+                        </form>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Diálogo para crear módulo */}
                 <Dialog open={isCreateModuleDialogOpen} onOpenChange={setIsCreateModuleDialogOpen}>
                     <DialogContent className="bg-white border border-blue-200 shadow-xl max-w-md">
                         <DialogHeader>
@@ -995,7 +1186,6 @@ export default function PasadoresClient() {
                         </form>
                     </DialogContent>
                 </Dialog>
-
                 <Toaster />
             </div>
         </div>

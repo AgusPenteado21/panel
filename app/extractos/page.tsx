@@ -87,7 +87,7 @@ const LOTERIA_NAME_MAP: { [key: string]: string[] } = {
 // Mapeo de nombres de loterías para enviar al backend (si el backend espera nombres cortos)
 const BACKEND_PROVINCE_MAP: { [key: string]: string } = {
     "SANTA FE": "SANTA",
-    MISIONES: "MISION",
+    MISIONES: "MISIONES", // CAMBIO AQUÍ: Enviamos el nombre completo para Misiones
     "SANTIAGO DEL ESTERO": "SANTIAGO",
     TUCUMAN: "TUCUMAN",
     NEUQUEN: "NEUQUEN",
@@ -433,6 +433,7 @@ export default function ExtractosPage() {
         const normalizedLoteriaBoton = loteriaBoton.toUpperCase()
         // Obtener todos los nombres posibles para esta lotería (incluyendo abreviaciones o nombres completos)
         const targetNames = LOTERIA_NAME_MAP[normalizedLoteriaBoton] || [normalizedLoteriaBoton]
+
         const turnosLoteria = extractos
             .filter((extracto) => {
                 const extractoLoteriaNormalizada = extracto.loteria.toUpperCase()
@@ -452,6 +453,7 @@ export default function ExtractosPage() {
         const turnosYaGuardados = getTurnosYaGuardados(provincia)
         const diaSemana = getDay(selectedDate) // 0 = domingo, 1 = lunes, ..., 6 = sábado
         let todosTurnos: string[] = []
+
         if (provincia === "MONTEVIDEO") {
             todosTurnos = getTurnosDisponiblesMontevideo(selectedDate)
         } else if (diaSemana === 0) {
@@ -465,6 +467,7 @@ export default function ExtractosPage() {
             // Para otras provincias y días que no son domingo, usar todos los turnos
             todosTurnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
         }
+
         const pendientes = todosTurnos.filter((turno) => !turnosYaGuardados.includes(turno))
         console.log(
             `DEBUG ${provincia}: Todos los turnos: ${todosTurnos}, Ya guardados: ${turnosYaGuardados}, Pendientes: ${pendientes}`,
@@ -568,6 +571,7 @@ export default function ExtractosPage() {
 
             // Si llegamos aquí, todos los turnos se guardaron exitosamente
             console.log(`🎉 ${turnosGuardadosExitosamente} turnos de ${provincia} guardados exitosamente para ${fecha}`)
+
             // Limpiar solo los turnos que se guardaron
             setData((prev) => {
                 const newData = { ...prev }
@@ -576,12 +580,14 @@ export default function ExtractosPage() {
                 })
                 return newData
             })
+
             // Mostrar mensaje de éxito
             setError(null)
             // Refrescar datos inmediatamente
             console.log("🔄 Refrescando datos desde Firebase...")
             await fetchExtractos(selectedDate)
             console.log("✅ Datos refrescados")
+
             // Cerrar el modal después de un breve delay para que el usuario vea la confirmación
             setTimeout(() => {
                 setShowModal(false)
@@ -707,10 +713,12 @@ export default function ExtractosPage() {
                 })
                 return newData
             })
+
             setError(null)
             console.log("🔄 Refrescando datos desde Firebase...")
             await fetchExtractos(selectedDate)
             console.log("✅ Datos refrescados")
+
             setTimeout(() => {
                 setShowGenericModal(false)
                 alert(
@@ -821,7 +829,6 @@ export default function ExtractosPage() {
             setDebugInfo("Obteniendo fecha forzada de Argentina...")
             const apiUrl = `${window.location.origin}/api/extractos/forzar-fecha` // Usar ruta absoluta
             console.log(`API URL para forzar fecha: ${apiUrl}`)
-
             const response = await fetch(apiUrl, {
                 method: "GET",
                 headers: {
@@ -846,6 +853,7 @@ export default function ExtractosPage() {
     }
 
     const sorteoOrder = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
+
     const sortExtractos = (a: Extracto, b: Extracto) => {
         return sorteoOrder.indexOf(a.sorteo) - sorteoOrder.indexOf(b.sorteo)
     }
@@ -1152,6 +1160,7 @@ export default function ExtractosPage() {
                                 </Button>
                             </div>
                         </div>
+
                         {/* Botones de acción - Responsive */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 mb-6 bg-white p-3 rounded-lg shadow-sm border border-blue-200">
                             <Button
@@ -1177,6 +1186,7 @@ export default function ExtractosPage() {
                                     </>
                                 )}
                             </Button>
+
                             {/* Botones Tipear - Específicos (EXISTENTES) */}
                             <Button
                                 variant="outline"
@@ -1270,6 +1280,7 @@ export default function ExtractosPage() {
                                 </span>
                                 <span className="sm:hidden">{getTurnosPendientes("MONTEVIDEO").length === 0 ? "MVD✓" : "MVD"}</span>
                             </Button>
+
                             {/* Botones Tipear - Dinámicos para OTRAS loterías (NUEVO) */}
                             {OTHER_LOTERIAS_FOR_DYNAMIC_BUTTONS.map((loteria) => {
                                 const turnosPendientes = getTurnosPendientes(loteria)
@@ -1293,6 +1304,7 @@ export default function ExtractosPage() {
                                     </Button>
                                 )
                             })}
+
                             {/* Botones de acción adicionales */}
                             <Button
                                 variant="outline"
@@ -1342,6 +1354,7 @@ export default function ExtractosPage() {
                                 <span className="sm:hidden">EXP</span>
                             </Button>
                         </div>
+
                         {/* Nota informativa - Responsive */}
                         <div className="mb-4 p-3 sm:p-4 bg-blue-100 border border-blue-300 rounded-lg flex items-start">
                             <Info className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -1355,18 +1368,21 @@ export default function ExtractosPage() {
                                 </p>
                             </div>
                         </div>
+
                         {error && (
                             <Alert variant="destructive" className="mb-4 bg-red-100 border-red-400 text-red-700 flex items-start">
                                 <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-red-600 flex-shrink-0 mt-0.5" />
                                 <AlertDescription className="text-xs sm:text-sm">{error}</AlertDescription>
                             </Alert>
                         )}
+
                         {extractos.length > 0 && (
                             <Alert variant="default" className="mb-4 bg-green-100 border-green-400 text-green-700 flex items-start">
                                 <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-green-600 flex-shrink-0 mt-0.5" />
                                 <AlertDescription className="text-xs sm:text-sm">{`Se cargaron ${extractos.length} extractos correctamente.`}</AlertDescription>
                             </Alert>
                         )}
+
                         {extractos.length === 0 && !isLoading && (
                             <Alert
                                 variant="default"
@@ -1378,6 +1394,7 @@ export default function ExtractosPage() {
                                 </AlertDescription>
                             </Alert>
                         )}
+
                         {usarFechaForzada && (
                             <Alert variant="default" className="mb-4 bg-blue-100 border-blue-400 text-blue-700 flex items-start">
                                 <Info className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -1386,6 +1403,7 @@ export default function ExtractosPage() {
                                 </AlertDescription>
                             </Alert>
                         )}
+
                         {/* Tabla responsive */}
                         <div className="rounded-lg overflow-x-auto shadow-md border border-blue-200 bg-white">
                             <Table className="w-full min-w-[800px] [&_th]:p-1 [&_td]:p-1 sm:[&_th]:p-2 sm:[&_td]:p-2 [&_th]:text-xs [&_td]:text-xs">
@@ -1513,6 +1531,7 @@ export default function ExtractosPage() {
                                 </TableBody>
                             </Table>
                         </div>
+
                         {/* Sección de diagnóstico - Responsive */}
                         <div className="mt-6 p-3 sm:p-4 bg-gray-100 border border-gray-300 rounded-lg">
                             <h3 className="text-xs sm:text-sm font-bold mb-2 text-gray-700 flex items-center">
@@ -1525,6 +1544,7 @@ export default function ExtractosPage() {
                         </div>
                     </CardContent>
                 </Card>
+
                 {/* Modal de Tucumán */}
                 <Dialog open={showTucumanModal} onOpenChange={(open) => !open && cerrarModal("TUCUMAN", setShowTucumanModal)}>
                     <DialogContent
@@ -1627,6 +1647,7 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
+
                 {/* Modal de Neuquén */}
                 <Dialog open={showNeuquenModal} onOpenChange={(open) => !open && cerrarModal("NEUQUEN", setShowNeuquenModal)}>
                     <DialogContent
@@ -1729,6 +1750,7 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
+
                 {/* Modal de Santa Fe */}
                 <Dialog open={showSantaFeModal} onOpenChange={(open) => !open && cerrarModal("SANTA FE", setShowSantaFeModal)}>
                     <DialogContent
@@ -1834,6 +1856,7 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
+
                 {/* Modal de Misiones */}
                 <Dialog
                     open={showMisionesModal}
@@ -1942,6 +1965,7 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
+
                 {/* Modal de Santiago */}
                 <Dialog
                     open={showSantiagoModal}
@@ -2065,6 +2089,7 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
+
                 {/* Modal de Montevideo con lógica específica de días */}
                 <Dialog
                     open={showMontevideoModal}
@@ -2183,6 +2208,7 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
+
                 {/* Modal Genérico para tipear cualquier lotería (NUEVO) */}
                 <Dialog open={showGenericModal} onOpenChange={(open) => !open && cerrarGenericModal()}>
                     <DialogContent
