@@ -1,4 +1,5 @@
 "use client"
+
 import type React from "react"
 import { useState, useCallback, useEffect } from "react"
 import Navbar from "../components/Navbar"
@@ -86,28 +87,28 @@ const LOTERIA_NAME_MAP: { [key: string]: string[] } = {
 
 // Mapeo de nombres de loterías para enviar al backend (si el backend espera nombres cortos)
 const BACKEND_PROVINCE_MAP: { [key: string]: string } = {
-    "SANTA FE": "SANTA",
-    MISIONES: "MISIONES", // CAMBIO AQUÍ: Enviamos el nombre completo para Misiones
-    "SANTIAGO DEL ESTERO": "SANTIAGO",
-    TUCUMAN: "TUCUMAN",
-    NEUQUEN: "NEUQUEN",
-    MONTEVIDEO: "MONTEVIDEO",
-    NACIONAL: "NACIONAL",
-    PROVINCIA: "PROVINCIA",
-    CIUDAD: "CIUDAD",
-    CORDOBA: "CORDOBA",
-    MENDOZA: "MENDOZA",
-    "ENTRE RIOS": "ENTRE RIOS",
-    CORRIENTES: "CORRIENTES",
-    CHACO: "CHACO",
+    "SANTA FE": "SANTA FE", // Corrected to match backend URLS_PIZARRAS key
+    MISIONES: "MISIONES", // Correct
+    "SANTIAGO DEL ESTERO": "SANTIAGO", // Correct
+    TUCUMAN: "TUCUMAN", // Correct
+    NEUQUEN: "NEUQUEN", // Correct
+    MONTEVIDEO: "MONTEVIDEO", // Correct
+    NACIONAL: "NACION", // Corrected to match backend URLS_PIZARRAS key
+    PROVINCIA: "PROVINCIA", // Correct
+    CIUDAD: "CIUDAD", // Correct
+    CORDOBA: "CORDOBA", // Correct
+    MENDOZA: "MENDOZA", // Correct
+    "ENTRE RIOS": "ENTRE RIOS", // Correct
+    CORRIENTES: "CORRIENTES", // Correct
+    CHACO: "CHACO", // Correct
+    "RIO NEGRO": "RIO NEGRO", // Correct
+    "SAN JUAN": "SAN JUAN", // Correct
     // "CHUBUT", // Eliminado
     // "FORMOSA", // Eliminado
     // "JUJUY", // Eliminado
     // "LA PAMPA", // Eliminado
     // "LA RIOJA", // Eliminado
-    "RIO NEGRO": "RIO NEGRO", // Re-agregado
     // "SALTA", // Eliminado
-    "SAN JUAN": "SAN JUAN",
     // "SAN LUIS", // Eliminado
     // "TIERRA DEL FUEGO", // Eliminado
     // "CIUDAD", // Eliminado
@@ -242,13 +243,16 @@ export default function ExtractosPage() {
                 setIsLoading(true)
                 setError(null)
                 setDebugInfo("Iniciando fetchExtractos")
+
                 const dateParam = format(date, "yyyy-MM-dd")
                 const hoy = new Date()
                 const esHoy = format(date, "yyyy-MM-dd") === format(hoy, "yyyy-MM-dd")
+
                 let apiUrl = `${window.location.origin}/api/extractos?date=${dateParam}` // Usar ruta absoluta
                 if (esHoy || usarFechaForzada) {
                     apiUrl += "&forceRefresh=true"
                 }
+
                 setDebugInfo((prev) => prev + `\nIntentando cargar datos de: ${apiUrl}`)
                 const response = await fetch(apiUrl, {
                     method: "GET",
@@ -260,11 +264,14 @@ export default function ExtractosPage() {
                     },
                 })
                 setDebugInfo((prev) => prev + `\nRespuesta recibida. Status: ${response.status}`)
+
                 if (!response.ok) {
                     throw new Error(`Error HTTP! status: ${response.status}`)
                 }
+
                 const data = await response.json()
                 setDebugInfo((prev) => prev + `\nDatos recibidos: ${JSON.stringify(data).substring(0, 200)}...`)
+
                 if (data && Array.isArray(data) && data.length > 0) {
                     const extractosConCamposAdicionales = data.map((extracto: any) => ({
                         ...extracto,
@@ -322,6 +329,7 @@ export default function ExtractosPage() {
             ...prev,
             [turno]: prev[turno].map((num, i) => (i === index ? numeroLimpio : num)),
         }))
+
         // Auto-focus al siguiente campo cuando se completen 4 dígitos
         if (numeroLimpio.length === 4) {
             const nextIndex = index + 1
@@ -382,6 +390,7 @@ export default function ExtractosPage() {
             ...prev,
             [turno]: prev[turno].map((num, i) => (i === index ? numeroLimpio : num)),
         }))
+
         if (numeroLimpio.length === 4) {
             const nextIndex = index + 1
             if (nextIndex < 20) {
@@ -456,16 +465,23 @@ export default function ExtractosPage() {
 
         if (provincia === "MONTEVIDEO") {
             todosTurnos = getTurnosDisponiblesMontevideo(selectedDate)
-        } else if (diaSemana === 0) {
-            // Domingo
-            if (provincia === "SANTIAGO DEL ESTERO") {
+        } else if (provincia === "SANTIAGO DEL ESTERO") {
+            if (diaSemana === 0) {
+                // Domingo: solo Matutina y Vespertina
                 todosTurnos = ["Matutina", "Vespertina"]
             } else {
-                todosTurnos = [] // Ninguna otra provincia permitida en domingo
+                // Lunes a Sábado: todos los turnos
+                todosTurnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
             }
         } else {
-            // Para otras provincias y días que no son domingo, usar todos los turnos
-            todosTurnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
+            // Para todas las demás provincias
+            if (diaSemana === 0) {
+                // Domingo para otras provincias (no Santiago, no Montevideo)
+                todosTurnos = [] // No hay sorteos para tipear en domingo para estas provincias
+            } else {
+                // Lunes a Sábado para otras provincias
+                todosTurnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
+            }
         }
 
         const pendientes = todosTurnos.filter((turno) => !turnosYaGuardados.includes(turno))
@@ -499,6 +515,7 @@ export default function ExtractosPage() {
         try {
             setIsSaving(true)
             setError(null)
+
             // Usar la fecha seleccionada
             const fecha = format(selectedDate, "dd/MM/yyyy", { locale: es })
             console.log(`🗓️ Guardando con fecha seleccionada: ${fecha}`)
@@ -525,6 +542,7 @@ export default function ExtractosPage() {
             // Enviar cada turno por separado
             for (const turno of turnosConDatos) {
                 const numerosCompletos = data[turno].map((num) => num.trim())
+
                 // Validación final antes de enviar
                 const todosCompletos = numerosCompletos.every((num) => /^\d{4}$/.test(num))
                 if (!todosCompletos) {
@@ -565,6 +583,7 @@ export default function ExtractosPage() {
                     console.error(`Respuesta no exitosa del servidor para ${provinciaParaBackend} ${turno}:`, responseData)
                     throw new Error(`Error al guardar ${turno}: ${responseData.error || "Respuesta no exitosa del servidor"}`)
                 }
+
                 turnosGuardadosExitosamente++
                 console.log(`✅ ${provinciaParaBackend} ${turno} guardado exitosamente para ${fecha}`)
             }
@@ -583,6 +602,7 @@ export default function ExtractosPage() {
 
             // Mostrar mensaje de éxito
             setError(null)
+
             // Refrescar datos inmediatamente
             console.log("🔄 Refrescando datos desde Firebase...")
             await fetchExtractos(selectedDate)
@@ -639,6 +659,7 @@ export default function ExtractosPage() {
         try {
             setIsSavingGenericLoteria(true)
             setError(null)
+
             const fecha = format(selectedDate, "dd/MM/yyyy", { locale: es })
             console.log(`🗓️ Guardando con fecha seleccionada: ${fecha}`)
 
@@ -661,6 +682,7 @@ export default function ExtractosPage() {
 
             for (const turno of turnosConDatos) {
                 const numerosCompletos = currentGenericLoteriaData[turno].map((num) => num.trim())
+
                 const todosCompletos = numerosCompletos.every((num) => /^\d{4}$/.test(num))
                 if (!todosCompletos) {
                     throw new Error(`El turno ${turno} tiene números incompletos. Todos deben ser de 4 dígitos.`)
@@ -699,6 +721,7 @@ export default function ExtractosPage() {
                     console.error(`Respuesta no exitosa del servidor para ${provinciaParaBackend} ${turno}:`, responseData)
                     throw new Error(`Error al guardar ${turno}: ${responseData.error || "Respuesta no exitosa del servidor"}`)
                 }
+
                 turnosGuardadosExitosamente++
                 console.log(`✅ ${provinciaParaBackend} ${turno} guardado exitosamente para ${fecha}`)
             }
@@ -706,6 +729,7 @@ export default function ExtractosPage() {
             console.log(
                 `🎉 ${turnosGuardadosExitosamente} turnos de ${currentGenericLoteria} guardados exitosamente para ${fecha}`,
             )
+
             setCurrentGenericLoteriaData((prev) => {
                 const newData = { ...prev }
                 turnosConDatos.forEach((turno) => {
@@ -715,6 +739,7 @@ export default function ExtractosPage() {
             })
 
             setError(null)
+
             console.log("🔄 Refrescando datos desde Firebase...")
             await fetchExtractos(selectedDate)
             console.log("✅ Datos refrescados")
@@ -853,7 +878,6 @@ export default function ExtractosPage() {
     }
 
     const sorteoOrder = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
-
     const sortExtractos = (a: Extracto, b: Extracto) => {
         return sorteoOrder.indexOf(a.sorteo) - sorteoOrder.indexOf(b.sorteo)
     }
@@ -905,7 +929,7 @@ export default function ExtractosPage() {
         setShowMontevideoModal(true)
     }
 
-    // Función para abrir el modal genérico de tipear (NUEVO)
+    // Función para abrir el modal genérico de tipear loterías (NUEVO)
     const abrirGenericModal = (loteria: string) => {
         console.log(`🔓 Abriendo modal genérico para tipear ${loteria}`)
         setCurrentGenericLoteria(loteria)
@@ -945,13 +969,13 @@ export default function ExtractosPage() {
         const diaSemana = getDay(selectedDate) // 0 = domingo, 1 = lunes, ..., 6 = sábado
         const nombreDia = format(selectedDate, "EEEE", { locale: es })
         if (diaSemana === 0) {
-            // Domingo
+            // Domingo - no hay sorteos
             return `Los domingos no hay sorteos en Montevideo`
         } else if (diaSemana === 6) {
-            // Sábado
+            // Sábado - solo Nocturna
             return `Los sábados solo hay sorteo Nocturno en Montevideo`
         } else {
-            // Lunes a Viernes
+            // Lunes a Viernes - Matutina y Nocturna
             return `${nombreDia}: Matutina y Nocturna disponibles`
         }
     }
@@ -960,13 +984,17 @@ export default function ExtractosPage() {
     const getMensajeDisponibilidad = (loteria: string) => {
         const diaSemana = getDay(selectedDate) // 0 = domingo, 1 = lunes, ..., 6 = sábado
         const nombreDia = format(selectedDate, "EEEE", { locale: es })
+
         if (loteria === "MONTEVIDEO") {
             return getMensajeDisponibilidadMontevideo()
-        } else if (loteria === "SANTIAGO DEL ESTERO" && diaSemana === 0) {
-            // Domingo
-            return `Los domingos, solo Matutina y Vespertina disponibles para Santiago.`
+        } else if (loteria === "SANTIAGO DEL ESTERO") {
+            if (diaSemana === 0) {
+                return `Los domingos, solo Matutina y Vespertina disponibles para Santiago.`
+            } else {
+                return `Todos los turnos disponibles para Santiago.` // Mensaje para L-S
+            }
         } else if (diaSemana === 0) {
-            // Cualquier otra lotería en domingo
+            // Cualquier otra lotería en domingo (que no sea Santiago ni Montevideo)
             return `Los domingos no hay sorteos para ${loteria}.`
         } else {
             return `Todos los turnos disponibles para ${loteria}`
@@ -1412,8 +1440,8 @@ export default function ExtractosPage() {
                                         <TableHead className="w-[30px] sm:w-[40px] text-white">
                                             <Checkbox
                                                 className="h-3 w-3 border-white text-white"
-                                                checked={selectAll}
-                                                onCheckedChange={handleSelectAll}
+                                                checked={selectAll} // Corrected: depends only on selectAll
+                                                onCheckedChange={handleSelectAll} // Corrected: uses the dedicated handler
                                             />
                                         </TableHead>
                                         <TableHead className="text-white font-bold min-w-[60px]">Id</TableHead>
@@ -1447,18 +1475,14 @@ export default function ExtractosPage() {
                                                 <TableCell>
                                                     <Checkbox
                                                         className="h-3 w-3 border-blue-400 text-blue-600"
-                                                        checked={selectAll || extractosSeleccionados.includes(extracto.id)}
+                                                        checked={extractosSeleccionados.includes(extracto.id)} // Corrected: depends on individual selection
                                                         onCheckedChange={(checked) => {
-                                                            if (selectAll) {
-                                                                setSelectAll(false)
-                                                                setExtractosSeleccionados(extractos.map((e) => e.id).filter((id) => id !== extracto.id))
+                                                            if (checked) {
+                                                                setExtractosSeleccionados([...extractosSeleccionados, extracto.id])
                                                             } else {
-                                                                if (checked) {
-                                                                    setExtractosSeleccionados([...extractosSeleccionados, extracto.id])
-                                                                } else {
-                                                                    setExtractosSeleccionados(extractosSeleccionados.filter((id) => id !== extracto.id))
-                                                                }
+                                                                setExtractosSeleccionados(extractosSeleccionados.filter((id) => id !== extracto.id))
                                                             }
+                                                            setSelectAll(false) // Deselect "select all" if any individual is unchecked
                                                         }}
                                                     />
                                                 </TableCell>
@@ -1979,19 +2003,17 @@ export default function ExtractosPage() {
                             <DialogTitle className="text-lg font-bold text-center">
                                 Tipear Resultados - SANTIAGO ({format(selectedDate, "dd/MM/yyyy", { locale: es })})
                             </DialogTitle>
-                            {getDay(selectedDate) === 0 && ( // Mostrar mensaje solo si es domingo
-                                <div className="text-center text-sm text-gray-600 mt-2">
-                                    Los domingos, solo Matutina y Vespertina disponibles.
-                                </div>
-                            )}
+                            <div className="text-center text-sm text-gray-600 mt-2">
+                                {getMensajeDisponibilidad("SANTIAGO DEL ESTERO")}
+                            </div>
                         </DialogHeader>
                         {getTurnosPendientes("SANTIAGO DEL ESTERO").length === 0 ? (
                             <div className="text-center py-8">
                                 <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
                                 <p className="text-lg font-semibold text-green-700">
                                     {getDay(selectedDate) === 0
-                                        ? "Los domingos, solo Matutina y Vespertina están disponibles para Santiago."
-                                        : "¡Todos los turnos de SANTIAGO ya están guardados!"}
+                                        ? "¡Todos los turnos de Matutina y Vespertina de Santiago ya están guardados para este domingo!"
+                                        : "¡Todos los turnos de SANTIAGO ya están guardados para la fecha seleccionada!"}
                                 </p>
                                 <p className="text-sm text-gray-600 mt-2">
                                     {getDay(selectedDate) === 0
@@ -2230,7 +2252,7 @@ export default function ExtractosPage() {
                                     {currentGenericLoteria === "MONTEVIDEO" && getDay(selectedDate) === 0
                                         ? "Los domingos no hay sorteos en Montevideo"
                                         : currentGenericLoteria === "SANTIAGO DEL ESTERO" && getDay(selectedDate) === 0
-                                            ? "Los domingos, solo Matutina y Vespertina están disponibles para Santiago."
+                                            ? "¡Todos los turnos de Matutina y Vespertina de Santiago ya están guardados para este domingo!"
                                             : `¡Todos los turnos disponibles de ${currentGenericLoteria} ya están guardados!`}
                                 </p>
                                 <p className="text-sm text-gray-600 mt-2">
