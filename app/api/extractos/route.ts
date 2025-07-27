@@ -1091,7 +1091,7 @@ export async function POST(request: Request) {
         await setDoc(docRef, dataParaGuardar, { merge: true })
 
         console.log(`✅ Manual: ${provincia} - ${turno}`)
-        return NextResponse.json({ success: true, message: "Actualizado manualmente" }, { headers: corsHeaders })
+        return NextResponse.json({ success: true, message: "Actualizadoo manualmente" }, { headers: corsHeaders })
     } catch (error) {
         console.error("❌ Error manual:", error)
         return NextResponse.json(
