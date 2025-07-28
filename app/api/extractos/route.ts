@@ -1178,7 +1178,7 @@ export async function POST(request: Request) {
             Object.keys(provinciaResultado.sorteos),
         )
 
-        // 🔥 GUARDADO CORREGIDO: Mantener estructura anidada por fecha
+        // 🔥 GUARDADO CORREGIDO: Mantener estructura anidada por fecha siempre
         const dataParaGuardar = {
             [fecha]: datosDia,
         }
