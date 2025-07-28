@@ -34,15 +34,15 @@ interface Resultado {
 // Añadimos la interfaz Extracto aquí para consistencia y tipado
 interface Extracto {
     id: string
-    fecha: string
+    fecha: string // "dd/MM/yyyy"
     dia: string
-    sorteo: string
-    loteria: string
+    sorteo: string // "Previa", "Primera", etc.
+    loteria: string // "Nacional", "Provincial", etc.
     numeros: string[]
     pizarraLink: string
     necesita: string
     confirmado: string
-    provincia?: string
+    provincia?: string // "NACION", "PROVINCIA", etc.
 }
 
 const PLACEHOLDER_RESULT = "----" // Placeholder para resultados no disponibles
@@ -54,16 +54,19 @@ function obtenerFechaArgentinaRobusta(): Date {
         const ahoraUTC = new Date()
         console.log(`🕐 UTC Original: ${ahoraUTC.toISOString()}`)
         console.log(`🕐 UTC toString: ${ahoraUTC.toString()}`)
+
         // 🆕 MÉTODO 1: Offset manual directo (más confiable)
         const offsetArgentina = -3 * 60 // Argentina es UTC-3 (en minutos)
         const offsetLocal = ahoraUTC.getTimezoneOffset() // Offset del servidor en minutos
         console.log(`⏰ Offset Argentina: ${offsetArgentina} minutos`)
         console.log(`⏰ Offset Servidor: ${offsetLocal} minutos`)
+
         // Calcular diferencia total
         const diferenciaMinutos = offsetLocal + offsetArgentina
         const fechaArgentina = new Date(ahoraUTC.getTime() + diferenciaMinutos * 60 * 1000)
         console.log(`🇦🇷 Argentina Calculada: ${fechaArgentina.toISOString()}`)
         console.log(`🇦🇷 Argentina toString: ${fechaArgentina.toString()}`)
+
         // 🆕 MÉTODO 2: Verificación con Intl (backup)
         let fechaIntl: Date | null = null
         try {
@@ -89,6 +92,7 @@ function obtenerFechaArgentinaRobusta(): Date {
         } catch (error) {
             console.log(`⚠️ Intl falló: ${error}`)
         }
+
         // 🆕 MÉTODO 3: Verificación con date-fns (backup)
         let fechaDateFns: Date | null = null
         try {
@@ -97,6 +101,7 @@ function obtenerFechaArgentinaRobusta(): Date {
         } catch (error) {
             console.log(`⚠️ date-fns falló: ${error}`)
         }
+
         // 🔥 DECISIÓN: Usar el método manual como principal
         const fechaFinal = fechaArgentina
         console.log(`✅ FECHA FINAL SELECCIONADA: ${fechaFinal.toISOString()}`)
@@ -122,11 +127,13 @@ function parsearFechaConsulta(fechaString: string): Date {
         const fechaArgentina = new Date()
         fechaArgentina.setFullYear(year, month - 1, day)
         fechaArgentina.setHours(12, 0, 0, 0) // Mediodía Argentina
+
         // Ajustar a zona horaria Argentina
         const offsetArgentina = -3 * 60 // UTC-3 en minutos
         const offsetLocal = fechaArgentina.getTimezoneOffset()
         const diferenciaMinutos = offsetLocal + offsetArgentina
         const fechaFinal = new Date(fechaArgentina.getTime() + diferenciaMinutos * 60 * 1000)
+
         console.log(`📅 Fecha parseada: ${fechaString} → ${fechaFinal.toISOString()}`)
         console.log(`📅 Fecha display: ${format(fechaFinal, "dd/MM/yyyy")}`)
         return startOfDay(fechaFinal)
@@ -155,17 +162,20 @@ function detectarEntorno(): string {
     const entorno = process.env.NODE_ENV || "development"
     const esRailway = process.env.RAILWAY_ENVIRONMENT_NAME !== undefined
     const esVercel = process.env.VERCEL !== undefined
+
     // 🔥 INFORMACIÓN ESPECÍFICA DE RAILWAY
     const railwayRegion = process.env.RAILWAY_REGION || "unknown"
     const railwayService = process.env.RAILWAY_SERVICE_NAME || "unknown"
+
     console.log(`🌍 ENTORNO DETECTADO:`)
-    console.log(`  - NODE_ENV: ${entorno}`)
-    console.log(`  - Railway: ${esRailway}`)
-    console.log(`  - Railway Region: ${railwayRegion}`)
-    console.log(`  - Railway Service: ${railwayService}`)
-    console.log(`  - Vercel: ${esVercel}`)
-    console.log(`  - TZ: ${process.env.TZ || "No definida"}`)
-    console.log(`  - Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
+    console.log(`   - NODE_ENV: ${entorno}`)
+    console.log(`   - Railway: ${esRailway}`)
+    console.log(`   - Railway Region: ${railwayRegion}`)
+    console.log(`   - Railway Service: ${railwayService}`)
+    console.log(`   - Vercel: ${esVercel}`)
+    console.log(`   - TZ: ${process.env.TZ || "No definida"}`)
+    console.log(`   - Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
+
     return esRailway ? "railway" : esVercel ? "vercel" : "local"
 }
 
@@ -186,6 +196,7 @@ const URLS_PIZARRAS = {
     NEUQUEN: "https://vivitusuerte.com/pizarra/neuquen",
     MISIONES: "https://vivitusuerte.com/pizarra/misiones",
 }
+
 const HORARIOS_SORTEOS = {
     Previa: "10:15",
     Primera: "12:00",
@@ -198,17 +209,21 @@ const HORARIOS_SORTEOS = {
 async function obtenerConTiempoLimite(url: string, opciones: RequestInit = {}): Promise<Response> {
     const controlador = new AbortController()
     const id = setTimeout(() => controlador.abort(), TIEMPO_ESPERA_FETCH)
+
     try {
         const timestamp = Date.now()
         const urlConTimestamp = `${url}${url.includes("?") ? "&" : "?"}_t=${timestamp}`
+
         // 🔥 HEADERS CORREGIDOS - ESTRUCTURA COMPATIBLE
         const entorno = detectarEntorno()
+
         // Headers base comunes
         const headersBase: Record<string, string> = {
             "Cache-Control": "no-cache, no-store, must-revalidate",
             Pragma: "no-cache",
             Expires: "0",
         }
+
         // Headers específicos por entorno
         let headersEspecificos: Record<string, string> = {}
         if (entorno === "railway") {
@@ -229,18 +244,21 @@ async function obtenerConTiempoLimite(url: string, opciones: RequestInit = {}): 
                 Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             }
         }
+
         // Combinar headers
         const headersFinales = {
             ...headersBase,
             ...headersEspecificos,
             ...opciones.headers,
         }
+
         const respuesta = await fetch(urlConTimestamp, {
             ...opciones,
             signal: controlador.signal,
             cache: "no-store",
             headers: headersFinales,
         })
+
         clearTimeout(id)
         console.log(`🌐 FETCH ${url}: Status ${respuesta.status} (${entorno})`)
         return respuesta
@@ -270,28 +288,29 @@ function esSorteoFinalizado(turno: string, fecha: Date): boolean {
     const ahora = obtenerFechaArgentinaRobusta()
     const tiempoActual = ahora.getHours() * 60 + ahora.getMinutes()
     const tiempoSorteo = obtenerTiempoSorteo(turno)
+
     const hoyArgentina = startOfDay(obtenerFechaArgentinaRobusta())
 
     // 🔥 LOGS DETALLADOS PARA DEBUG
     console.log(`⏰ VERIFICANDO SORTEO: ${turno}`)
     console.log(
-        `  - Hora actual: ${ahora.getHours()}:${ahora.getMinutes().toString().padStart(2, "0")} (${tiempoActual} min)`,
+        `   - Hora actual: ${ahora.getHours()}:${ahora.getMinutes().toString().padStart(2, "0")} (${tiempoActual} min)`,
     )
     console.log(
-        `  - Hora sorteo: ${Math.floor(tiempoSorteo / 60)}:${(tiempoSorteo % 60).toString().padStart(2, "0")} (${tiempoSorteo} min)`,
+        `   - Hora sorteo: ${Math.floor(tiempoSorteo / 60)}:${(tiempoSorteo % 60).toString().padStart(2, "0")} (${tiempoSorteo} min)`,
     )
-    console.log(`  - Fecha consulta: ${formatearFechaArgentina(fecha, "dd/MM/yyyy")}`)
-    console.log(`  - Hoy Argentina: ${formatearFechaArgentina(hoyArgentina, "dd/MM/yyyy")}`)
+    console.log(`   - Fecha consulta: ${formatearFechaArgentina(fecha, "dd/MM/yyyy")}`)
+    console.log(`   - Hoy Argentina: ${formatearFechaArgentina(hoyArgentina, "dd/MM/yyyy")}`)
 
     if (isAfter(hoyArgentina, fecha)) {
-        console.log(`  ✅ FINALIZADO: Fecha pasada`)
+        console.log(`   ✅ FINALIZADO: Fecha pasada`)
         return true
     }
 
     // Considerar finalizado 30 minutos después de la hora del sorteo para mayor seguridad
     const finalizado = tiempoActual > tiempoSorteo + 30
     console.log(
-        `  ${finalizado ? "✅" : "⏰"} ${finalizado ? "FINALIZADO" : "PENDIENTE"}: ${tiempoActual} > ${tiempoSorteo + 30}`,
+        `   ${finalizado ? "✅" : "⏰"} ${finalizado ? "FINALIZADO" : "PENDIENTE"}: ${tiempoActual} > ${tiempoSorteo + 30}`,
     )
     return finalizado
 }
@@ -300,24 +319,29 @@ function esSorteoFinalizado(turno: string, fecha: Date): boolean {
 function extraerNumerosFormato5($: cheerio.CheerioAPI, turno: string, provincia: string): string[] {
     console.log(`🔢 EXTRACCIÓN FORMATO 5 NÚMEROS: ${provincia} - ${turno}`)
     const textoCompleto = $("body").text()
+
     // Buscar el turno específico en el texto
     const regexTurno = new RegExp(`\\b${turno}\\b`, "gi")
     let match: RegExpExecArray | null
+
     while ((match = regexTurno.exec(textoCompleto)) !== null) {
         const indiceInicio = match.index
         // Buscar en los próximos 1000 caracteres después del turno (aumentado para capturar más)
         const segmento = textoCompleto.substring(indiceInicio, indiceInicio + 1000)
-        console.log(`📄 Segmento analizado: "${segmento.substring(0, 200)}..."`)
+        console.log(`📄 Segmento analizado (primeros 200 chars): "${segmento.substring(0, 200)}..."`)
+
         // 🔥 PATRÓN CORREGIDO: Buscar secuencias como "1." seguido de espacios/saltos y luego números de 4-5 dígitos
         // Patrón: número + punto + espacios/saltos + número de 4-5 dígitos
-        const patronEspaciado = /(\d+)\.\s*\s*(\d{4,5})/g
+        const patronEspaciado = /(\d+)\.\s*(\d{4,5})/g // Simplificado \s*\s* a \s*
         const numerosEncontrados: string[] = []
         let matchPatron: RegExpExecArray | null
+
         console.log(`🔍 Buscando patrón espaciado en segmento...`)
         while ((matchPatron = patronEspaciado.exec(segmento)) !== null) {
             const posicion = matchPatron[1] // El número antes del punto (1, 2, 3, etc.)
             const numero = matchPatron[2] // El número de 4-5 dígitos
             console.log(`🎯 Encontrado: Posición ${posicion} → Número ${numero}`)
+
             if (numero.length === 4) {
                 numerosEncontrados.push(numero)
             } else if (numero.length === 5) {
@@ -327,6 +351,7 @@ function extraerNumerosFormato5($: cheerio.CheerioAPI, turno: string, provincia:
                 console.log(`🔄 Número de 5 dígitos: ${numero} → ${ultimosCuatro}`)
             }
         }
+
         console.log(`🔢 Números extraídos del patrón espaciado:`, numerosEncontrados)
         if (numerosEncontrados.length >= 18) {
             console.log(`✅ FORMATO ESPACIADO: Encontrados ${numerosEncontrados.length} números válidos`)
@@ -362,7 +387,7 @@ function extraerNumerosFormato5($: cheerio.CheerioAPI, turno: string, provincia:
         }
 
         // 🆕 PATRÓN ALTERNATIVO 2: Números concatenados sin puntos
-        const patronSinPuntos = /\d{80,100}/g
+        const patronSinPuntos = /\d{80,100}/g // Busca una cadena larga de dígitos (20 números de 4 dígitos = 80)
         const matchesSinPuntos = segmento.match(patronSinPuntos)
         if (matchesSinPuntos) {
             console.log(`🔗 Patrones sin puntos encontrados:`, matchesSinPuntos)
@@ -375,7 +400,7 @@ function extraerNumerosFormato5($: cheerio.CheerioAPI, turno: string, provincia:
                         numerosSinPuntos.push(numero)
                     }
                 }
-                console.log(`🔢 Números de secuencia sin puntos:`, numerosSinPuntos.slice(0, 10))
+                console.log(`🔢 Números de secuencia sin puntos (primeros 10):`, numerosSinPuntos.slice(0, 10))
                 if (numerosSinPuntos.length >= 18) {
                     console.log(`✅ SIN PUNTOS: Encontrados ${numerosSinPuntos.length} números válidos`)
                     return numerosSinPuntos.slice(0, 20)
@@ -407,6 +432,7 @@ function extraerNumerosNeuquen($: cheerio.CheerioAPI, turno: string): string[] {
     for (const selector of selectoresNeuquen) {
         const elemento = $(selector)
         if (elemento.length > 0) {
+            console.log(`🔍 NEUQUÉN: Intentando selector ${selector}`)
             const numeros = elemento.text().match(/\b\d{4}\b/g) || []
             if (numeros.length >= 18) {
                 console.log(`✅ NEUQUÉN: Encontrado con selector ${selector}`)
@@ -422,6 +448,7 @@ function extraerNumerosNeuquen($: cheerio.CheerioAPI, turno: string): string[] {
         const textoTabla = $tabla.text().toLowerCase()
         // Verificar si contiene "neuquén" y el turno
         if (textoTabla.includes("neuqu") && textoTabla.includes(turno.toLowerCase())) {
+            console.log(`🔍 NEUQUÉN: Intentando tabla que contiene "neuqu" y "${turno.toLowerCase()}"`)
             const numeros: string[] = []
             $tabla.find("td, th").each((_, celda) => {
                 const texto = $(celda).text().trim()
@@ -436,7 +463,7 @@ function extraerNumerosNeuquen($: cheerio.CheerioAPI, turno: string): string[] {
         }
     }
 
-    // Estrategia 3: Usar la función ultra específica general
+    // Estrategia 3: Usar la función ultra específica general como último recurso
     return extraerNumerosUltraEspecificos($, turno, "NEUQUEN")
 }
 
@@ -460,6 +487,7 @@ function extraerNumerosMisiones($: cheerio.CheerioAPI, turno: string): string[] 
     for (const selector of selectoresMisiones) {
         const elemento = $(selector)
         if (elemento.length > 0) {
+            console.log(`🔍 MISIONES: Intentando selector ${selector}`)
             const numeros = elemento.text().match(/\b\d{4}\b/g) || []
             if (numeros.length >= 18) {
                 console.log(`✅ MISIONES: Encontrado con selector ${selector}`)
@@ -477,6 +505,7 @@ function extraerNumerosMisiones($: cheerio.CheerioAPI, turno: string): string[] 
     for (const id of idsMisiones) {
         const elemento = $(id)
         if (elemento.length > 0) {
+            console.log(`🔍 MISIONES: Intentando ID ${id}`)
             const numeros = elemento.text().match(/\b\d{4}\b/g) || []
             if (numeros.length >= 18) {
                 console.log(`✅ MISIONES: Encontrado con ID ${id}`)
@@ -491,6 +520,7 @@ function extraerNumerosMisiones($: cheerio.CheerioAPI, turno: string): string[] 
         const $seccion = $(seccion)
         const textoSeccion = $seccion.text().toLowerCase()
         if (textoSeccion.includes("misiones") && textoSeccion.includes(turno.toLowerCase())) {
+            console.log(`🔍 MISIONES: Intentando sección que contiene "misiones" y "${turno.toLowerCase()}"`)
             // Verificar que no contenga otros turnos
             const otrosTurnos = ["previa", "primera", "matutina", "vespertina", "nocturna"].filter(
                 (t) => t !== turno.toLowerCase(),
@@ -510,13 +540,14 @@ function extraerNumerosMisiones($: cheerio.CheerioAPI, turno: string): string[] 
         }
     }
 
-    // Estrategia 4: Usar la función ultra específica general
+    // Estrategia 4: Usar la función ultra específica general como último recurso
     return extraerNumerosUltraEspecificos($, turno, "MISIONES")
 }
 
 // 🔥 FUNCIÓN ULTRA ESPECÍFICA MEJORADA CON FORMATO ESPACIADO
 function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, provincia: string): string[] {
     console.log(`🎯 EXTRACCIÓN ULTRA ESPECÍFICA: ${provincia} - ${turno}`)
+
     // 🔥 PRIMERO: Intentar formato espaciado
     const numerosFormato5 = extraerNumerosFormato5($, turno, provincia)
     if (numerosFormato5.length >= 18) {
@@ -543,6 +574,7 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
             const regexOtroTurno = new RegExp(`\\b${otroTurno}\\b`, "i")
             return regexOtroTurno.test(textoElemento)
         })
+
         if (contieneOtroTurno) {
             console.log(`⚠️ Elemento contiene otros turnos, DESCARTANDO`)
             continue
@@ -561,6 +593,7 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
     const textoCompleto = $("body").text()
     const regexTurno = new RegExp(`\\b${turno}\\b`, "gi")
     let match: RegExpExecArray | null
+
     while ((match = regexTurno.exec(textoCompleto)) !== null) {
         const indiceInicio = match.index
         // Encontrar el PRIMER otro turno que aparezca después
@@ -577,6 +610,7 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
                 }
             }
         }
+
         // Si no hay otro turno después, limitar a 400 caracteres
         if (!siguienteTurnoEncontrado) {
             indiceFin = Math.min(indiceInicio + 400, textoCompleto.length)
@@ -584,7 +618,7 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
 
         // Extraer SOLO el segmento entre nuestro turno y el siguiente
         const segmento = textoCompleto.substring(indiceInicio, indiceFin)
-        console.log(`📄 Segmento aislado: "${segmento.substring(0, 80)}..."`)
+        console.log(`📄 Segmento aislado (primeros 80 chars): "${segmento.substring(0, 80)}..."`)
         const numeros = segmento.match(/\b\d{4}\b/g) || []
         if (numeros.length >= 18) {
             console.log(`✅ ENCONTRADO en segmento aislado: ${numeros.length} números`)
@@ -608,6 +642,7 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
             const regexOtroTurno = new RegExp(`\\b${otroTurno}\\b`, "i")
             return regexOtroTurno.test(textoTabla)
         })
+
         if (!contieneOtrosTurnos) {
             // Tabla EXCLUSIVA para nuestro turno
             const numeros: string[] = []
@@ -631,15 +666,19 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
 // Validación ULTRA estricta - Solo acepta resultados muy confiables
 function validarResultadosUltraEstricto(numeros: string[], provincia: string, turno: string): boolean {
     console.log(`🔍 Validación ultra estricta: ${provincia} - ${turno}`)
+    console.log(`   - Números recibidos para validación: ${numeros.join(", ")}`)
+
     if (numeros.length < 18) {
-        console.log(`❌ Muy pocos números: ${numeros.length}`)
+        console.log(`❌ Validación fallida: Muy pocos números (${numeros.length} < 18)`)
         return false
     }
 
     // Filtrar números válidos (4 dígitos, no placeholders)
     const numerosValidos = numeros.filter((num) => /^\d{4}$/.test(num) && num !== PLACEHOLDER_RESULT)
+    console.log(`   - Números válidos después de filtro: ${numerosValidos.join(", ")} (${numerosValidos.length})`)
+
     if (numerosValidos.length < 18) {
-        console.log(`❌ Muy pocos números válidos: ${numerosValidos.length}`)
+        console.log(`❌ Validación fallida: Muy pocos números válidos (${numerosValidos.length} < 18)`)
         return false
     }
 
@@ -648,28 +687,39 @@ function validarResultadosUltraEstricto(numeros: string[], provincia: string, tu
     for (const num of numerosValidos) {
         const numInt = Number.parseInt(num)
         // Números muy bajos (posibles errores)
-        if (numInt <= 30) patronesSospechosos++
+        if (numInt <= 30) {
+            patronesSospechosos++
+            console.log(`   ⚠️ Patrón sospechoso (número bajo): ${num}`)
+        }
         // Números repetitivos (1111, 2222, etc.)
-        if (/^(\d)\1{3}$/.test(num)) patronesSospechosos++
+        if (/^(\d)\1{3}$/.test(num)) {
+            patronesSospechosos++
+            console.log(`   ⚠️ Patrón sospechoso (repetitivo): ${num}`)
+        }
         // Secuencias obvias (0001, 0002, etc.)
-        if (numInt <= 50 && num.startsWith("0")) patronesSospechosos++
+        if (numInt <= 50 && num.startsWith("0")) {
+            patronesSospechosos++
+            console.log(`   ⚠️ Patrón sospechoso (secuencia obvia): ${num}`)
+        }
     }
 
     // Máximo 15% de patrones sospechosos
     const porcentajeSospechosos = (patronesSospechosos / numerosValidos.length) * 100
+    console.log(`   - Patrones sospechosos: ${patronesSospechosos} (${porcentajeSospechosos.toFixed(1)}%)`)
     if (porcentajeSospechosos > 15) {
-        console.log(`❌ Demasiados patrones sospechosos: ${porcentajeSospechosos.toFixed(1)}%`)
+        console.log(`❌ Validación fallida: Demasiados patrones sospechosos (${porcentajeSospechosos.toFixed(1)}% > 15%)`)
         return false
     }
 
     // Verificar diversidad de números
     const numerosUnicos = new Set(numerosValidos)
+    console.log(`   - Números únicos: ${numerosUnicos.size} (vs. ${numerosValidos.length} válidos)`)
     if (numerosUnicos.size < numerosValidos.length * 0.9) {
-        console.log(`❌ Demasiados números repetidos`)
+        console.log(`❌ Validación fallida: Demasiados números repetidos (pocos únicos)`)
         return false
     }
 
-    console.log(`✅ Validación exitosa: ${numerosValidos.length} números válidos`)
+    console.log(`✅ Validación exitosa: ${numerosValidos.length} números válidos y confiables`)
     return true
 }
 
@@ -693,13 +743,13 @@ async function obtenerResultadoEspecifico(provincia: string, turno: string): Pro
             return null
         }
 
-        console.log(`
-🔍 PROCESANDO: ${provincia} - ${turno}`)
+        console.log(`🔍 PROCESANDO: ${provincia} - ${turno}`)
 
         // 🔥 RETRY LOGIC PARA RAILWAY
         let intentos = 0
         const maxIntentos = 3
         let pizarraHtml: Response | null = null
+
         while (intentos < maxIntentos && !pizarraHtml?.ok) {
             try {
                 intentos++
@@ -725,7 +775,9 @@ async function obtenerResultadoEspecifico(provincia: string, turno: string): Pro
         }
 
         const contenidoPizarra = await pizarraHtml.text()
+        console.log(`📄 Contenido HTML recibido (primeros 500 chars): ${contenidoPizarra.substring(0, 500)}...`)
         const $ = cheerio.load(contenidoPizarra)
+
         let numeros: string[] = []
 
         // 🆕 USAR FUNCIONES ESPECÍFICAS PARA NUEVAS PROVINCIAS
@@ -771,6 +823,7 @@ async function obtenerResultadoEspecifico(provincia: string, turno: string): Pro
 async function obtenerResultadosConfiables(): Promise<Extracto[]> {
     // Changed return type to Extracto[]
     console.log("🚀 INICIANDO EXTRACCIÓN ULTRA CONFIABLE - TODOS LOS RESULTADOS")
+
     // 🔥 DETECTAR ENTORNO AL INICIO
     const entorno = detectarEntorno()
     console.log(`🌍 EJECUTÁNDOSE EN: ${entorno.toUpperCase()}`)
@@ -785,18 +838,18 @@ async function obtenerResultadosConfiables(): Promise<Extracto[]> {
     console.log(`📅 KEY FIREBASE: ${fechaKeyFirebase}`)
 
     const scrapedResults: Extracto[] = [] // Changed to Extracto[]
-
     const allTurnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
 
     // Procesar cada provincia (incluyendo las nuevas)
     for (const [provinciaKey, pizarraUrl] of Object.entries(URLS_PIZARRAS)) {
-        console.log(`
-🏛️ === PROVINCIA: ${provinciaKey} ===`)
+        console.log(`🏛️ === PROVINCIA: ${provinciaKey} ===`)
+
         const provinciaData = {
             loteria: provinciaKey === "NACION" ? "Nacional" : provinciaKey === "PROVINCIA" ? "Provincial" : provinciaKey,
             provincia: provinciaKey,
             sorteos: {} as { [key: string]: string[] },
         }
+
         let tieneResultadosValidos = false
         let turnosParaProvincia: string[] = []
 
@@ -838,6 +891,7 @@ async function obtenerResultadosConfiables(): Promise<Extracto[]> {
             // Solo procesar si el sorteo finalizó
             if (esSorteoFinalizado(turno, fechaActual)) {
                 const numeros = await obtenerResultadoEspecifico(provinciaKey, turno)
+
                 // SOLO agregar si se encontraron números válidos
                 if (numeros !== null && numeros.length > 0) {
                     // Agregar a API - FORMATO CORRECTO PARA LA INTERFAZ EXISTENTE
@@ -850,7 +904,7 @@ async function obtenerResultadosConfiables(): Promise<Extracto[]> {
                         loteria: provinciaData.loteria,
                         provincia: provinciaKey,
                         numeros: numeros,
-                        pizarraLink: pizarraUrl,
+                        pizarraLink: URLS_PIZARRAS[provinciaKey as keyof typeof URLS_PIZARRAS] || "",
                         necesita: "No",
                         confirmado: "No",
                     })
@@ -867,8 +921,7 @@ async function obtenerResultadosConfiables(): Promise<Extracto[]> {
         }
     }
 
-    console.log(`
-🏁 COMPLETADO SCRAPING: ${scrapedResults.length} resultados 100% CONFIABLES`)
+    console.log(`🏁 COMPLETADO SCRAPING: ${scrapedResults.length} resultados 100% CONFIABLES`)
     console.log(
         `📊 SCRAPED RESULTS:`,
         scrapedResults.map((r) => `${r.provincia}-${r.sorteo}`),
@@ -882,10 +935,12 @@ export async function GET(request: Request) {
         const url = new URL(request.url)
         const parametroFecha = url.searchParams.get("date")
         const forceRefresh = url.searchParams.get("forceRefresh") === "true"
+
         console.log(`📥 PARÁMETROS: fecha=${parametroFecha}, forceRefresh=${forceRefresh}`)
 
         const fechaActualArgentina = obtenerFechaArgentinaRobusta()
         let fechaConsulta: Date
+
         if (parametroFecha) {
             // 🔥 USAR FUNCIÓN ROBUSTA PARA PARSEAR FECHA
             fechaConsulta = parsearFechaConsulta(parametroFecha)
@@ -914,8 +969,10 @@ export async function GET(request: Request) {
         if (docSnap.exists()) {
             const data = docSnap.data()
             console.log(`📋 Datos encontrados en Firebase para ${fechaKeyFirebase}:`, Object.keys(data))
+
             // 🔥 BUSCAR EN LA ESTRUCTURA ANIDADA POR FECHA
             let resultadosData: ResultadoDia | null = null
+
             // Buscar por fecha exacta
             if (data[fechaDisplayConsulta]) {
                 resultadosData = data[fechaDisplayConsulta] as ResultadoDia
@@ -987,6 +1044,42 @@ export async function GET(request: Request) {
             }
             finalResults = Array.from(resultsMap.values())
             console.log(`✅ Resultados finales después de la fusión con scraping: ${finalResults.length}`)
+
+            // 🔥 NUEVA LÓGICA: Guardar los resultados finales en Firebase
+            if (finalResults.length > 0) {
+                const resultadosAgrupadosPorProvincia = new Map<string, Resultado>();
+
+                for (const extracto of finalResults) {
+                    let provinciaResultado = resultadosAgrupadosPorProvincia.get(extracto.provincia || "");
+                    if (!provinciaResultado) {
+                        provinciaResultado = {
+                            loteria: extracto.loteria,
+                            provincia: extracto.provincia || "",
+                            sorteos: {},
+                        };
+                        resultadosAgrupadosPorProvincia.set(extracto.provincia || "", provinciaResultado);
+                    }
+                    provinciaResultado.sorteos[extracto.sorteo] = extracto.numeros;
+                }
+
+                const resultadosParaGuardar: Resultado[] = Array.from(resultadosAgrupadosPorProvincia.values());
+
+                const dataToSave: ResultadoDia = {
+                    fecha: fechaDisplayConsulta, // "dd/MM/yyyy"
+                    dia: formatearFechaArgentina(fechaConsulta, "EEEE").replace(/^\w/, (c) => c.toUpperCase()),
+                    resultados: resultadosParaGuardar,
+                };
+
+                // Guardar en Firebase, usando la fecha de visualización como clave anidada
+                const docRefToSave = doc(db, "extractos", fechaKeyFirebase);
+                const dataObjectForFirebase = {
+                    [fechaDisplayConsulta]: dataToSave,
+                };
+                await setDoc(docRefToSave, dataObjectForFirebase, { merge: true });
+                console.log(`✅ Resultados de scraping guardados en Firebase para ${fechaKeyFirebase} bajo la clave ${fechaDisplayConsulta}`);
+            } else {
+                console.log(`⚠️ No hay resultados para guardar en Firebase después del scraping.`)
+            }
         } else {
             console.log(`⏭️ No se realiza scraping: No es hoy y no se forzó la actualización.`)
         }
@@ -1019,6 +1112,7 @@ export async function POST(request: Request) {
     console.log("📝 Actualización manual")
     try {
         const { provincia, turno, fecha, numeros } = await request.json()
+
         if (!provincia || !turno || !fecha || !numeros || !Array.isArray(numeros) || numeros.length !== 20) {
             throw new Error("Datos incompletos o inválidos")
         }
