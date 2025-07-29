@@ -175,13 +175,11 @@ function detectarEntorno(): string {
     console.log(`   - Vercel: ${esVercel}`)
     console.log(`   - TZ: ${process.env.TZ || "No definida"}`)
     console.log(`   - Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
-
     return esRailway ? "railway" : esVercel ? "vercel" : "local"
 }
 
 // Constantes
 const TIEMPO_ESPERA_FETCH = 60000 // 60 segundos
-
 const URLS_PIZARRAS = {
     NACION: "https://vivitusuerte.com/pizarra/ciudad",
     PROVINCIA: "https://vivitusuerte.com/pizarra/provincia",
@@ -196,14 +194,13 @@ const URLS_PIZARRAS = {
     SANTIAGO: "https://vivitusuerte.com/pizarra/santiago",
     NEUQUEN: "https://vivitusuerte.com/pizarra/neuquen",
     MISIONES: "https://vivitusuerte.com/pizarra/misiones",
-    // Nuevas provincias
     FORMOSA: "https://vivitusuerte.com/pizarra/formosa",
     JUJUY: "https://vivitusuerte.com/pizarra/jujuy",
     SALTA: "https://vivitusuerte.com/pizarra/salta",
-    // AGREGADO PARA SAN LUIS
     "SAN LUIS": "https://vivitusuerte.com/pizarra/san+luis",
 }
 
+// Horarios de sorteos generales (por defecto)
 const HORARIOS_SORTEOS = {
     Previa: "10:15",
     Primera: "12:00",
@@ -212,11 +209,59 @@ const HORARIOS_SORTEOS = {
     Nocturna: "21:00",
 }
 
+// Nuevo: Horarios de sorteos específicos por provincia y turno
+const LOTTERY_SPECIFIC_DRAW_TIMES: {
+    [provincia: string]: {
+        [turno: string]: string
+    }
+} = {
+    FORMOSA: {
+        Matutina: "14:00", // Formosa Matutina sortea a las 14:00
+    },
+    SALTA: {
+        Previa: "10:15", // Ejemplo: Salta Previa
+        Primera: "12:00", // Ejemplo: Salta Primera
+        Matutina: "14:30", // Ejemplo: Salta Matutina
+        Vespertina: "17:30", // Ejemplo: Salta Vespertina
+        Nocturna: "20:30", // Ejemplo: Salta Nocturna
+    },
+    // Agrega otros horarios específicos aquí si es necesario
+    // "CORDOBA": {
+    //   "Matutina": "14:45",
+    // },
+}
+
+// Tiempos de "corte" para considerar un sorteo finalizado y sus resultados disponibles
+// Este es el offset por defecto (en minutos) después del horario oficial del sorteo.
+const DEFAULT_DISPLAY_OFFSET_MINUTES = 15 // Por defecto, 15 minutos después del sorteo
+
+// Puedes añadir overrides específicos por lotería y turno aquí.
+// Por ejemplo, si la "Previa" de Salta publica sus resultados muy rápido:
+const LOTTERY_DISPLAY_CUTOFF_OVERRIDES: {
+    [provincia: string]: {
+        [turno: string]: { displayOffsetMinutes: number }
+    }
+} = {
+    SALTA: {
+        Previa: { displayOffsetMinutes: 5 }, // Salta Previa aparece 5 minutos después del sorteo
+        Primera: { displayOffsetMinutes: 10 }, // Salta Primera aparece 10 minutos después del sorteo
+        Matutina: { displayOffsetMinutes: 10 }, // Salta Matutina aparece 10 minutos después del sorteo
+        Vespertina: { displayOffsetMinutes: 10 }, // Salta Vespertina aparece 10 minutos después del sorteo
+        Nocturna: { displayOffsetMinutes: 10 }, // Salta Nocturna aparece 10 minutos después del sorteo
+    },
+    FORMOSA: {
+        Matutina: { displayOffsetMinutes: 5 }, // Formosa Matutina aparece 5 minutos después de su sorteo (14:00 + 5 min = 14:05)
+    },
+    // Agrega otras configuraciones específicas aquí si es necesario
+    // "CORDOBA": {
+    //   "Matutina": { displayOffsetMinutes: 20 }, // Ejemplo: Córdoba Matutina un poco más tarde
+    // },
+}
+
 // 🔥 FUNCIÓN CORREGIDA CON HEADERS COMPATIBLES
 async function obtenerConTiempoLimite(url: string, opciones: RequestInit = {}): Promise<Response> {
     const controlador = new AbortController()
     const id = setTimeout(() => controlador.abort(), TIEMPO_ESPERA_FETCH)
-
     try {
         const timestamp = Date.now()
         const urlConTimestamp = `${url}${url.includes("?") ? "&" : "?"}_t=${timestamp}`
@@ -275,36 +320,62 @@ async function obtenerConTiempoLimite(url: string, opciones: RequestInit = {}): 
     }
 }
 
-function obtenerTiempoSorteo(turno: string): number {
-    const horario = HORARIOS_SORTEOS[turno as keyof typeof HORARIOS_SORTEOS]
+// 🔥 FUNCIÓN MEJORADA PARA OBTENER TIEMPO DE SORTEO ESPECÍFICO
+function obtenerTiempoSorteo(turno: string, provinciaKey?: string): number {
+    let horario: string | undefined
+
+    // 1. Intentar obtener el horario específico por provincia y turno
+    if (provinciaKey && LOTTERY_SPECIFIC_DRAW_TIMES[provinciaKey]?.[turno]) {
+        horario = LOTTERY_SPECIFIC_DRAW_TIMES[provinciaKey][turno]
+        console.log(`⏰ Usando horario específico para ${provinciaKey} - ${turno}: ${horario}`)
+    } else {
+        // 2. Si no hay horario específico, usar el horario general
+        horario = HORARIOS_SORTEOS[turno as keyof typeof HORARIOS_SORTEOS]
+        console.log(`⏰ Usando horario general para ${turno}: ${horario}`)
+    }
+
     if (!horario) {
-        console.error(`Horario no definido para el turno: ${turno}`)
+        console.error(`Horario no definido para el turno: ${turno} (Provincia: ${provinciaKey || "N/A"})`)
         return -1
     }
+
     const [horas, minutos] = horario.split(":").map(Number)
     if (isNaN(horas) || isNaN(minutos)) {
-        console.error(`Formato de horario inválido para el turno: ${turno}`)
+        console.error(`Formato de horario inválido para el turno: ${turno} (${horario})`)
         return -1
     }
     return horas * 60 + minutos
 }
 
-// 🔥 FUNCIÓN MEJORADA CON LOGS DETALLADOS
-function esSorteoFinalizado(turno: string, fecha: Date): boolean {
+// 🔥 FUNCIÓN MEJORADA CON LOGS DETALLADOS Y OFFSET DINÁMICO
+function esSorteoFinalizado(turno: string, fecha: Date, provinciaKey?: string): boolean {
     const ahora = obtenerFechaArgentinaRobusta()
     const tiempoActual = ahora.getHours() * 60 + ahora.getMinutes()
-    const tiempoSorteo = obtenerTiempoSorteo(turno)
+    // Usar la función mejorada para obtener el tiempo de sorteo
+    const tiempoSorteo = obtenerTiempoSorteo(turno, provinciaKey)
+
+    let effectiveDisplayOffsetMinutes = DEFAULT_DISPLAY_OFFSET_MINUTES // Offset por defecto
+
+    // Aplicar override si existe para esta provincia y turno
+    if (provinciaKey && LOTTERY_DISPLAY_CUTOFF_OVERRIDES[provinciaKey]) {
+        const provinceOverrides = LOTTERY_DISPLAY_CUTOFF_OVERRIDES[provinciaKey]
+        if (provinceOverrides[turno]) {
+            effectiveDisplayOffsetMinutes = provinceOverrides[turno].displayOffsetMinutes
+            console.log(`⚡️ OVERRIDE: Usando offset de ${effectiveDisplayOffsetMinutes} min para ${provinciaKey} - ${turno}`)
+        }
+    }
 
     const hoyArgentina = startOfDay(obtenerFechaArgentinaRobusta())
 
     // 🔥 LOGS DETALLADOS PARA DEBUG
-    console.log(`⏰ VERIFICANDO SORTEO: ${turno}`)
+    console.log(`⏰ VERIFICANDO SORTEO: ${turno} (${provinciaKey || "N/A"})`)
     console.log(
         `   - Hora actual: ${ahora.getHours()}:${ahora.getMinutes().toString().padStart(2, "0")} (${tiempoActual} min)`,
     )
     console.log(
         `   - Hora sorteo: ${Math.floor(tiempoSorteo / 60)}:${(tiempoSorteo % 60).toString().padStart(2, "0")} (${tiempoSorteo} min)`,
     )
+    console.log(`   - Offset de visualización: ${effectiveDisplayOffsetMinutes} min`)
     console.log(`   - Fecha consulta: ${formatearFechaArgentina(fecha, "dd/MM/yyyy")}`)
     console.log(`   - Hoy Argentina: ${formatearFechaArgentina(hoyArgentina, "dd/MM/yyyy")}`)
 
@@ -313,10 +384,10 @@ function esSorteoFinalizado(turno: string, fecha: Date): boolean {
         return true
     }
 
-    // Considerar finalizado 30 minutos después de la hora del sorteo para mayor seguridad
-    const finalizado = tiempoActual > tiempoSorteo + 30
+    // Considerar finalizado 'effectiveDisplayOffsetMinutes' después de la hora del sorteo
+    const finalizado = tiempoActual > tiempoSorteo + effectiveDisplayOffsetMinutes
     console.log(
-        `   ${finalizado ? "✅" : "⏰"} ${finalizado ? "FINALIZADO" : "PENDIENTE"}: ${tiempoActual} > ${tiempoSorteo + 30}`,
+        `   ${finalizado ? "✅" : "⏰"} ${finalizado ? "FINALIZADO" : "PENDIENTE"}: ${tiempoActual} > ${tiempoSorteo + effectiveDisplayOffsetMinutes}`,
     )
     return finalizado
 }
@@ -325,11 +396,9 @@ function esSorteoFinalizado(turno: string, fecha: Date): boolean {
 function extraerNumerosFormato5($: cheerio.CheerioAPI, turno: string, provincia: string): string[] {
     console.log(`🔢 EXTRACCIÓN FORMATO 5 NÚMEROS: ${provincia} - ${turno}`)
     const textoCompleto = $("body").text()
-
     // Buscar el turno específico en el texto
     const regexTurno = new RegExp(`\\b${turno}\\b`, "gi")
     let match: RegExpExecArray | null
-
     while ((match = regexTurno.exec(textoCompleto)) !== null) {
         const indiceInicio = match.index
         // Buscar en los próximos 1000 caracteres después del turno (aumentado para capturar más)
@@ -341,13 +410,11 @@ function extraerNumerosFormato5($: cheerio.CheerioAPI, turno: string, provincia:
         const patronEspaciado = /(\d+)\.\s*(\d{4,5})/g // Simplificado \s*\s* a \s*
         const numerosEncontrados: string[] = []
         let matchPatron: RegExpExecArray | null
-
         console.log(`🔍 Buscando patrón espaciado en segmento...`)
         while ((matchPatron = patronEspaciado.exec(segmento)) !== null) {
             const posicion = matchPatron[1] // El número antes del punto (1, 2, 3, etc.)
             const numero = matchPatron[2] // El número de 4-5 dígitos
             console.log(`🎯 Encontrado: Posición ${posicion} → Número ${numero}`)
-
             if (numero.length === 4) {
                 numerosEncontrados.push(numero)
             } else if (numero.length === 5) {
@@ -357,7 +424,6 @@ function extraerNumerosFormato5($: cheerio.CheerioAPI, turno: string, provincia:
                 console.log(`🔄 Número de 5 dígitos: ${numero} → ${ultimosCuatro}`)
             }
         }
-
         console.log(`🔢 Números extraídos del patrón espaciado:`, numerosEncontrados)
         if (numerosEncontrados.length >= 18) {
             console.log(`✅ FORMATO ESPACIADO: Encontrados ${numerosEncontrados.length} números válidos`)
@@ -553,7 +619,6 @@ function extraerNumerosMisiones($: cheerio.CheerioAPI, turno: string): string[] 
 // 🔥 FUNCIÓN ULTRA ESPECÍFICA MEJORADA CON FORMATO ESPACIADO
 function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, provincia: string): string[] {
     console.log(`🎯 EXTRACCIÓN ULTRA ESPECÍFICA: ${provincia} - ${turno}`)
-
     // 🔥 PRIMERO: Intentar formato espaciado
     const numerosFormato5 = extraerNumerosFormato5($, turno, provincia)
     if (numerosFormato5.length >= 18) {
@@ -580,7 +645,6 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
             const regexOtroTurno = new RegExp(`\\b${otroTurno}\\b`, "i")
             return regexOtroTurno.test(textoElemento)
         })
-
         if (contieneOtroTurno) {
             console.log(`⚠️ Elemento contiene otros turnos, DESCARTANDO`)
             continue
@@ -599,7 +663,6 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
     const textoCompleto = $("body").text()
     const regexTurno = new RegExp(`\\b${turno}\\b`, "gi")
     let match: RegExpExecArray | null
-
     while ((match = regexTurno.exec(textoCompleto)) !== null) {
         const indiceInicio = match.index
         // Encontrar el PRIMER otro turno que aparezca después
@@ -648,7 +711,6 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
             const regexOtroTurno = new RegExp(`\\b${otroTurno}\\b`, "i")
             return regexOtroTurno.test(textoTabla)
         })
-
         if (!contieneOtrosTurnos) {
             // Tabla EXCLUSIVA para nuestro turno
             const numeros: string[] = []
@@ -755,7 +817,6 @@ async function obtenerResultadoEspecifico(provincia: string, turno: string): Pro
         let intentos = 0
         const maxIntentos = 3
         let pizarraHtml: Response | null = null
-
         while (intentos < maxIntentos && !pizarraHtml?.ok) {
             try {
                 intentos++
@@ -783,7 +844,6 @@ async function obtenerResultadoEspecifico(provincia: string, turno: string): Pro
         const contenidoPizarra = await pizarraHtml.text()
         console.log(`📄 Contenido HTML recibido (primeros 500 chars): ${contenidoPizarra.substring(0, 500)}...`)
         const $ = cheerio.load(contenidoPizarra)
-
         let numeros: string[] = []
 
         // 🆕 USAR FUNCIONES ESPECÍFICAS PARA NUEVAS PROVINCIAS
@@ -849,13 +909,11 @@ async function obtenerResultadosConfiables(): Promise<Extracto[]> {
     // Procesar cada provincia (incluyendo las nuevas y San Luis)
     for (const [provinciaKey, pizarraUrl] of Object.entries(URLS_PIZARRAS)) {
         console.log(`🏛️ === PROVINCIA: ${provinciaKey} ===`)
-
         const provinciaData = {
             loteria: provinciaKey === "NACION" ? "Nacional" : provinciaKey === "PROVINCIA" ? "Provincial" : provinciaKey,
             provincia: provinciaKey,
             sorteos: {} as { [key: string]: string[] },
         }
-
         let tieneResultadosValidos = false
         let turnosParaProvincia: string[] = []
 
@@ -894,10 +952,9 @@ async function obtenerResultadosConfiables(): Promise<Extracto[]> {
         // Procesar cada turno relevante para la provincia y el día
         for (const turno of turnosParaProvincia) {
             console.log(`🔍 Intentando obtener: ${provinciaKey} - ${turno}`)
-            // Solo procesar si el sorteo finalizó
-            if (esSorteoFinalizado(turno, fechaActual)) {
+            // Solo procesar si el sorteo finalizó, pasando la provincia para el override
+            if (esSorteoFinalizado(turno, fechaActual, provinciaKey)) {
                 const numeros = await obtenerResultadoEspecifico(provinciaKey, turno)
-
                 // SOLO agregar si se encontraron números válidos
                 if (numeros !== null && numeros.length > 0) {
                     // Agregar a API - FORMATO CORRECTO PARA LA INTERFAZ EXISTENTE
@@ -941,12 +998,10 @@ export async function GET(request: Request) {
         const url = new URL(request.url)
         const parametroFecha = url.searchParams.get("date")
         const forceRefresh = url.searchParams.get("forceRefresh") === "true"
-
         console.log(`📥 PARÁMETROS: fecha=${parametroFecha}, forceRefresh=${forceRefresh}`)
 
         const fechaActualArgentina = obtenerFechaArgentinaRobusta()
         let fechaConsulta: Date
-
         if (parametroFecha) {
             // 🔥 USAR FUNCIÓN ROBUSTA PARA PARSEAR FECHA
             fechaConsulta = parsearFechaConsulta(parametroFecha)
@@ -962,7 +1017,6 @@ export async function GET(request: Request) {
         // 🔥 COMPARACIÓN ROBUSTA DE FECHAS
         const fechaHoyKey = formatearFechaArgentina(startOfDay(fechaActualArgentina), "yyyy-MM-dd")
         const esHoyEnArgentina = fechaKeyFirebase === fechaHoyKey
-
         console.log(`📅 KEY FIREBASE CONSULTA: ${fechaKeyFirebase}`)
         console.log(`📅 KEY FIREBASE HOY: ${fechaHoyKey}`)
         console.log(`📅 FECHA DISPLAY: ${fechaDisplayConsulta}`)
@@ -1067,9 +1121,7 @@ export async function GET(request: Request) {
                     }
                     provinciaResultado.sorteos[extracto.sorteo] = extracto.numeros
                 }
-
                 const resultadosParaGuardar: Resultado[] = Array.from(resultadosAgrupadosPorProvincia.values())
-
                 const dataToSave: ResultadoDia = {
                     fecha: fechaDisplayConsulta, // "dd/MM/yyyy"
                     dia: formatearFechaArgentina(fechaConsulta, "EEEE").replace(/^\w/, (c) => c.toUpperCase()),
@@ -1167,7 +1219,6 @@ export async function POST(request: Request) {
 
         // Buscar si ya existe la provincia
         let provinciaResultado = datosDia.resultados.find((r) => r.provincia === provincia)
-
         if (!provinciaResultado) {
             // Si no existe la provincia, crearla
             provinciaResultado = {
