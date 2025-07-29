@@ -163,6 +163,10 @@ export default function CargarJugadas() {
         { id: "TUCUMA", label: "Tucumán" },
         { id: "NEUQUE", label: "Neuquén" },
         { id: "MISION", label: "Misiones" },
+        { id: "FORMOSA", label: "Formosa" },
+        { id: "JUJUY", label: "Jujuy" },
+        { id: "SALTA", label: "Salta" },
+        { id: "SAN LUIS", label: "San Luis" },
     ]
 
     useEffect(() => {
@@ -1034,8 +1038,8 @@ export default function CargarJugadas() {
                                                         key={jugada.id}
                                                         onClick={() => setJugadaSeleccionada(jugada)}
                                                         className={`p-3 rounded-lg border cursor-pointer transition-all ${isSelected
-                                                                ? "border-purple-500 bg-purple-50"
-                                                                : "border-gray-200 hover:border-purple-300 hover:bg-gray-50"
+                                                            ? "border-purple-500 bg-purple-50"
+                                                            : "border-gray-200 hover:border-purple-300 hover:bg-gray-50"
                                                             }`}
                                                     >
                                                         <div className="flex justify-between items-start">

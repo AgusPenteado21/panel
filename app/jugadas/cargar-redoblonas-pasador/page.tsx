@@ -1,5 +1,4 @@
 "use client"
-
 import { useState, useEffect, useCallback, useRef, type KeyboardEvent } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -69,6 +68,10 @@ const provinceAbbreviations: { [key: string]: string } = {
     RIONEG: "RN",
     SANTIA: "SG",
     TUCUMA: "TU",
+    FORMOSA: "FOR", // Añadido
+    JUJUY: "JUJ", // Añadido
+    SALTA: "SAL", // Añadido
+    SANLUIS: "SL", // Añadido
 }
 
 // Número total de filas de jugadas
@@ -122,6 +125,10 @@ export default function CargarRedoblonas() {
         { id: "RIONEG", label: "Rio Negro" },
         { id: "SANTIA", label: "Santiago" },
         { id: "TUCUMA", label: "Tucumán" },
+        { id: "FORMOSA", label: "Formosa" }, // Añadido
+        { id: "JUJUY", label: "Jujuy" }, // Añadido
+        { id: "SALTA", label: "Salta" }, // Añadido
+        { id: "SANLUIS", label: "San Luis" }, // Añadido
     ]
 
     const fetchPasadores = useCallback(async () => {
@@ -174,10 +181,8 @@ export default function CargarRedoblonas() {
         const aleatorio = Math.floor(Math.random() * 100)
             .toString()
             .padStart(2, "0")
-
         const secuencia = `${timestamp}${contador}${aleatorio}`.padStart(13, "0")
         incrementSecuenciaCounter()
-
         console.log(`⚡ Secuencia generada instantáneamente: ${secuencia}`)
         return secuencia
     }, [secuenciaCounter, incrementSecuenciaCounter])
@@ -188,7 +193,6 @@ export default function CargarRedoblonas() {
         if (jugadas.length < TOTAL_FILAS) {
             setJugadas(createEmptyJugadas())
         }
-
         // Inicializar las referencias
         inputRefs.current = Array(TOTAL_FILAS)
             .fill(0)
@@ -244,7 +248,6 @@ export default function CargarRedoblonas() {
         ticketContent += "-".repeat(32) + "\n"
 
         const loteriaAbreviada = lotteryAbbreviations[selectedSorteo] || selectedSorteo
-
         let secuenciaIndex = 0
         let totalGeneral = 0
 
@@ -436,24 +439,20 @@ export default function CargarRedoblonas() {
             // Guardar todos los documentos en paralelo (mucho más rápido)
             console.log(`⚡ Guardando ${documentosAGuardar.length} documentos en paralelo...`)
             const promesasGuardado = documentosAGuardar.map((documento) => addDoc(jugadasPasadorCollection, documento))
-
             await Promise.all(promesasGuardado)
             console.log(`✅ Todos los documentos guardados exitosamente`)
 
             // Generar y mostrar el ticket con todas las secuencias
             generarTicketConMultiplesSecuencias(jugadasCompletas, secuenciasGeneradas)
-
             toast.success(`Jugadas guardadas exitosamente con ${secuenciasGeneradas.length} apuestas`)
             limpiarFormulario()
         } catch (error: unknown) {
             console.error("Error al guardar las jugadas:", error)
             let errorMessage = "Error al guardar las jugadas"
-
             // Verificar si el error tiene una propiedad message
             if (error instanceof Error) {
                 errorMessage += ": " + error.message
             }
-
             toast.error(errorMessage)
         } finally {
             setIsLoading(false)
@@ -472,7 +471,6 @@ export default function CargarRedoblonas() {
     const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>, rowIndex: number, colIndex: number) => {
         if (e.key === "Enter") {
             e.preventDefault()
-
             // Determinar el siguiente campo para enfocar
             let nextRow = rowIndex
             let nextCol = colIndex + 1
@@ -512,7 +510,6 @@ export default function CargarRedoblonas() {
         console.log("🔥 Abriendo diálogo redoblona para índice:", index)
         console.log("🔥 Jugadas completas:", jugadasCompletas)
         console.log("🔥 Jugada seleccionada:", jugadasCompletas[index])
-
         setCurrentJugadaIndex(index)
         setRedoblonaNumero("")
         setRedoblonaPosicion("")
@@ -559,7 +556,6 @@ export default function CargarRedoblonas() {
             originalNumero: jugadaOriginal.numero,
             originalPosicion: jugadaOriginal.posicion,
         }
-
         console.log("🔥 Nueva redoblona:", nuevaRedoblona)
 
         const nuevasJugadas = [...jugadasCompletas]
@@ -568,9 +564,7 @@ export default function CargarRedoblonas() {
             tipo: "Jugada con redoblona",
             redoblonas: [...jugadaOriginal.redoblonas, nuevaRedoblona],
         }
-
         console.log("🔥 Jugadas actualizadas:", nuevasJugadas)
-
         setJugadasCompletas(nuevasJugadas)
         setIsRedoblonaDialogOpen(false)
         setCurrentJugadaIndex(null)
@@ -585,12 +579,10 @@ export default function CargarRedoblonas() {
             toast.error("Debe completar número, posición e importe")
             return
         }
-
         if (!selectedSorteo) {
             toast.error("Debe seleccionar un sorteo")
             return
         }
-
         if (selectedLotteries.length === 0) {
             toast.error("Debe seleccionar al menos una lotería")
             return
@@ -610,7 +602,6 @@ export default function CargarRedoblonas() {
         // Agregar la jugada al estado
         setJugadasCompletas((prev) => {
             const nuevasJugadas = [...prev, nuevaJugada]
-
             // Configurar el índice para la redoblona DESPUÉS de que se actualice el estado
             setTimeout(() => {
                 setCurrentJugadaIndex(nuevasJugadas.length - 1)
@@ -618,7 +609,6 @@ export default function CargarRedoblonas() {
                 setRedoblonaPosicion("")
                 setIsRedoblonaDialogOpen(true)
             }, 0)
-
             return nuevasJugadas
         })
 
@@ -713,7 +703,6 @@ export default function CargarRedoblonas() {
                                         </SelectContent>
                                     </Select>
                                 </div>
-
                                 <div className="flex items-center gap-4">
                                     <Label htmlFor="pasador" className="min-w-[80px] text-blue-800 font-semibold">
                                         PASADOR:
@@ -732,7 +721,6 @@ export default function CargarRedoblonas() {
                                     </Select>
                                 </div>
                             </div>
-
                             <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200 shadow-sm">
                                 <Label className="mb-3 block text-indigo-800 font-semibold">LOTERÍAS:</Label>
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -751,7 +739,6 @@ export default function CargarRedoblonas() {
                                     ))}
                                 </div>
                             </div>
-
                             <div>
                                 <h3 className="text-lg font-semibold mb-2 text-blue-800 border-b-2 border-blue-300 pb-2 flex items-center">
                                     <Calculator className="h-5 w-5 mr-2 text-blue-600" />
@@ -772,7 +759,6 @@ export default function CargarRedoblonas() {
                                     </Table>
                                 </div>
                             </div>
-
                             {jugadasCompletas.length > 0 && (
                                 <div>
                                     <h3 className="text-lg font-semibold mb-2 text-blue-800 border-b-2 border-blue-300 pb-2">
@@ -838,7 +824,6 @@ export default function CargarRedoblonas() {
                                     </div>
                                 </div>
                             )}
-
                             <div className="flex justify-between items-center p-4 bg-blue-50 rounded-lg border border-blue-200 shadow-sm">
                                 <div className="text-xl font-bold text-blue-800">
                                     Total: <span className="text-green-600">${totalMonto.toFixed(2)}</span>
@@ -864,7 +849,6 @@ export default function CargarRedoblonas() {
                         </div>
                     </CardContent>
                 </Card>
-
                 {/* Diálogo para mostrar el ticket */}
                 <Dialog open={isTicketDialogOpen} onOpenChange={setIsTicketDialogOpen}>
                     <DialogContent className="bg-white border border-blue-200 shadow-xl max-w-md">
@@ -902,6 +886,7 @@ export default function CargarRedoblonas() {
                                                         pre {
                                                             white-space: pre-wrap;
                                                             margin: 0;
+                                                            padding: 0;
                                                         }
                                                     </style>
                                                 </head>
@@ -924,7 +909,6 @@ export default function CargarRedoblonas() {
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
-
                 {/* Diálogo para agregar redoblona */}
                 <Dialog open={isRedoblonaDialogOpen} onOpenChange={setIsRedoblonaDialogOpen}>
                     <DialogContent className="bg-amber-100 border border-amber-300 shadow-xl max-w-md">
@@ -938,7 +922,6 @@ export default function CargarRedoblonas() {
                                 <p>Debug: Número: &quot;{redoblonaNumero}&quot;</p>
                                 <p>Debug: Posición: &quot;{redoblonaPosicion}&quot;</p>
                             </div>
-
                             {currentJugadaIndex !== null && jugadasCompletas[currentJugadaIndex] && (
                                 <div className="bg-white p-3 rounded-md">
                                     <p className="font-semibold text-gray-700">Jugada Original:</p>

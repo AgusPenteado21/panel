@@ -82,7 +82,7 @@ function obtenerFechaArgentinaRobusta(): Date {
             })
             const parts = formatter.formatToParts(ahoraUTC)
             const partsObj = parts.reduce((acc, part) => {
-                acc[part.type] = part.value
+                ; (acc as any)[part.type] = part.value
                 return acc
             }, {} as any)
             fechaIntl = new Date(
@@ -181,6 +181,7 @@ function detectarEntorno(): string {
 
 // Constantes
 const TIEMPO_ESPERA_FETCH = 60000 // 60 segundos
+
 const URLS_PIZARRAS = {
     NACION: "https://vivitusuerte.com/pizarra/ciudad",
     PROVINCIA: "https://vivitusuerte.com/pizarra/provincia",
@@ -195,6 +196,12 @@ const URLS_PIZARRAS = {
     SANTIAGO: "https://vivitusuerte.com/pizarra/santiago",
     NEUQUEN: "https://vivitusuerte.com/pizarra/neuquen",
     MISIONES: "https://vivitusuerte.com/pizarra/misiones",
+    // Nuevas provincias
+    FORMOSA: "https://vivitusuerte.com/pizarra/formosa",
+    JUJUY: "https://vivitusuerte.com/pizarra/jujuy",
+    SALTA: "https://vivitusuerte.com/pizarra/salta",
+    // AGREGADO PARA SAN LUIS
+    "SAN LUIS": "https://vivitusuerte.com/pizarra/san+luis",
 }
 
 const HORARIOS_SORTEOS = {
@@ -258,7 +265,6 @@ async function obtenerConTiempoLimite(url: string, opciones: RequestInit = {}): 
             cache: "no-store",
             headers: headersFinales,
         })
-
         clearTimeout(id)
         console.log(`🌐 FETCH ${url}: Status ${respuesta.status} (${entorno})`)
         return respuesta
@@ -786,7 +792,7 @@ async function obtenerResultadoEspecifico(provincia: string, turno: string): Pro
         } else if (provincia === "MISIONES") {
             numeros = extraerNumerosMisiones($, turno)
         } else {
-            // Usar extracción ULTRA específica para provincias existentes
+            // Usar extracción ULTRA específica para provincias existentes y nuevas genéricas (incluyendo San Luis)
             numeros = extraerNumerosUltraEspecificos($, turno, provincia)
         }
 
@@ -840,7 +846,7 @@ async function obtenerResultadosConfiables(): Promise<Extracto[]> {
     const scrapedResults: Extracto[] = [] // Changed to Extracto[]
     const allTurnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
 
-    // Procesar cada provincia (incluyendo las nuevas)
+    // Procesar cada provincia (incluyendo las nuevas y San Luis)
     for (const [provinciaKey, pizarraUrl] of Object.entries(URLS_PIZARRAS)) {
         console.log(`🏛️ === PROVINCIA: ${provinciaKey} ===`)
 
@@ -875,7 +881,7 @@ async function obtenerResultadosConfiables(): Promise<Extracto[]> {
                 turnosParaProvincia = allTurnos
             }
         } else {
-            // Otras provincias
+            // Otras provincias (incluyendo Formosa, Jujuy, Salta, y SAN LUIS)
             if (diaSemana === 0) {
                 // Domingo
                 turnosParaProvincia = [] // No hay sorteos para otras provincias los domingos
@@ -956,6 +962,7 @@ export async function GET(request: Request) {
         // 🔥 COMPARACIÓN ROBUSTA DE FECHAS
         const fechaHoyKey = formatearFechaArgentina(startOfDay(fechaActualArgentina), "yyyy-MM-dd")
         const esHoyEnArgentina = fechaKeyFirebase === fechaHoyKey
+
         console.log(`📅 KEY FIREBASE CONSULTA: ${fechaKeyFirebase}`)
         console.log(`📅 KEY FIREBASE HOY: ${fechaHoyKey}`)
         console.log(`📅 FECHA DISPLAY: ${fechaDisplayConsulta}`)
@@ -1047,36 +1054,37 @@ export async function GET(request: Request) {
 
             // 🔥 NUEVA LÓGICA: Guardar los resultados finales en Firebase
             if (finalResults.length > 0) {
-                const resultadosAgrupadosPorProvincia = new Map<string, Resultado>();
-
+                const resultadosAgrupadosPorProvincia = new Map<string, Resultado>()
                 for (const extracto of finalResults) {
-                    let provinciaResultado = resultadosAgrupadosPorProvincia.get(extracto.provincia || "");
+                    let provinciaResultado = resultadosAgrupadosPorProvincia.get(extracto.provincia || "")
                     if (!provinciaResultado) {
                         provinciaResultado = {
                             loteria: extracto.loteria,
                             provincia: extracto.provincia || "",
                             sorteos: {},
-                        };
-                        resultadosAgrupadosPorProvincia.set(extracto.provincia || "", provinciaResultado);
+                        }
+                        resultadosAgrupadosPorProvincia.set(extracto.provincia || "", provinciaResultado)
                     }
-                    provinciaResultado.sorteos[extracto.sorteo] = extracto.numeros;
+                    provinciaResultado.sorteos[extracto.sorteo] = extracto.numeros
                 }
 
-                const resultadosParaGuardar: Resultado[] = Array.from(resultadosAgrupadosPorProvincia.values());
+                const resultadosParaGuardar: Resultado[] = Array.from(resultadosAgrupadosPorProvincia.values())
 
                 const dataToSave: ResultadoDia = {
                     fecha: fechaDisplayConsulta, // "dd/MM/yyyy"
                     dia: formatearFechaArgentina(fechaConsulta, "EEEE").replace(/^\w/, (c) => c.toUpperCase()),
                     resultados: resultadosParaGuardar,
-                };
+                }
 
                 // Guardar en Firebase, usando la fecha de visualización como clave anidada
-                const docRefToSave = doc(db, "extractos", fechaKeyFirebase);
+                const docRefToSave = doc(db, "extractos", fechaKeyFirebase)
                 const dataObjectForFirebase = {
                     [fechaDisplayConsulta]: dataToSave,
-                };
-                await setDoc(docRefToSave, dataObjectForFirebase, { merge: true });
-                console.log(`✅ Resultados de scraping guardados en Firebase para ${fechaKeyFirebase} bajo la clave ${fechaDisplayConsulta}`);
+                }
+                await setDoc(docRefToSave, dataObjectForFirebase, { merge: true })
+                console.log(
+                    `✅ Resultados de scraping guardados en Firebase para ${fechaKeyFirebase} bajo la clave ${fechaDisplayConsulta}`,
+                )
             } else {
                 console.log(`⚠️ No hay resultados para guardar en Firebase después del scraping.`)
             }
@@ -1159,6 +1167,7 @@ export async function POST(request: Request) {
 
         // Buscar si ya existe la provincia
         let provinciaResultado = datosDia.resultados.find((r) => r.provincia === provincia)
+
         if (!provinciaResultado) {
             // Si no existe la provincia, crearla
             provinciaResultado = {
@@ -1185,7 +1194,7 @@ export async function POST(request: Request) {
         await setDoc(docRef, dataParaGuardar, { merge: true })
 
         console.log(`✅ Manual: ${provincia} - ${turno}`)
-        return NextResponse.json({ success: true, message: "Actualizadoo manualmente" }, { headers: corsHeaders })
+        return NextResponse.json({ success: true, message: "Actualizado manualmente" }, { headers: corsHeaders })
     } catch (error) {
         console.error("❌ Error manual:", error)
         return NextResponse.json(

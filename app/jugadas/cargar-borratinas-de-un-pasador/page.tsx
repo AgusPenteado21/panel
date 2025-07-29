@@ -1,5 +1,4 @@
 "use client"
-
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import { Input } from "@/components/ui/input"
@@ -106,6 +105,10 @@ const provinceAbbreviations: { [key: string]: string } = {
     TUCUMA: "TU",
     NEUQUE: "NEU",
     MISION: "MIS",
+    FORMOSA: "FOR", // Nueva abreviatura
+    JUJUY: "JUJ", // Nueva abreviatura
+    SALTA: "SAL", // Nueva abreviatura
+    SANLUIS: "SL", // Nueva abreviatura
 }
 
 const loterias: Loteria[] = [
@@ -123,6 +126,10 @@ const loterias: Loteria[] = [
     { id: "TUCUMA", label: "Tucumán", color: "bg-emerald-100 border-emerald-500", habilitada: true },
     { id: "NEUQUE", label: "Neuquén", color: "bg-violet-100 border-violet-500", habilitada: true },
     { id: "MISION", label: "Misiones", color: "bg-rose-100 border-rose-500", habilitada: true },
+    { id: "FORMOSA", label: "Formosa", color: "bg-amber-100 border-amber-500", habilitada: true }, // Nueva lotería
+    { id: "JUJUY", label: "Jujuy", color: "bg-fuchsia-100 border-fuchsia-500", habilitada: true }, // Nueva lotería
+    { id: "SALTA", label: "Salta", color: "bg-sky-100 border-sky-500", habilitada: true }, // Nueva lotería
+    { id: "SANLUIS", label: "San Luis", color: "bg-indigo-100 border-indigo-500", habilitada: true }, // Nueva lotería
 ]
 
 const formatDate = (date: Date): string => {
@@ -149,17 +156,14 @@ export default function CargarJugadas() {
     const [ticketContent, setTicketContent] = useState("")
     const [isLoading, setIsLoading] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
-
     // Estados para repetir jugada
     const [isRepeatDialogOpen, setIsRepeatDialogOpen] = useState(false)
     const [secuenciaBuscar, setSecuenciaBuscar] = useState("")
     const [isSearching, setIsSearching] = useState(false)
-
     // Estados para la funcionalidad mejorada
     const [jugadasPasador, setJugadasPasador] = useState<JugadaFirebase[]>([])
     const [isLoadingJugadas, setIsLoadingJugadas] = useState(false)
     const [jugadaSeleccionada, setJugadaSeleccionada] = useState<JugadaFirebase | null>(null)
-
     // Estados para observación y búsqueda
     const [observacionJugada, setObservacionJugada] = useState<string>("")
     const [nombreObservacionJugada, setNombreObservacionJugada] = useState<string>("")
@@ -211,7 +215,6 @@ export default function CargarJugadas() {
             toast.error("Por favor, seleccione un pasador primero.")
             return
         }
-
         setIsLoadingJugadas(true)
         try {
             const pasadorDoc = pasadores.find((p) => p.id === selectedPasador)
@@ -219,12 +222,10 @@ export default function CargarJugadas() {
                 toast.error("Pasador no encontrado.")
                 return
             }
-
             console.log("🔍 Obteniendo jugadas del pasador:", pasadorDoc.nombre)
             const nombreColeccion = `JUGADAS DE ${pasadorDoc.nombre}`
             const jugadasCollection = collection(db, nombreColeccion)
             const jugadasSnapshot = await getDocs(jugadasCollection)
-
             const jugadasList: JugadaFirebase[] = jugadasSnapshot.docs.map((doc) => {
                 const data = doc.data()
                 return {
@@ -260,7 +261,6 @@ export default function CargarJugadas() {
             console.log("📋 Jugadas encontradas:", jugadasList.length)
             console.log("📋 Jugadas filtradas:", jugadasFiltradas.length)
             setJugadasPasador(jugadasFiltradas)
-
             if (jugadasFiltradas.length === 0) {
                 toast.error(`No se encontraron jugadas anteriores de Triplona, Quintina o Borratina para ${pasadorDoc.nombre}.`)
             }
@@ -277,7 +277,6 @@ export default function CargarJugadas() {
             toast.error("Por favor, ingrese un número de secuencia.")
             return
         }
-
         setIsSearching(true)
         try {
             console.log("🔍 Iniciando búsqueda de secuencia:", secuenciaBuscar)
@@ -288,13 +287,11 @@ export default function CargarJugadas() {
             for (const pasador of pasadores) {
                 const nombreColeccion = `JUGADAS DE ${pasador.nombre}`
                 console.log(`🔎 Buscando en colección: "${nombreColeccion}"`)
-
                 try {
                     const jugadasCollection = collection(db, nombreColeccion)
                     const q = query(jugadasCollection, where("secuencia", "==", secuenciaBuscar))
                     const querySnapshot = await getDocs(q)
                     coleccionesRevisadas++
-
                     if (!querySnapshot.empty) {
                         const docs = querySnapshot.docs.map((doc) => {
                             const data = doc.data()
@@ -415,19 +412,16 @@ export default function CargarJugadas() {
 
             setTotal(totalCalculado)
             const tiposEncontrados = jugadasFiltradas.map((j) => j.tipo).join(", ")
-            const loteriasTexto = provinciasEncontradas.join(", ")
-
+            const loteriasTexto = provinciasEncontradas.length > 0 ? provinciasEncontradas.join(", ") : "Todas las loterías"
             console.log("🎉 Búsqueda completada exitosamente")
             console.log("📋 Resumen:")
             console.log("- Tipos:", tiposEncontrados)
             console.log("- Sorteo:", sorteoEncontrado)
             console.log("- Loterías:", loteriasTexto)
             console.log("- Total:", totalCalculado)
-
             toast.success(
                 `Jugada encontrada y cargada. Sorteo: ${sorteoEncontrado}. Loterías: ${loteriasTexto}. Total: $${totalCalculado.toFixed(2)}`,
             )
-
             setIsRepeatDialogOpen(false)
             setSecuenciaBuscar("")
         } catch (error) {
@@ -443,7 +437,6 @@ export default function CargarJugadas() {
             toast.error("Por favor, seleccione una jugada para repetir.")
             return
         }
-
         try {
             console.log("🎯 Cargando jugada seleccionada:", jugadaSeleccionada.secuencia)
             console.log("📋 Datos completos de la jugada:", jugadaSeleccionada)
@@ -481,7 +474,6 @@ export default function CargarJugadas() {
             if (jugadaSeleccionada.tipo === "NUEVA TRIPLONA") {
                 console.log("🔢 Procesando TRIPLONA")
                 console.log("📊 Números array:", jugadaSeleccionada.numeros)
-
                 if (jugadaSeleccionada.numeros && Array.isArray(jugadaSeleccionada.numeros)) {
                     jugadaSeleccionada.numeros.forEach((numeroStr: string, index: number) => {
                         console.log(`🎲 Procesando número ${index + 1}:`, numeroStr)
@@ -497,7 +489,6 @@ export default function CargarJugadas() {
                         }
                     })
                 }
-
                 setTriplonaApuestas(nuevasTriplonas)
                 totalCalculado = nuevasTriplonas.length * provinciasJugada.length * 50
                 console.log(
@@ -509,7 +500,6 @@ export default function CargarJugadas() {
             } else if (jugadaSeleccionada.tipo === "NUEVA QUINTINA") {
                 console.log("🔢 Procesando QUINTINA")
                 console.log("📊 Números array:", jugadaSeleccionada.numeros)
-
                 if (jugadaSeleccionada.numeros && Array.isArray(jugadaSeleccionada.numeros)) {
                     jugadaSeleccionada.numeros.forEach((numeroStr: string, index: number) => {
                         console.log(`🎲 Procesando quintina ${index + 1}:`, numeroStr)
@@ -524,7 +514,6 @@ export default function CargarJugadas() {
                         }
                     })
                 }
-
                 setQuintinaApuestas(nuevasQuintinas)
                 totalCalculado = nuevasQuintinas.length * provinciasJugada.length * 100
                 console.log(
@@ -536,7 +525,6 @@ export default function CargarJugadas() {
             } else if (jugadaSeleccionada.tipo === "NUEVA BORRATINA") {
                 console.log("🔢 Procesando BORRATINA")
                 console.log("📊 Jugadas array:", jugadaSeleccionada.jugadas)
-
                 if (jugadaSeleccionada.jugadas && Array.isArray(jugadaSeleccionada.jugadas)) {
                     jugadaSeleccionada.jugadas.forEach((borratina: any, index: number) => {
                         console.log(`🎲 Procesando borratina ${index + 1}:`, borratina)
@@ -549,7 +537,6 @@ export default function CargarJugadas() {
                         }
                     })
                 }
-
                 setBorratinaApuestas(nuevasBorratinas)
                 totalCalculado = nuevasBorratinas.length * 30
                 console.log(`💰 Total Borratina: ${nuevasBorratinas.length} × 30 = ${totalCalculado}`)
@@ -571,10 +558,8 @@ export default function CargarJugadas() {
             // PASO 9: Generar y mostrar el ticket automáticamente con los datos correctos
             const nuevaSecuencia = generarSecuencia()
             setSecuencia(nuevaSecuencia)
-
             // Esperar otro momento para asegurar que el estado se haya actualizado
             await new Promise((resolve) => setTimeout(resolve, 100))
-
             const ticketContent = generarContenidoTicket(nuevaSecuencia)
             imprimirTicket(ticketContent)
 
@@ -586,7 +571,6 @@ export default function CargarJugadas() {
             console.log("- Loterías:", loteriasTexto)
             console.log("- Total:", totalCalculado)
             console.log("- Ticket generado con secuencia:", nuevaSecuencia)
-
             toast.success(
                 `¡Jugada repetida exitosamente! Sorteo: ${sorteoConfiguracion}. Loterías: ${loteriasTexto}. Total: $${totalCalculado.toFixed(2)}. Ticket generado.`,
             )
@@ -654,7 +638,6 @@ export default function CargarJugadas() {
                     })
                     .filter(Boolean)
             }
-
             resumen = `${cantidad} Triplona(s)`
             if (jugada.totalMonto) {
                 total = jugada.totalMonto
@@ -681,7 +664,6 @@ export default function CargarJugadas() {
                     })
                     .filter(Boolean)
             }
-
             resumen = `${cantidad} Quintina(s)`
             if (jugada.totalMonto) {
                 total = jugada.totalMonto
@@ -704,7 +686,6 @@ export default function CargarJugadas() {
                 cantidad = jugada.numeros.length
                 numerosJugados = jugada.numeros
             }
-
             resumen = `${cantidad} Borratina(s)`
             if (jugada.totalMonto) {
                 total = jugada.totalMonto
@@ -721,7 +702,6 @@ export default function CargarJugadas() {
                     })
                     .filter(Boolean)
             }
-
             resumen = `${cantidad} Exacta(s)`
             total = jugada.totalMonto || 0
         }
@@ -741,11 +721,9 @@ export default function CargarJugadas() {
     ) => {
         const value = e.target.value.replace(/\D/g, "")
         e.target.value = value
-
         if (value.length === 2 && nextRef && nextRef.current) {
             nextRef.current.focus()
         }
-
         if (value.length === 2 && !nextRef) {
             agregarTriplona()
         }
@@ -754,16 +732,13 @@ export default function CargarJugadas() {
     const handleBorratinaInput = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
         const value = e.target.value.replace(/\D/g, "")
         e.target.value = value
-
         if (value.length === 2) {
             const isRepeated = borratinaRefs.current.some((ref, i) => i !== index && ref?.value === value)
-
             if (isRepeated) {
                 e.target.value = ""
                 toast.error("Este número ya ha sido ingresado. Por favor, elija otro.")
                 return
             }
-
             if (index < 7 && borratinaRefs.current[index + 1]) {
                 borratinaRefs.current[index + 1]?.focus()
             } else if (index === 7) {
@@ -775,7 +750,6 @@ export default function CargarJugadas() {
     const handleQuintinaInput = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
         const value = e.target.value.replace(/\D/g, "")
         e.target.value = value
-
         if (value.length === 2) {
             if (index < 4 && quintinaRefs.current[index + 1]) {
                 quintinaRefs.current[index + 1]?.focus()
@@ -790,7 +764,6 @@ export default function CargarJugadas() {
             toast.error("Por favor, seleccione pasador, loterías y sorteo antes de agregar una apuesta.")
             return
         }
-
         const numero1 = numero1Ref.current?.value || ""
         const numero2 = numero2Ref.current?.value || ""
         const numero3 = numero3Ref.current?.value || ""
@@ -805,7 +778,6 @@ export default function CargarJugadas() {
             loteria: selectedSorteo,
             provincias: selectedLotteries,
         }
-
         setTriplonaApuestas([...triplonaApuestas, nuevaApuesta])
         setTotal(total + selectedLotteries.length * 50)
         toast.success("Triplona agregada correctamente")
@@ -821,9 +793,7 @@ export default function CargarJugadas() {
             toast.error("Por favor, seleccione pasador y sorteo antes de agregar una apuesta.")
             return
         }
-
         const numeros = borratinaRefs.current.map((ref) => ref?.value || "")
-
         if (numeros.some((num) => num.length !== 2)) {
             toast.error("Por favor, ingrese ocho números de dos dígitos cada uno.")
             return
@@ -833,7 +803,6 @@ export default function CargarJugadas() {
             numeros: numeros,
             loteria: selectedSorteo,
         }
-
         setBorratinaApuestas([...borratinaApuestas, nuevaApuesta])
         setTotal(total + 30)
         toast.success("Borratina agregada correctamente")
@@ -849,9 +818,7 @@ export default function CargarJugadas() {
             toast.error("Por favor, seleccione pasador, loterías y sorteo antes de agregar una apuesta.")
             return
         }
-
         const numeros = quintinaRefs.current.map((ref) => ref?.value || "")
-
         if (numeros.some((num) => num.length !== 2)) {
             toast.error("Por favor, ingrese cinco números de dos dígitos cada uno.")
             return
@@ -862,7 +829,6 @@ export default function CargarJugadas() {
             loteria: selectedSorteo,
             provincias: selectedLotteries,
         }
-
         setQuintinaApuestas([...quintinaApuestas, nuevaApuesta])
         setTotal(total + selectedLotteries.length * 100)
         toast.success("Quintina agregada correctamente")
@@ -898,7 +864,6 @@ export default function CargarJugadas() {
             toast.error("Por favor, seleccione pasador, loterías y sorteo antes de agregar una apuesta.")
             return
         }
-
         if (
             exactaNumero.length < 2 ||
             exactaNumero.length > 4 ||
@@ -916,12 +881,10 @@ export default function CargarJugadas() {
             loteria: selectedSorteo,
             provincias: selectedLotteries,
         }
-
         const montoTotal = Number.parseFloat(exactaImporte) * selectedLotteries.length
         setExactaApuestas([...exactaApuestas, nuevaApuesta])
         setTotal(total + montoTotal)
         toast.success("Exacta agregada correctamente")
-
         setExactaNumero("")
         setExactaPosicion("")
         setExactaImporte("")
@@ -959,7 +922,6 @@ export default function CargarJugadas() {
         ticketContent += `PASADOR    ${pasadorSeleccionado.nombre}\n`
         ticketContent += `SORTEO     ${selectedSorteo}\n`
         ticketContent += "-".repeat(32) + "\n"
-
         const loteriaAbreviada = lotteryAbbreviations[selectedSorteo] || selectedSorteo
         ticketContent += `${loteriaAbreviada}\n`
         ticketContent += `SECUENCIA  ${secuenciaTicket}\n`
@@ -967,20 +929,17 @@ export default function CargarJugadas() {
         // TRIPLONA - Con provincias y números
         if (triplonaApuestas.length > 0) {
             ticketContent += "\n**** NUEVA TRIPLONA ****\n"
-
             // Mostrar las loterías donde se juega
             const provinciasTriplona = triplonaApuestas[0].provincias || selectedLotteries
             if (provinciasTriplona.length > 0) {
                 const provinciasAbreviadas = provinciasTriplona.map((l) => provinceAbbreviations[l] || l)
                 ticketContent += `LOTERIAS: ${provinciasAbreviadas.join(" ")}\n`
             }
-
             // Mostrar cada triplona con sus números
             triplonaApuestas.forEach((apuesta) => {
                 const numerosFormateados = apuesta.numeros.join("-")
                 ticketContent += `${numerosFormateados}   $50.00\n`
             })
-
             ticketContent += "-".repeat(32) + "\n"
             const totalTriplona = triplonaApuestas.length * 50 * provinciasTriplona.length
             ticketContent += `TOTAL: $${totalTriplona.toFixed(2)}\n\n`
@@ -990,13 +949,11 @@ export default function CargarJugadas() {
         if (borratinaApuestas.length > 0) {
             ticketContent += "\n**** NUEVA BORRATINA ****\n"
             ticketContent += "LOTERIAS: TODAS\n"
-
             // Mostrar cada borratina con sus números
             borratinaApuestas.forEach((apuesta) => {
                 const numerosFormateados = apuesta.numeros.join("-")
                 ticketContent += `${numerosFormateados}   $30.00\n`
             })
-
             ticketContent += "-".repeat(32) + "\n"
             const totalBorratina = borratinaApuestas.length * 30
             ticketContent += `TOTAL: $${totalBorratina.toFixed(2)}\n\n`
@@ -1005,20 +962,17 @@ export default function CargarJugadas() {
         // QUINTINA - Con provincias y números
         if (quintinaApuestas.length > 0) {
             ticketContent += "\n**** NUEVA QUINTINA ****\n"
-
             // Mostrar las loterías donde se juega
             const provinciasQuintina = quintinaApuestas[0].provincias || selectedLotteries
             if (provinciasQuintina.length > 0) {
                 const provinciasAbreviadas = provinciasQuintina.map((l) => provinceAbbreviations[l] || l)
                 ticketContent += `LOTERIAS: ${provinciasAbreviadas.join(" ")}\n`
             }
-
             // Mostrar cada quintina con sus números
             quintinaApuestas.forEach((apuesta) => {
                 const numerosFormateados = apuesta.numeros.join("-")
                 ticketContent += `${numerosFormateados}   $100.00\n`
             })
-
             ticketContent += "-".repeat(32) + "\n"
             const totalQuintina = quintinaApuestas.length * 100 * provinciasQuintina.length
             ticketContent += `TOTAL: $${totalQuintina.toFixed(2)}\n\n`
@@ -1027,16 +981,13 @@ export default function CargarJugadas() {
         // EXACTA - Con provincias, números, posiciones e importes
         if (exactaApuestas.length > 0) {
             ticketContent += "\n**** NUEVA EXACTA ****\n"
-
             // Mostrar las loterías donde se juega
             const provinciasExacta = exactaApuestas[0].provincias || selectedLotteries
             if (provinciasExacta.length > 0) {
                 const provinciasAbreviadas = provinciasExacta.map((l) => provinceAbbreviations[l] || l)
                 ticketContent += `LOTERIAS: ${provinciasAbreviadas.join(" ")}\n`
             }
-
             ticketContent += "NUMERO UBIC   IMPORTE\n"
-
             // Mostrar cada exacta con número, posición e importe
             exactaApuestas.forEach((apuesta) => {
                 const numero = apuesta.numero.padStart(4, "0")
@@ -1044,7 +995,6 @@ export default function CargarJugadas() {
                 const importe = Number.parseFloat(apuesta.importe) || 0
                 ticketContent += `${numero}  ${posicion}   $${importe.toFixed(2)}\n`
             })
-
             ticketContent += "-".repeat(32) + "\n"
             const totalExacta = exactaApuestas.reduce(
                 (acc, apuesta) => acc + Number.parseFloat(apuesta.importe) * apuesta.provincias.length,
@@ -1072,7 +1022,6 @@ export default function CargarJugadas() {
                 toast.error("No se pudo abrir la ventana de impresión. Verifique que no esté bloqueada por el navegador.")
                 return
             }
-
             printWindow.document.write(`
         <!DOCTYPE html>
         <html>
@@ -1114,7 +1063,6 @@ export default function CargarJugadas() {
           </body>
         </html>
       `)
-
             printWindow.document.close()
         } catch (error) {
             console.error("Error al imprimir:", error)
@@ -1179,7 +1127,6 @@ export default function CargarJugadas() {
             const jugadasCollection = collection(db, `JUGADAS DE ${pasadorDoc.nombre}`)
             const nuevaSecuencia = generarSecuencia()
             setSecuencia(nuevaSecuencia)
-
             const fechaHoraISO = new Date().toISOString()
 
             const guardarJugadasPorTipo = async (tipo: string, apuestas: any[], observacion = "", nombreObservacion = "") => {
@@ -1200,7 +1147,6 @@ export default function CargarJugadas() {
                         nombreObservacion: nombreObservacion, // Agregar esta línea
                         jugadas: apuestas.map((a) => ({ numeros: a.numeros })),
                     }
-
                     const docRef = await addDoc(jugadasCollection, nuevaJugada)
                     console.log(`Jugada NUEVA QUINTINA guardada con ID: ${docRef.id}`)
                 } else if (tipo === "NUEVA TRIPLONA") {
@@ -1218,7 +1164,6 @@ export default function CargarJugadas() {
                         nombreObservacion: nombreObservacion, // Agregar esta línea
                         jugadas: apuestas.map((a) => ({ numeros: a.numeros })),
                     }
-
                     const docRef = await addDoc(jugadasCollection, nuevaJugada)
                     console.log(`Jugada NUEVA TRIPLONA guardada con ID: ${docRef.id}`)
                 } else if (tipo === "NUEVA BORRATINA") {
@@ -1236,7 +1181,6 @@ export default function CargarJugadas() {
                             numeros: d.numeros,
                         })),
                     }
-
                     const docRef = await addDoc(jugadasCollection, nuevaJugada)
                     console.log(`Jugadas NUEVA BORRATINA guardadas con ID: ${docRef.id}`)
                 } else if (tipo === "NUEVA EXACTA") {
@@ -1257,7 +1201,6 @@ export default function CargarJugadas() {
                             importe: d.importe,
                         })),
                     }
-
                     const docRef = await addDoc(jugadasCollection, nuevaJugada)
                     console.log(`Jugadas NUEVA EXACTA guardadas con ID: ${docRef.id}`)
                 }
@@ -1270,7 +1213,6 @@ export default function CargarJugadas() {
 
             const ticketContent = generarContenidoTicket(nuevaSecuencia)
             imprimirTicket(ticketContent)
-
             resetearCampos()
             toast.success("Jugadas guardadas exitosamente")
         } catch (error) {
@@ -1335,7 +1277,6 @@ export default function CargarJugadas() {
                                         </SelectContent>
                                     </Select>
                                 </div>
-
                                 <div>
                                     <Label htmlFor="pasador" className="mb-2 block text-sm font-medium">
                                         PASADOR:
@@ -1354,7 +1295,6 @@ export default function CargarJugadas() {
                                     </Select>
                                 </div>
                             </div>
-
                             <div className="mb-6">
                                 <Label className="mb-2 block text-sm font-medium">LOTERÍAS:</Label>
                                 <div
@@ -1428,7 +1368,6 @@ export default function CargarJugadas() {
                                         Nueva Exacta
                                     </TabsTrigger>
                                 </TabsList>
-
                                 <div className="p-4">
                                     <TabsContent value="triplona" className="mt-0">
                                         <div className="bg-purple-50 p-4 rounded-lg border border-purple-200 mb-4">
@@ -1469,7 +1408,6 @@ export default function CargarJugadas() {
                                                 <Plus className="h-4 w-4 mr-2" /> Agregar Triplona
                                             </Button>
                                         </div>
-
                                         {triplonaApuestas.length > 0 && (
                                             <div className="bg-white rounded-lg border border-gray-200 p-4">
                                                 <h3 className="font-bold mb-3 text-gray-700 flex items-center">
@@ -1509,7 +1447,6 @@ export default function CargarJugadas() {
                                             </div>
                                         )}
                                     </TabsContent>
-
                                     <TabsContent value="borratina" className="mt-0">
                                         <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-4">
                                             <h3 className="text-lg font-semibold text-blue-800 mb-3">Nueva Borratina</h3>
@@ -1537,7 +1474,6 @@ export default function CargarJugadas() {
                                                 <Plus className="h-4 w-4 mr-2" /> Agregar Borratina
                                             </Button>
                                         </div>
-
                                         {borratinaApuestas.length > 0 && (
                                             <div className="bg-white rounded-lg border border-gray-200 p-4">
                                                 <h3 className="font-bold mb-3 text-gray-700 flex items-center">
@@ -1576,7 +1512,6 @@ export default function CargarJugadas() {
                                             </div>
                                         )}
                                     </TabsContent>
-
                                     <TabsContent value="quintina" className="mt-0">
                                         <div className="bg-green-50 p-4 rounded-lg border border-green-200 mb-4">
                                             <h3 className="text-lg font-semibold text-green-800 mb-3">Nueva Quintina</h3>
@@ -1604,7 +1539,6 @@ export default function CargarJugadas() {
                                                 <Plus className="h-4 w-4 mr-2" /> Agregar Quintina
                                             </Button>
                                         </div>
-
                                         {quintinaApuestas.length > 0 && (
                                             <div className="bg-white rounded-lg border border-gray-200 p-4">
                                                 <h3 className="font-bold mb-3 text-gray-700 flex items-center">
@@ -1644,7 +1578,6 @@ export default function CargarJugadas() {
                                             </div>
                                         )}
                                     </TabsContent>
-
                                     <TabsContent value="exacta" className="mt-0">
                                         <div className="bg-amber-50 p-4 rounded-lg border border-amber-200 mb-4">
                                             <h3 className="text-lg font-semibold text-amber-800 mb-3">Nueva Exacta</h3>
@@ -1700,7 +1633,6 @@ export default function CargarJugadas() {
                                                 <Plus className="h-4 w-4 mr-2" /> Agregar Exacta
                                             </Button>
                                         </div>
-
                                         {exactaApuestas.length > 0 && (
                                             <div className="bg-white rounded-lg border border-gray-200 p-4">
                                                 <h3 className="font-bold mb-3 text-gray-700 flex items-center">
@@ -1771,9 +1703,7 @@ export default function CargarJugadas() {
                                     <p className="text-2xl font-bold text-amber-700">{exactaApuestas.length}</p>
                                 </div>
                             </div>
-
                             <Separator className="my-4" />
-
                             <div className="mb-4">
                                 <Label htmlFor="observacion" className="text-sm font-medium mb-2 block">
                                     Observación (opcional):
@@ -1787,7 +1717,6 @@ export default function CargarJugadas() {
                                     maxLength={100}
                                 />
                             </div>
-
                             <div className="mb-4">
                                 <Label htmlFor="nombreObservacion" className="text-sm font-medium mb-2 block">
                                     Asignar nombre a esta jugada (opcional):
@@ -1804,13 +1733,11 @@ export default function CargarJugadas() {
                                     Este nombre te ayudará a identificar y buscar esta jugada más fácilmente
                                 </p>
                             </div>
-
                             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                                 <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-4 rounded-lg text-white w-full md:w-auto">
                                     <h3 className="text-sm font-medium opacity-90">TOTAL A PAGAR:</h3>
                                     <p className="text-3xl font-bold">${total.toFixed(2)}</p>
                                 </div>
-
                                 <div className="flex gap-2 w-full md:w-auto flex-wrap">
                                     <Button
                                         variant="outline"
@@ -1819,7 +1746,6 @@ export default function CargarJugadas() {
                                     >
                                         <RefreshCw className="h-4 w-4 mr-2" /> Reiniciar
                                     </Button>
-
                                     <Button
                                         onClick={guardarJugadas}
                                         disabled={
@@ -1861,7 +1787,6 @@ export default function CargarJugadas() {
                                             </>
                                         )}
                                     </Button>
-
                                     <Button
                                         variant="outline"
                                         onClick={() => {
@@ -1973,7 +1898,6 @@ export default function CargarJugadas() {
                                 </div>
                             </div>
                         </DialogHeader>
-
                         <div className="space-y-4">
                             {isLoadingJugadas ? (
                                 <div className="flex items-center justify-center py-8">
@@ -2087,7 +2011,6 @@ export default function CargarJugadas() {
                                 </div>
                             )}
                         </div>
-
                         <DialogFooter className="flex justify-between">
                             <Button
                                 variant="outline"

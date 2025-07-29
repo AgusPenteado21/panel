@@ -1,4 +1,5 @@
 "use client"
+
 import type React from "react"
 import { useState, useCallback, useEffect } from "react"
 import Navbar from "../components/Navbar"
@@ -102,23 +103,28 @@ const BACKEND_PROVINCE_MAP: { [key: string]: string } = {
     CHACO: "CHACO", // Correct
     "RIO NEGRO": "RIO NEGRO", // Correct
     "SAN JUAN": "SAN JUAN", // Correct
-    // "CHUBUT", // Eliminado
-    // "FORMOSA", // Eliminado
-    // "JUJUY", // Eliminado
-    // "LA PAMPA", // Eliminado
-    // "LA RIOJA", // Eliminado
-    // "SALTA", // Eliminado
-    // "SAN LUIS", // Eliminado
-    // "TIERRA DEL FUEGO", // Eliminado
-    // "CIUDAD", // Eliminado
+    // Nuevas provincias
+    FORMOSA: "FORMOSA",
+    JUJUY: "JUJUY",
+    SALTA: "SALTA",
+    "SAN LUIS": "SAN LUIS", // Added San Luis
 }
 
 // Lista de loterías que tienen botones y modales dedicados
-const DEDICATED_BUTTON_LOTERIAS = ["TUCUMAN", "NEUQUEN", "SANTA FE", "MISIONES", "SANTIAGO DEL ESTERO", "MONTEVIDEO"]
+const DEDICATED_BUTTON_LOTERIAS = [
+    "TUCUMAN",
+    "NEUQUEN",
+    "SANTA FE",
+    "MISIONES",
+    "SANTIAGO DEL ESTERO",
+    "MONTEVIDEO",
+    "SALTA",
+    // Removed "SAN JUAN" from here
+]
 
 // Lista de todas las loterías para las que queremos mostrar un botón (incluyendo las que no tienen modal dedicado)
 const ALL_LOTERIAS_TO_DISPLAY = [
-    ...DEDICATED_BUTTON_LOTERIAS, // "TUCUMAN", "NEUQUEN", "SANTA FE", "MISIONES", "SANTIAGO DEL ESTERO", "MONTEVIDEO"
+    ...DEDICATED_BUTTON_LOTERIAS,
     "NACIONAL",
     "PROVINCIA",
     "CORDOBA",
@@ -126,8 +132,11 @@ const ALL_LOTERIAS_TO_DISPLAY = [
     "ENTRE RIOS",
     "CORRIENTES",
     "CHACO",
-    "RIO NEGRO", // Re-agregado
-    "SAN JUAN",
+    "RIO NEGRO",
+    // Removed "SAN JUAN" from here
+    "FORMOSA",
+    "JUJUY",
+    "SAN LUIS", // Added San Luis
 ].sort() // Ordenar alfabéticamente para consistencia
 
 // Filtrar las loterías que ya tienen botones dedicados para generar los dinámicos
@@ -222,6 +231,17 @@ export default function ExtractosPage() {
         Nocturna: Array(20).fill(""),
     })
     const [isSavingMontevideo, setIsSavingMontevideo] = useState(false)
+
+    // Estados para el modal de Salta (NUEVO)
+    const [showSaltaModal, setShowSaltaModal] = useState(false)
+    const [saltaData, setSaltaData] = useState<ProvinciaData>({
+        Previa: Array(20).fill(""),
+        Primera: Array(20).fill(""),
+        Matutina: Array(20).fill(""),
+        Vespertina: Array(20).fill(""),
+        Nocturna: Array(20).fill(""),
+    })
+    const [isSavingSalta, setIsSavingSalta] = useState(false)
 
     // Estados para el modal genérico de tipear loterías (NUEVO)
     const [showGenericModal, setShowGenericModal] = useState(false)
@@ -376,6 +396,9 @@ export default function ExtractosPage() {
     const handleMontevideoNumberChange = (turno: string, index: number, value: string) => {
         handleProvinciaNumberChange("MONTEVIDEO", turno, index, value, setMontevideoData, montevideoData)
     }
+    const handleSaltaNumberChange = (turno: string, index: number, value: string) => {
+        handleProvinciaNumberChange("SALTA", turno, index, value, setSaltaData, saltaData)
+    }
 
     // Función genérica para manejar cambios de números en el modal genérico (NUEVO)
     const handleGenericNumberChange = (loteria: string, turno: string, index: number, value: string) => {
@@ -454,6 +477,7 @@ export default function ExtractosPage() {
         const turnosYaGuardados = getTurnosYaGuardados(provincia)
         const diaSemana = getDay(selectedDate) // 0 = domingo, 1 = lunes, ..., 6 = sábado
         let todosTurnos: string[] = []
+
         if (provincia === "MONTEVIDEO") {
             todosTurnos = getTurnosDisponiblesMontevideo(selectedDate)
         } else if (provincia === "SANTIAGO DEL ESTERO") {
@@ -464,16 +488,24 @@ export default function ExtractosPage() {
                 // Lunes a Sábado: todos los turnos
                 todosTurnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
             }
-        } else {
-            // Para todas las demás provincias
+        } else if (provincia === "SALTA") {
+            // Lógica específica para Salta
             if (diaSemana === 0) {
-                // Domingo para otras provincias (no Santiago, no Montevideo)
+                todosTurnos = [] // Domingo: no hay sorteos
+            } else {
+                todosTurnos = ["Primera", "Matutina", "Vespertina", "Nocturna"] // Lunes a Sábado: sin Previa
+            }
+        } else {
+            // Para todas las demás provincias (incluyendo San Luis, Formosa y Jujuy)
+            if (diaSemana === 0) {
+                // Domingo para otras provincias (no Santiago, no Montevideo, no Salta)
                 todosTurnos = [] // No hay sorteos para tipear en domingo para estas provincias
             } else {
                 // Lunes a Sábado para otras provincias
                 todosTurnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
             }
         }
+
         const pendientes = todosTurnos.filter((turno) => !turnosYaGuardados.includes(turno))
         console.log(
             `DEBUG ${provincia}: Todos los turnos: ${todosTurnos}, Ya guardados: ${turnosYaGuardados}, Pendientes: ${pendientes}`,
@@ -640,6 +672,9 @@ export default function ExtractosPage() {
             setShowMontevideoModal,
         )
     }
+    const handleConfirmarSalta = () => {
+        handleConfirmarProvincia("SALTA", saltaData, setSaltaData, setIsSavingSalta, setShowSaltaModal)
+    }
 
     // Función genérica para confirmar resultados de cualquier lotería (NUEVO)
     const handleConfirmarGenericLoteria = async () => {
@@ -713,7 +748,6 @@ export default function ExtractosPage() {
             console.log(
                 `🎉 ${turnosGuardadosExitosamente} turnos de ${currentGenericLoteria} guardados exitosamente para ${fecha}`,
             )
-
             setCurrentGenericLoteriaData((prev) => {
                 const newData = { ...prev }
                 turnosConDatos.forEach((turno) => {
@@ -721,12 +755,10 @@ export default function ExtractosPage() {
                 })
                 return newData
             })
-
             setError(null)
             console.log("🔄 Refrescando datos desde Firebase...")
             await fetchExtractos(selectedDate)
             console.log("✅ Datos refrescados")
-
             setTimeout(() => {
                 setShowGenericModal(false)
                 alert(
@@ -911,6 +943,12 @@ export default function ExtractosPage() {
         console.log("🔓 Abriendo modal Montevideo")
         setShowMontevideoModal(true)
     }
+    const abrirModalSalta = (e: React.MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        console.log("🔓 Abriendo modal Salta")
+        setShowSaltaModal(true)
+    }
 
     // Función para abrir el modal genérico de tipear loterías (NUEVO)
     const abrirGenericModal = (loteria: string) => {
@@ -975,8 +1013,14 @@ export default function ExtractosPage() {
             } else {
                 return `Todos los turnos disponibles para Santiago.` // Mensaje para L-S
             }
+        } else if (loteria === "SALTA") {
+            if (diaSemana === 0) {
+                return `Los domingos no hay sorteos para Salta.`
+            } else {
+                return `Primera, Matutina, Vespertina y Nocturna disponibles para Salta.`
+            }
         } else if (diaSemana === 0) {
-            // Cualquier otra lotería en domingo (que no sea Santiago ni Montevideo)
+            // Cualquier otra lotería en domingo (que no sea Santiago ni Montevideo ni Salta)
             return `Los domingos no hay sorteos para ${loteria}.`
         } else {
             return `Todos los turnos disponibles para ${loteria}`
@@ -998,6 +1042,8 @@ export default function ExtractosPage() {
                 return "border-cyan-300 text-cyan-700 hover:bg-cyan-50 hover:border-cyan-500"
             case "MONTEVIDEO":
                 return "border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-500"
+            case "SALTA": // Added
+                return "border-green-300 text-green-700 hover:bg-green-50 hover:border-green-500"
             case "NACIONAL":
                 return "border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-500"
             case "PROVINCIA":
@@ -1016,9 +1062,9 @@ export default function ExtractosPage() {
                 return "border-violet-300 text-violet-700 hover:bg-violet-50 hover:border-violet-500"
             case "CHUBUT":
                 return "border-fuchsia-300 text-fuchsia-700 hover:bg-fuchsia-50 hover:border-fuchsia-500"
-            case "FORMOSA":
+            case "FORMOSA": // Added
                 return "border-amber-300 text-amber-700 hover:bg-amber-50 hover:border-amber-500"
-            case "JUJUY":
+            case "JUJUY": // Added
                 return "border-lime-300 text-lime-700 hover:bg-lime-50 hover:border-lime-500"
             case "LA PAMPA":
                 return "border-sky-300 text-sky-700 hover:bg-sky-50 hover:border-sky-500"
@@ -1026,8 +1072,6 @@ export default function ExtractosPage() {
                 return "border-orange-300 text-orange-700 hover:bg-orange-50 hover:border-orange-500"
             case "RIO NEGRO": // Re-agregado
                 return "border-red-300 text-red-700 hover:bg-red-50 hover:border-red-500"
-            case "SALTA":
-                return "border-green-300 text-green-700 hover:bg-green-50 hover:border-green-500"
             case "SAN JUAN":
                 return "border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-500"
             case "SAN LUIS":
@@ -1054,6 +1098,8 @@ export default function ExtractosPage() {
                 return "SGO"
             case "MONTEVIDEO":
                 return "MVD"
+            case "SALTA": // Added
+                return "SAL"
             case "NACIONAL":
                 return "NAC"
             case "PROVINCIA":
@@ -1072,9 +1118,9 @@ export default function ExtractosPage() {
                 return "CHA"
             case "CHUBUT":
                 return "CHU"
-            case "FORMOSA":
+            case "FORMOSA": // Added
                 return "FSA"
-            case "JUJUY":
+            case "JUJUY": // Added
                 return "JUJ"
             case "LA PAMPA":
                 return "LPA"
@@ -1082,8 +1128,6 @@ export default function ExtractosPage() {
                 return "LRI"
             case "RIO NEGRO": // Re-agregado
                 return "RNE"
-            case "SALTA":
-                return "SAL"
             case "SAN JUAN":
                 return "SJU"
             case "SAN LUIS":
@@ -1170,7 +1214,6 @@ export default function ExtractosPage() {
                                 </Button>
                             </div>
                         </div>
-
                         {/* Botones de acción - Responsive */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 mb-6 bg-white p-3 rounded-lg shadow-sm border border-blue-200">
                             <Button
@@ -1196,7 +1239,6 @@ export default function ExtractosPage() {
                                     </>
                                 )}
                             </Button>
-
                             {/* Botones Tipear - Específicos (EXISTENTES) */}
                             <Button
                                 variant="outline"
@@ -1290,7 +1332,21 @@ export default function ExtractosPage() {
                                 </span>
                                 <span className="sm:hidden">{getTurnosPendientes("MONTEVIDEO").length === 0 ? "MVD✓" : "MVD"}</span>
                             </Button>
-
+                            <Button // NEW SALTA BUTTON
+                                variant="outline"
+                                size="sm"
+                                onClick={abrirModalSalta}
+                                className="border-green-300 text-green-700 hover:bg-green-50 hover:border-green-500 bg-transparent text-xs h-8"
+                                disabled={getTurnosPendientes("SALTA").length === 0}
+                            >
+                                <Keyboard className="h-3 w-3 mr-1" />
+                                <span className="hidden sm:inline">
+                                    {getTurnosPendientes("SALTA").length === 0
+                                        ? "Salta OK"
+                                        : `Salta (${getTurnosPendientes("SALTA").length})`}
+                                </span>
+                                <span className="sm:hidden">{getTurnosPendientes("SALTA").length === 0 ? "SAL✓" : "SAL"}</span>
+                            </Button>
                             {/* Botones Tipear - Dinámicos para OTRAS loterías (NUEVO) */}
                             {OTHER_LOTERIAS_FOR_DYNAMIC_BUTTONS.map((loteria) => {
                                 const turnosPendientes = getTurnosPendientes(loteria)
@@ -1314,7 +1370,6 @@ export default function ExtractosPage() {
                                     </Button>
                                 )
                             })}
-
                             {/* Botones de acción adicionales */}
                             <Button
                                 variant="outline"
@@ -1364,7 +1419,6 @@ export default function ExtractosPage() {
                                 <span className="sm:hidden">EXP</span>
                             </Button>
                         </div>
-
                         {/* Nota informativa - Responsive */}
                         <div className="mb-4 p-3 sm:p-4 bg-blue-100 border border-blue-300 rounded-lg flex items-start">
                             <Info className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -1378,7 +1432,6 @@ export default function ExtractosPage() {
                                 </p>
                             </div>
                         </div>
-
                         {error && (
                             <Alert variant="destructive" className="mb-4 bg-red-100 border-red-400 text-red-700 flex items-start">
                                 <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-red-600 flex-shrink-0 mt-0.5" />
@@ -1410,7 +1463,6 @@ export default function ExtractosPage() {
                                 </AlertDescription>
                             </Alert>
                         )}
-
                         {/* Tabla responsive */}
                         <div className="rounded-lg overflow-x-auto shadow-md border border-blue-200 bg-white">
                             <Table className="w-full min-w-[800px] [&_th]:p-1 [&_td]:p-1 sm:[&_th]:p-2 sm:[&_td]:p-2 [&_th]:text-xs [&_td]:text-xs">
@@ -1534,7 +1586,6 @@ export default function ExtractosPage() {
                                 </TableBody>
                             </Table>
                         </div>
-
                         {/* Sección de diagnóstico - Responsive */}
                         <div className="mt-6 p-3 sm:p-4 bg-gray-100 border border-gray-300 rounded-lg">
                             <h3 className="text-xs sm:text-sm font-bold mb-2 text-gray-700 flex items-center">
@@ -1547,7 +1598,6 @@ export default function ExtractosPage() {
                         </div>
                     </CardContent>
                 </Card>
-
                 {/* Modal de Tucumán */}
                 <Dialog open={showTucumanModal} onOpenChange={(open) => !open && cerrarModal("TUCUMAN", setShowTucumanModal)}>
                     <DialogContent
@@ -1650,7 +1700,6 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
-
                 {/* Modal de Neuquén */}
                 <Dialog open={showNeuquenModal} onOpenChange={(open) => !open && cerrarModal("NEUQUEN", setShowNeuquenModal)}>
                     <DialogContent
@@ -1753,7 +1802,6 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
-
                 {/* Modal de Santa Fe */}
                 <Dialog open={showSantaFeModal} onOpenChange={(open) => !open && cerrarModal("SANTA FE", setShowSantaFeModal)}>
                     <DialogContent
@@ -1859,7 +1907,6 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
-
                 {/* Modal de Misiones */}
                 <Dialog
                     open={showMisionesModal}
@@ -1968,7 +2015,6 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
-
                 {/* Modal de Santiago */}
                 <Dialog
                     open={showSantiagoModal}
@@ -2090,7 +2136,6 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
-
                 {/* Modal de Montevideo con lógica específica de días */}
                 <Dialog
                     open={showMontevideoModal}
@@ -2209,7 +2254,109 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
-
+                {/* Modal de Salta (NUEVO) */}
+                <Dialog open={showSaltaModal} onOpenChange={(open) => !open && cerrarModal("SALTA", setShowSaltaModal)}>
+                    <DialogContent
+                        className="max-w-4xl max-h-[80vh] overflow-y-auto"
+                        onPointerDownOutside={(e) => e.preventDefault()}
+                    >
+                        <DialogHeader>
+                            <DialogTitle className="text-lg font-bold text-center">
+                                Tipear Resultados - SALTA ({format(selectedDate, "dd/MM/yyyy", { locale: es })})
+                            </DialogTitle>
+                            <div className="text-center text-sm text-gray-600 mt-2">{getMensajeDisponibilidad("SALTA")}</div>
+                        </DialogHeader>
+                        {getTurnosPendientes("SALTA").length === 0 ? (
+                            <div className="text-center py-8">
+                                <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                                <p className="text-lg font-semibold text-green-700">¡Todos los turnos de SALTA ya están guardados!</p>
+                                <p className="text-sm text-gray-600 mt-2">No hay turnos pendientes para tipear.</p>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="space-y-6">
+                                    {getTurnosPendientes("SALTA").map((turno) => {
+                                        const numerosCompletados = contarNumerosCompletados(turno, saltaData)
+                                        const turnoCompleto = isTurnoCompleto(turno, saltaData)
+                                        return (
+                                            <div key={turno} className="border rounded-lg p-4">
+                                                <div className="flex justify-between items-center mb-3">
+                                                    <Label className="text-sm font-semibold">{turno}</Label>
+                                                    <div className="flex items-center gap-2">
+                                                        <span
+                                                            className={`text-xs px-2 py-1 rounded ${turnoCompleto ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
+                                                                }`}
+                                                        >
+                                                            {numerosCompletados}/20
+                                                        </span>
+                                                        {turnoCompleto && <CheckCircle className="h-4 w-4 text-green-500" />}
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
+                                                    {saltaData[turno].map((numero, index) => (
+                                                        <Input
+                                                            key={index}
+                                                            type="text"
+                                                            value={numero}
+                                                            onChange={(e) => handleSaltaNumberChange(turno, index, e.target.value)}
+                                                            className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
+                                                                    ? "border-green-300 bg-green-50"
+                                                                    : numero.length > 0
+                                                                        ? "border-yellow-300 bg-yellow-50"
+                                                                        : "border-gray-300"
+                                                                }`}
+                                                            placeholder={`${index + 1}`}
+                                                            maxLength={4}
+                                                            data-provincia="SALTA"
+                                                            data-turno={turno}
+                                                            data-index={index}
+                                                        />
+                                                    ))}
+                                                </div>
+                                                {!turnoCompleto && numerosCompletados > 0 && (
+                                                    <p className="text-xs text-yellow-600 mt-2">
+                                                        Faltan {20 - numerosCompletados} números de 4 dígitos para completar este turno
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                                <div className="flex justify-end gap-2 pt-4 border-t">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => cerrarModal("SALTA", setShowSaltaModal)}
+                                        disabled={isSavingSalta}
+                                    >
+                                        Cancelar
+                                    </Button>
+                                    <Button
+                                        onClick={handleConfirmarSalta}
+                                        disabled={
+                                            isSavingSalta ||
+                                            getTurnosPendientes("SALTA").filter((turno) => isTurnoCompleto(turno, saltaData)).length === 0
+                                        }
+                                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
+                                    >
+                                        {isSavingSalta ? (
+                                            <>
+                                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                                Guardando...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <CheckCircle className="h-4 w-4 mr-2" />
+                                                Confirmar (
+                                                {getTurnosPendientes("SALTA").filter((turno) => isTurnoCompleto(turno, saltaData)).length}{" "}
+                                                turnos listos)
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+                            </>
+                        )}
+                    </DialogContent>
+                </Dialog>
                 {/* Modal Genérico para tipear cualquier lotería (NUEVO) */}
                 <Dialog open={showGenericModal} onOpenChange={(open) => !open && cerrarGenericModal()}>
                     <DialogContent
@@ -2346,6 +2493,8 @@ export default function ExtractosPage() {
     )
 }
 
+// The ProvinciaModal component is not used in the main component anymore,
+// but keeping it here as it was part of the original code structure.
 interface ProvinciaModalProps {
     provincia: string
     data: ProvinciaData
@@ -2403,7 +2552,6 @@ const ProvinciaModal: React.FC<ProvinciaModalProps> = ({
                     </AlertDescription>
                 </Alert>
             )}
-
             {todosTurnos.map((turno) => (
                 <div key={turno} className="mb-4">
                     <Label className="block font-medium text-gray-700 mb-2">{turno}</Label>
@@ -2426,7 +2574,6 @@ const ProvinciaModal: React.FC<ProvinciaModalProps> = ({
                     <div className="mt-2 text-sm text-gray-500">{contarNumerosCompletados(turno, data)}/20 números completos</div>
                 </div>
             ))}
-
             <div className="flex justify-end gap-2">
                 <Button type="button" variant="secondary" onClick={onClose}>
                     Cancelar
