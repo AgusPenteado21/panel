@@ -1174,7 +1174,7 @@ export const guardarAciertosEnFirestore = async (
         }
     }
 
-    // Guardar en la nueva colección 'aciertos_calculados'
+    // Guardar en la nuevaaa colección 'aciertos_calculados'
     await setDoc(
         doc(aciertosCalculadosRef, docId),
         {
