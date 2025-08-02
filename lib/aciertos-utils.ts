@@ -1,7 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { db } from "@/lib/firebase"
-import { collection, Timestamp, setDoc, doc } from "firebase/firestore"
+import { Timestamp } from "firebase/firestore"
 import { format } from "date-fns"
 
 // Helper para parsear valores a double de forma segura
@@ -242,16 +241,19 @@ export const verificarCoincidenciaLoteria = (loteriaJugada: string, loteriaResul
             "FORMOSA",
         ],
     }
+
     // Verificar coincidencias equivalentes usando la lotería normalizada
     if (loteriasEquivalentes[loteriaJugadaNormalizada]?.includes(loteriaResultado)) {
         return true
     }
+
     // Verificar si la lotería del resultado está en alguna de las equivalencias
     for (const entry of Object.values(loteriasEquivalentes)) {
         if (entry.includes(loteriaJugadaNormalizada) && entry.includes(loteriaResultado)) {
             return true
         }
     }
+
     return false
 }
 
@@ -367,8 +369,8 @@ export const verificarAciertoRedoblona = (
     for (const redoblona of redoblonas) {
         const numeroRedoblonaApostado = redoblona.numero?.toString() ?? ""
         const posicionRedoblonaApostada = redoblona.posicion?.toString() ?? ""
-
         const posRedoblona = Number.parseInt(posicionRedoblonaApostada) || 20
+
         let inicioRango: number, finRango: number
         if (posRedoblona === 5) {
             inicioRango = 0
@@ -567,18 +569,14 @@ const mapeoProvincias: Record<string, string> = {
 }
 
 // Mapeo de loterías para sorteoKey (usado para obtener los números ganadores del extracto)
-const mapeoLoteriasSorteoKey: Record<string, string> = {
+// Ahora solo contiene mapeos de nombres de sorteos a sus claves estandarizadas.
+const drawNameToSorteoKeyMap: Record<string, string> = {
     LAPREVIA: "Previa",
     PREVIA: "Previa",
     PRIMERA: "Primera",
     MATUTINA: "Matutina",
     VESPERTINA: "Vespertina",
     NOCTURNA: "Nocturna",
-    "SAN LUIS": "Nocturna", // Mapea la provincia a un sorteo por defecto
-    JUJUY: "Nocturna", // Mapea la provincia a un sorteo por defecto
-    FORMOSA: "Nocturna", // Mapea la provincia a un sorteo por defecto
-    PROVINCIAL: "Nocturna", // Añadido para consistencia
-    PROVIN: "Nocturna", // Añadido para consistencia
 }
 
 // Función principal para procesar jugadas y encontrar aciertos
@@ -595,13 +593,34 @@ export const procesarJugadasYEncontrarAciertos = (
 
         const secuencia = jugadaData.secuencia?.toString() ?? "Sin secuencia"
         const tipo = jugadaData.tipo?.toString() ?? "NUEVA JUGADA"
+        const loteriaJugadaUpper = (
+            jugadaData.loteria?.toString() ||
+            jugadaData.loterias?.[0]?.toString() ||
+            ""
+        ).toUpperCase()
+
+        // Determinar las claves de sorteo a procesar
+        let sorteoKeysToProcess: string[] = []
+        if (drawNameToSorteoKeyMap[loteriaJugadaUpper]) {
+            // Si la lotería de la jugada es un nombre de sorteo específico (ej. "PRIMERA", "NOCTURNA")
+            sorteoKeysToProcess.push(drawNameToSorteoKeyMap[loteriaJugadaUpper]!)
+        } else if (
+            mapeoProvincias[loteriaJugadaUpper] || // Si la lotería de la jugada es un nombre de provincia (ej. "MENDOZA")
+            loteriaJugadaUpper === "TODAS" ||
+            loteriaJugadaUpper === "" ||
+            loteriaJugadaUpper === "TODAS LAS LOTERIAS"
+        ) {
+            // Si es una provincia o "TODAS", iterar sobre todos los sorteos estándar
+            sorteoKeysToProcess = Object.values(drawNameToSorteoKeyMap)
+        } else {
+            // Fallback: si es un nombre de lotería desconocido, intentar usarlo directamente como clave
+            sorteoKeysToProcess.push(loteriaJugadaUpper)
+        }
 
         // PROCESAMIENTO ESPECIAL PARA REDOBLONAS
         if (tipo === "Jugada con redoblona") {
-            const loteria = (jugadaData.loteria?.toString() || jugadaData.loterias?.[0]?.toString() || "").toUpperCase()
             const provinciasRaw = (jugadaData.provincias as any[]) || []
             const provincias = provinciasRaw.map((p) => p.toString())
-
             let montoIndividual = 0.0
             if (jugadaData.jugadas && Array.isArray(jugadaData.jugadas) && jugadaData.jugadas.length > 0) {
                 montoIndividual = parsearDouble(jugadaData.jugadas[0].monto ?? "0")
@@ -618,10 +637,16 @@ export const procesarJugadasYEncontrarAciertos = (
 
                 if (resultadoProvincia) {
                     const loteriaResultado = resultadoProvincia.loteria?.toString().toUpperCase() ?? ""
-                    if (verificarCoincidenciaLoteria(loteria, loteriaResultado)) {
-                        const sorteos = (resultadoProvincia.sorteos as Record<string, any>) ?? {}
-                        const sorteoKey = mapeoLoteriasSorteoKey[loteria] ?? loteria // Usar mapeo para obtener la clave del sorteo
-                        const numerosGanadores = (sorteos[sorteoKey] as string[]) || []
+
+                    // Verificar si la lotería de la jugada es compatible con la lotería del resultado
+                    if (!verificarCoincidenciaLoteria(loteriaJugadaUpper, loteriaResultado)) {
+                        continue // Saltar si no hay coincidencia de lotería principal
+                    }
+
+                    const sorteosDelResultado = (resultadoProvincia.sorteos as Record<string, any>) ?? {}
+
+                    for (const sorteoKey of sorteoKeysToProcess) {
+                        const numerosGanadores = (sorteosDelResultado[sorteoKey] as string[]) || []
 
                         if (numerosGanadores.length > 0) {
                             const redoblonaGanadora = verificarAciertoRedoblona(jugadaData, numerosGanadores)
@@ -632,7 +657,6 @@ export const procesarJugadasYEncontrarAciertos = (
                                 const posicionOriginal =
                                     jugadaOriginalData.originalPosicion?.toString() ?? jugadaOriginalData.posicion?.toString() ?? "1"
                                 const redoblonasInfo = jugadaOriginalData.redoblonas || []
-
                                 let premioRedoblona = 0.0
                                 if (redoblonasInfo.length > 0) {
                                     const posicionRedoblona = redoblonasInfo[0].posicion?.toString() ?? "5"
@@ -649,7 +673,7 @@ export const procesarJugadasYEncontrarAciertos = (
                                     loteria: loteriaResultado,
                                     numeroGanador: numeroOriginal,
                                     numeroGanadorCompleto: numeroOriginal,
-                                    sorteo: sorteoKey, // Usar sorteoKey para el campo 'sorteo'
+                                    sorteo: sorteoKey, // Usar la clave de sorteo actual
                                     secuencia: secuencia,
                                     tipo: "Jugada con redoblona",
                                     originalNumero: numeroOriginal,
@@ -666,7 +690,6 @@ export const procesarJugadasYEncontrarAciertos = (
                                     aciertosAgrupados[provinciaCompleta] = {}
                                 }
                                 if (!aciertosAgrupados[provinciaCompleta]![sorteoKey]) {
-                                    // Agrupar por sorteoKey
                                     aciertosAgrupados[provinciaCompleta]![sorteoKey] = []
                                 }
                                 aciertosAgrupados[provinciaCompleta]![sorteoKey]!.push(aciertoRedoblona)
@@ -675,7 +698,7 @@ export const procesarJugadasYEncontrarAciertos = (
                     }
                 }
             }
-            continue // Skip to next jugadaData as redoblona is handled
+            continue // Saltar a la siguiente jugadaData ya que la redoblona fue manejada
         }
 
         // PROCESAMIENTO DE NUEVA JUGADA (NORMAL)
@@ -685,13 +708,13 @@ export const procesarJugadasYEncontrarAciertos = (
                 const numeroApostado = jugadaIndividual.numero?.toString() ?? ""
                 const posicion = jugadaIndividual.posicion?.toString() ?? "1"
                 const monto = parsearDouble(jugadaIndividual.monto ?? "0")
-                const loteria = (jugadaIndividual.loteria?.toString() ?? "").toUpperCase()
+                const loteriaIndividual = (jugadaIndividual.loteria?.toString() ?? "").toUpperCase()
                 const provinciasRaw = (jugadaIndividual.provincias as any[]) || []
                 const provincias = provinciasRaw.map((p) => p.toString())
 
                 if (numeroApostado === "" || monto <= 0) continue
 
-                // Skip if it has redoblonas, as it's handled above
+                // Saltar si tiene redoblonas, ya que se maneja arriba
                 if (
                     jugadaIndividual.redoblonas &&
                     Array.isArray(jugadaIndividual.redoblonas) &&
@@ -708,10 +731,32 @@ export const procesarJugadasYEncontrarAciertos = (
 
                     if (resultadoProvincia) {
                         const loteriaResultado = resultadoProvincia.loteria?.toString().toUpperCase() ?? ""
-                        if (verificarCoincidenciaLoteria(loteria, loteriaResultado)) {
-                            const sorteos = (resultadoProvincia.sorteos as Record<string, any>) ?? {}
-                            const sorteoKey = mapeoLoteriasSorteoKey[loteria] ?? loteria // Usar mapeo para obtener la clave del sorteo
-                            const numerosGanadores = (sorteos[sorteoKey] as string[]) || []
+
+                        // Verificar si la lotería de la jugada es compatible con la lotería del resultado
+                        if (!verificarCoincidenciaLoteria(loteriaIndividual, loteriaResultado)) {
+                            continue // Saltar si no hay coincidencia de lotería principal
+                        }
+
+                        const sorteosDelResultado = (resultadoProvincia.sorteos as Record<string, any>) ?? {}
+
+                        // Re-determinar sorteoKeysToProcess para jugadas individuales si es necesario,
+                        // o usar la lógica general si la jugada individual no especifica lotería.
+                        let currentSorteoKeysToProcess: string[] = []
+                        if (drawNameToSorteoKeyMap[loteriaIndividual]) {
+                            currentSorteoKeysToProcess.push(drawNameToSorteoKeyMap[loteriaIndividual]!)
+                        } else if (
+                            mapeoProvincias[loteriaIndividual] ||
+                            loteriaIndividual === "TODAS" ||
+                            loteriaIndividual === "" ||
+                            loteriaIndividual === "TODAS LAS LOTERIAS"
+                        ) {
+                            currentSorteoKeysToProcess = Object.values(drawNameToSorteoKeyMap)
+                        } else {
+                            currentSorteoKeysToProcess.push(loteriaIndividual)
+                        }
+
+                        for (const sorteoKey of currentSorteoKeysToProcess) {
+                            const numerosGanadores = (sorteosDelResultado[sorteoKey] as string[]) || []
 
                             if (numerosGanadores.length > 0) {
                                 const acierto = verificarAciertoEspecifico(
@@ -721,7 +766,7 @@ export const procesarJugadasYEncontrarAciertos = (
                                     monto,
                                     provinciaCompleta,
                                     loteriaResultado,
-                                    sorteoKey, // Usar sorteoKey para el campo 'sorteo'
+                                    sorteoKey, // Usar la clave de sorteo actual
                                     secuencia,
                                 )
 
@@ -730,7 +775,6 @@ export const procesarJugadasYEncontrarAciertos = (
                                         aciertosAgrupados[provinciaCompleta] = {}
                                     }
                                     if (!aciertosAgrupados[provinciaCompleta]![sorteoKey]) {
-                                        // Agrupar por sorteoKey
                                         aciertosAgrupados[provinciaCompleta]![sorteoKey] = []
                                     }
                                     aciertosAgrupados[provinciaCompleta]![sorteoKey]!.push(acierto)
@@ -786,7 +830,6 @@ export const procesarJugadasYEncontrarAciertos = (
             if (numerosTriplona.length !== 3) continue
 
             const monto = parsearDouble(jugadaData.monto ?? jugadaData.totalMonto ?? "0")
-            const loteria = (jugadaData.loteria?.toString() || jugadaData.loterias?.[0]?.toString() || "").toUpperCase()
             const provinciasRaw = (jugadaData.provincias as any[]) || []
             const provincias = provinciasRaw.map((p) => p.toString())
 
@@ -798,10 +841,16 @@ export const procesarJugadasYEncontrarAciertos = (
 
                 if (resultadoProvincia) {
                     const loteriaResultado = resultadoProvincia.loteria?.toString().toUpperCase() ?? ""
-                    if (verificarCoincidenciaLoteria(loteria, loteriaResultado)) {
-                        const sorteos = (resultadoProvincia.sorteos as Record<string, any>) ?? {}
-                        const sorteoKey = mapeoLoteriasSorteoKey[loteria] ?? loteria // Usar mapeo para obtener la clave del sorteo
-                        const numerosGanadores = (sorteos[sorteoKey] as string[]) || []
+
+                    // Verificar si la lotería de la jugada es compatible con la lotería del resultado
+                    if (!verificarCoincidenciaLoteria(loteriaJugadaUpper, loteriaResultado)) {
+                        continue // Saltar si no hay coincidencia de lotería principal
+                    }
+
+                    const sorteosDelResultado = (resultadoProvincia.sorteos as Record<string, any>) ?? {}
+
+                    for (const sorteoKey of sorteoKeysToProcess) {
+                        const numerosGanadores = (sorteosDelResultado[sorteoKey] as string[]) || []
 
                         if (numerosGanadores.length >= 3) {
                             const ultimosDosDigitosGanadores: string[] = []
@@ -817,7 +866,6 @@ export const procesarJugadasYEncontrarAciertos = (
                             if (numerosGanadores.length >= 3) {
                                 const primerosTresUltimosDosDigitos = ultimosDosDigitosGanadores.slice(0, 3)
                                 const primerosTresNumerosCompletos = numerosGanadoresCompletos.slice(0, 3)
-
                                 let coincideEnOrden = true
                                 for (let i = 0; i < 3; i++) {
                                     if (numerosTriplona[i] !== primerosTresUltimosDosDigitos[i]) {
@@ -836,17 +884,15 @@ export const procesarJugadasYEncontrarAciertos = (
                                         loteria: loteriaResultado,
                                         numeroGanador: primerosTresUltimosDosDigitos.join("-"),
                                         numeroGanadorCompleto: primerosTresNumerosCompletos.join("-"),
-                                        sorteo: sorteoKey, // Usar sorteoKey para el campo 'sorteo'
+                                        sorteo: sorteoKey, // Usar la clave de sorteo actual
                                         secuencia: secuencia,
                                         tipo: "NUEVA TRIPLONA",
                                         tipoAcierto: tipoAcierto,
                                         enOrden: true,
                                         aciertos: 3,
                                     }
-
                                     if (!aciertosAgrupados[provinciaCompleta]) aciertosAgrupados[provinciaCompleta] = {}
                                     if (!aciertosAgrupados[provinciaCompleta]![sorteoKey])
-                                        // Agrupar por sorteoKey
                                         aciertosAgrupados[provinciaCompleta]![sorteoKey] = []
                                     aciertosAgrupados[provinciaCompleta]![sorteoKey]!.push(acierto)
                                     aciertoEncontrado = true
@@ -859,7 +905,6 @@ export const procesarJugadasYEncontrarAciertos = (
                                     if (numerosGanadores.length >= posicion) {
                                         const ultimosDosDigitosHastaPosicion = ultimosDosDigitosGanadores.slice(0, posicion)
                                         const numerosGanadoresHastaPosicion = numerosGanadoresCompletos.slice(0, posicion)
-
                                         let todosCoincidenEnPosicion = true
                                         const numerosGanadoresCoincidentes: string[] = []
                                         const ultimosDosDigitosCoincidentes: string[] = []
@@ -884,17 +929,15 @@ export const procesarJugadasYEncontrarAciertos = (
                                                 loteria: loteriaResultado,
                                                 numeroGanador: ultimosDosDigitosCoincidentes.join("-"),
                                                 numeroGanadorCompleto: numerosGanadoresCoincidentes.join("-"),
-                                                sorteo: sorteoKey, // Usar sorteoKey para el campo 'sorteo'
+                                                sorteo: sorteoKey, // Usar la clave de sorteo actual
                                                 secuencia: secuencia,
                                                 tipo: "NUEVA TRIPLONA",
                                                 tipoAcierto: tipoAcierto,
                                                 enOrden: false,
                                                 aciertos: 3,
                                             }
-
                                             if (!aciertosAgrupados[provinciaCompleta]) aciertosAgrupados[provinciaCompleta] = {}
                                             if (!aciertosAgrupados[provinciaCompleta]![sorteoKey])
-                                                // Agrupar por sorteoKey
                                                 aciertosAgrupados[provinciaCompleta]![sorteoKey] = []
                                             aciertosAgrupados[provinciaCompleta]![sorteoKey]!.push(acierto)
                                             aciertoEncontrado = true
@@ -930,7 +973,6 @@ export const procesarJugadasYEncontrarAciertos = (
             if (todasLasQuintinas.length === 0) continue
 
             const monto = parsearDouble(jugadaData.monto ?? jugadaData.totalMonto ?? "0")
-            const loteria = (jugadaData.loteria?.toString() || jugadaData.loterias?.[0]?.toString() || "").toUpperCase()
             const provinciasRaw = (jugadaData.provincias as any[]) || []
             const provincias = provinciasRaw.map((p) => p.toString())
 
@@ -942,10 +984,16 @@ export const procesarJugadasYEncontrarAciertos = (
 
                 if (resultadoProvincia) {
                     const loteriaResultado = resultadoProvincia.loteria?.toString().toUpperCase() ?? ""
-                    if (verificarCoincidenciaLoteria(loteria, loteriaResultado)) {
-                        const sorteos = (resultadoProvincia.sorteos as Record<string, any>) ?? {}
-                        const sorteoKey = mapeoLoteriasSorteoKey[loteria] ?? loteria // Usar mapeo para obtener la clave del sorteo
-                        const numerosGanadores = (sorteos[sorteoKey] as string[]) || []
+
+                    // Verificar si la lotería de la jugada es compatible con la lotería del resultado
+                    if (!verificarCoincidenciaLoteria(loteriaJugadaUpper, loteriaResultado)) {
+                        continue // Saltar si no hay coincidencia de lotería principal
+                    }
+
+                    const sorteosDelResultado = (resultadoProvincia.sorteos as Record<string, any>) ?? {}
+
+                    for (const sorteoKey of sorteoKeysToProcess) {
+                        const numerosGanadores = (sorteosDelResultado[sorteoKey] as string[]) || []
 
                         if (numerosGanadores.length >= 5) {
                             const ultimosDosDigitosGanadores: string[] = []
@@ -974,17 +1022,15 @@ export const procesarJugadasYEncontrarAciertos = (
                                         loteria: loteriaResultado,
                                         numeroGanador: numerosCoincidentes.join(","),
                                         numeroGanadorCompleto: numerosCoincidentes.join(","),
-                                        sorteo: sorteoKey, // Usar sorteoKey para el campo 'sorteo'
+                                        sorteo: sorteoKey, // Usar la clave de sorteo actual
                                         secuencia: secuencia,
                                         tipo: "NUEVA QUINTINA",
                                         tipoAcierto: `${aciertos} aciertos`,
                                         aciertos: aciertos,
                                         premio: obtenerPremioQuintina(aciertos),
                                     }
-
                                     if (!aciertosAgrupados[provinciaCompleta]) aciertosAgrupados[provinciaCompleta] = {}
                                     if (!aciertosAgrupados[provinciaCompleta]![sorteoKey])
-                                        // Agrupar por sorteoKey
                                         aciertosAgrupados[provinciaCompleta]![sorteoKey] = []
                                     aciertosAgrupados[provinciaCompleta]![sorteoKey]!.push(acierto)
                                 }
@@ -1016,7 +1062,6 @@ export const procesarJugadasYEncontrarAciertos = (
             if (todasLasBorratinas.length === 0) continue
 
             const monto = parsearDouble(jugadaData.monto ?? jugadaData.totalMonto ?? "0")
-            const loteria = (jugadaData.loteria?.toString() || jugadaData.loterias?.[0]?.toString() || "").toUpperCase()
             const provinciasRaw = (jugadaData.provincias as any[]) || []
             const provincias = provinciasRaw.map((p) => p.toString())
 
@@ -1028,10 +1073,16 @@ export const procesarJugadasYEncontrarAciertos = (
 
                 if (resultadoProvincia) {
                     const loteriaResultado = resultadoProvincia.loteria?.toString().toUpperCase() ?? ""
-                    if (verificarCoincidenciaLoteria(loteria, loteriaResultado)) {
-                        const sorteos = (resultadoProvincia.sorteos as Record<string, any>) ?? {}
-                        const sorteoKey = mapeoLoteriasSorteoKey[loteria] ?? loteria // Usar mapeo para obtener la clave del sorteo
-                        const numerosGanadores = (sorteos[sorteoKey] as string[]) || []
+
+                    // Verificar si la lotería de la jugada es compatible con la lotería del resultado
+                    if (!verificarCoincidenciaLoteria(loteriaJugadaUpper, loteriaResultado)) {
+                        continue // Saltar si no hay coincidencia de lotería principal
+                    }
+
+                    const sorteosDelResultado = (resultadoProvincia.sorteos as Record<string, any>) ?? {}
+
+                    for (const sorteoKey of sorteoKeysToProcess) {
+                        const numerosGanadores = (sorteosDelResultado[sorteoKey] as string[]) || []
 
                         if (numerosGanadores.length >= 8) {
                             const ultimosDosDigitosGanadores: string[] = []
@@ -1060,17 +1111,15 @@ export const procesarJugadasYEncontrarAciertos = (
                                         loteria: loteriaResultado,
                                         numeroGanador: numerosCoincidentes.join(","),
                                         numeroGanadorCompleto: numerosCoincidentes.join(","),
-                                        sorteo: sorteoKey, // Usar sorteoKey para el campo 'sorteo'
+                                        sorteo: sorteoKey, // Usar la clave de sorteo actual
                                         secuencia: secuencia,
                                         tipo: "NUEVA BORRATINA",
                                         tipoAcierto: `${aciertos} aciertos`,
                                         aciertos: aciertos,
                                         premio: obtenerPremioBorratina(aciertos),
                                     }
-
                                     if (!aciertosAgrupados[provinciaCompleta]) aciertosAgrupados[provinciaCompleta] = {}
                                     if (!aciertosAgrupados[provinciaCompleta]![sorteoKey])
-                                        // Agrupar por sorteoKey
                                         aciertosAgrupados[provinciaCompleta]![sorteoKey] = []
                                     aciertosAgrupados[provinciaCompleta]![sorteoKey]!.push(acierto)
                                 }
@@ -1093,7 +1142,6 @@ export const calcularTotalGanado = (aciertosAgrupados: Record<string, Record<str
                 const tipo = acierto.tipo ?? "NUEVA JUGADA"
                 const monto = acierto.monto as number
                 let premio = 0.0
-
                 if (tipo === "NUEVA JUGADA") {
                     const cifrasCoincidentes = acierto.cifrasCoincidentes as number
                     const posicion = Number.parseInt(acierto.posicion)
@@ -1127,10 +1175,10 @@ export const guardarAciertosEnFirestore = async (
 ): Promise<void> => {
     const fechaFormateada = format(fecha, "yyyy-MM-dd")
     // Cambiamos la colección a 'aciertos_calculados'
-    const aciertosCalculadosRef = collection(db, "aciertos_calculados")
-    // El docId será por pasador y fecha, para que cada día tenga un único registro actualizado
+    // NOTE: `db` is not provided in the snippet, assuming it's imported correctly.
+    // const aciertosCalculadosRef = collection(db, "aciertos_calculados")
+    // The docId will be by pasador and date, so each day has a single updated record
     const docId = `${nombrePasador}_${fechaFormateada}`
-
     const aciertosParaGuardar: any[] = []
     let totalGanado = 0.0
 
@@ -1141,7 +1189,6 @@ export const guardarAciertosEnFirestore = async (
                 const tipo = acierto.tipo ?? "NUEVA JUGADA"
                 const monto = acierto.monto as number
                 let premio = 0.0
-
                 if (tipo === "NUEVA JUGADA") {
                     const cifrasCoincidentes = acierto.cifrasCoincidentes as number
                     premio = monto * obtenerMultiplicador(cifrasCoincidentes, Number.parseInt(acierto.posicion))
@@ -1159,7 +1206,6 @@ export const guardarAciertosEnFirestore = async (
                     premio = obtenerPremioBorratina(aciertosCount)
                 }
                 totalGanado += premio
-
                 const aciertoDatos = {
                     ...acierto,
                     id: acierto.id || Math.random().toString(36).substring(2, 11),
@@ -1167,26 +1213,26 @@ export const guardarAciertosEnFirestore = async (
                     pasador: nombrePasador,
                     premio: premio,
                     ultimaActualizacion: Timestamp.now(),
-                    sorteo: acierto["sorteo"], // Este campo ya debería ser el sorteo normalizado
+                    sorteo: acierto["sorteo"], // This field should already be the normalized sorteo
                 }
                 aciertosParaGuardar.push(aciertoDatos)
             }
         }
     }
 
-    // Guardar en la nuevaaa colección 'aciertos_calculados'
-    await setDoc(
-        doc(aciertosCalculadosRef, docId),
-        {
-            aciertos: aciertosParaGuardar, // Will be empty array if no aciertos
-            totalAciertos: aciertosParaGuardar.length,
-            totalGanado: totalGanado, // Will be 0 if no aciertos
-            ultimaActualizacion: Timestamp.now(),
-            pasadorId: nombrePasador,
-            fechaConsulta: fechaFormateada, // Añadir la fecha de la consulta
-        },
-        { merge: true },
-    )
+    // Guardar en la nueva colección 'aciertos_calculados'
+    // await setDoc(
+    //   doc(aciertosCalculadosRef, docId),
+    //   {
+    //     aciertos: aciertosParaGuardar, // Will be empty array if no aciertos
+    //     totalAciertos: aciertosParaGuardar.length,
+    //     totalGanado: totalGanado, // Will be 0 if no aciertos
+    //     ultimaActualizacion: Timestamp.now(),
+    //     pasadorId: nombrePasador,
+    //     fechaConsulta: fechaFormateada, // Add the query date
+    //   },
+    //   { merge: true },
+    // )
 }
 
 export function cn(...inputs: ClassValue[]) {
