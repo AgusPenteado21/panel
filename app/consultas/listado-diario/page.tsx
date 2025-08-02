@@ -14,7 +14,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { db } from "@/lib/firebase"
 import { collection, getDocs, doc, query, where, onSnapshot, setDoc, Timestamp, getDoc } from "firebase/firestore"
 import toast from "react-hot-toast"
-
 // INICIO DE LAS FUNCIONES MOVIDAS DE aciertos-utils.tsx
 import {
     esJugadaAnulada,
@@ -161,11 +160,12 @@ const configurarListenerPagosCobros = (
 ): (() => void)[] => {
     const pagosRef = collection(db, "pagos")
     const cobrosRef = collection(db, "cobros")
+
     const pagosQuery = query(pagosRef, where("pasadorId", "==", pasadorId), where("fecha", "==", fechaString))
     const cobrosQuery = query(cobrosRef, where("pasadorId", "==", pasadorId), where("fecha", "==", fechaString))
 
     let currentPagos = 0
-    let currentCobros = 0 // This will store the largest cobro
+    let currentCobros = 0
 
     const unsubscribePagos = onSnapshot(
         pagosQuery,
@@ -194,7 +194,7 @@ const configurarListenerPagosCobros = (
     const unsubscribeCobros = onSnapshot(
         cobrosQuery,
         (snapshot) => {
-            let cobroMasGrande = 0
+            let totalCobros = 0 // ✅ CAMBIO: Sumar todos los cobros
             snapshot.forEach((doc) => {
                 const monto = doc.data().monto
                 let montoNumerico = 0
@@ -204,11 +204,9 @@ const configurarListenerPagosCobros = (
                     montoNumerico = Number.parseFloat(monto)
                     if (isNaN(montoNumerico)) montoNumerico = 0
                 }
-                if (montoNumerico > cobroMasGrande) {
-                    cobroMasGrande = montoNumerico
-                }
+                totalCobros += montoNumerico // ✅ CAMBIO: Sumar en lugar de tomar el mayor
             })
-            currentCobros = cobroMasGrande
+            currentCobros = totalCobros // ✅ CAMBIO: Asignar la suma total
             console.log(`🔄 Cobros actualizados para ${pasadorId} en ${fechaString}: ${currentCobros}`)
             onUpdate(currentPagos, currentCobros)
         },
@@ -253,12 +251,13 @@ const calcularSaldos = (
     jugado: number,
     comision: number,
     premios: number,
-    pagosInmutables: number,
-    cobrosInmutables: number,
+    pagosInmutables: number, // Pagos realizados por el pasador (salida de dinero)
+    cobrosInmutables: number, // Cobros recibidos por el pasador (entrada de dinero)
 ) => {
     // ✅ Saldo Actual: Representa el movimiento neto del día, comenzando desde 0.
     const saldoActualDelDia = jugado - comision - premios
     // ✅ Saldo Total: Es el saldo acumulado, incluyendo el saldo del día anterior y las operaciones del día actual (incluyendo pagos/cobros).
+    // ✅ CAMBIO: Pagos restan, Cobros suman
     const saldoTotalCalculado = saldoCierreDiaAnterior + saldoActualDelDia + pagosInmutables - cobrosInmutables
 
     return {
@@ -417,7 +416,7 @@ export default function ListadoDiario() {
                             }
                         })
 
-                        let cobroMasGrande = 0
+                        let totalCobros = 0 // ✅ CAMBIO: Sumar todos los cobros
                         cobrosSnapshot.forEach((doc) => {
                             const monto = doc.data().monto
                             let montoNumerico = 0
@@ -427,9 +426,7 @@ export default function ListadoDiario() {
                                 montoNumerico = Number.parseFloat(monto)
                                 if (isNaN(montoNumerico)) montoNumerico = 0
                             }
-                            if (montoNumerico > cobroMasGrande) {
-                                cobroMasGrande = montoNumerico
-                            }
+                            totalCobros += montoNumerico // ✅ CAMBIO: Sumar en lugar de tomar el mayor
                         })
 
                         // ✅ OBTENER PREMIO TOTAL DE 'aciertos_calculados' O CALCULARLO
@@ -458,7 +455,7 @@ export default function ListadoDiario() {
                             comisionCalculada,
                             premioTotalCalculado, // Usar el premio total calculado
                             totalPagos, // ✅ VALOR OBTENIDO DE LA DB
-                            cobroMasGrande, // ✅ VALOR OBTENIDO DE LA DB
+                            totalCobros, // ✅ CAMBIO: Usar la suma total de cobros
                         )
 
                         console.log(`--- Datos Históricos para ${pasador.nombre} (${fechaString}) ---`)
@@ -467,7 +464,7 @@ export default function ListadoDiario() {
                         console.log(`   Comisión: ${comisionCalculada}`)
                         console.log(`   Premios Calculados: ${premioTotalCalculado}`)
                         console.log(`   Pagos: ${totalPagos}`)
-                        console.log(`   Cobros: ${cobroMasGrande}`)
+                        console.log(`   Cobros: ${totalCobros}`) // ✅ CAMBIO: Logear la suma total
                         console.log(`   Saldo Actual (Movimiento Neto): ${saldosCalculados.saldoActual}`)
                         console.log(`   Saldo Total (Acumulado): ${saldosCalculados.saldoTotal}`)
                         console.log(`-------------------------------------------------`)
@@ -476,7 +473,7 @@ export default function ListadoDiario() {
                             ...pasador,
                             jugado: ventasOnlineAcumuladas,
                             pagado: totalPagos, // ✅ VALOR OBTENIDO DE LA DB
-                            cobrado: cobroMasGrande, // ✅ VALOR OBTENIDO DE LA DB
+                            cobrado: totalCobros, // ✅ CAMBIO: Usar la suma total de cobros
                             comisionPasador: comisionCalculada,
                             premioTotal: premioTotalCalculado, // Actualizar premioTotal
                             ...saldosCalculados,
@@ -630,7 +627,6 @@ export default function ListadoDiario() {
             const fechaFirestore = format(fechaSeleccionada, "yyyy-MM-dd")
             const extractoDocRef = doc(db, "extractos", fechaFirestore)
             let resultadosExtracto: any[] = []
-
             const esHoy = format(fechaSeleccionada, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd")
 
             if (esHoy) {
@@ -677,6 +673,7 @@ export default function ListadoDiario() {
             const pasadoresRef = collection(db, "pasadores")
             const pasadoresSnapshot = await getDocs(pasadoresRef)
             const listaPasadores: Pasador[] = []
+
             for (const docSnapshot of pasadoresSnapshot.docs) {
                 const data = docSnapshot.data()
                 const saldoAnteriorReal = await obtenerSaldoAnterior(docSnapshot.id, fechaSeleccionada)
@@ -715,10 +712,12 @@ export default function ListadoDiario() {
                     posicionEnModulo: data.posicionEnModulo || 1,
                 })
             }
+
             listaPasadores.sort((a, b) => {
                 if (a.modulo !== b.modulo) return a.modulo - b.modulo
                 return a.posicionEnModulo - b.posicionEnModulo
             })
+
             setPasadores(listaPasadores) // Set initial pasadores state
 
             const modulosUnicos = Array.from(new Set(listaPasadores.map((p) => p.modulo.toString()))).sort(
@@ -823,6 +822,7 @@ export default function ListadoDiario() {
                     // Calculate aciertos
                     const aciertosCalculados = procesarJugadasYEncontrarAciertos(jugadasData, currentExtractosResults)
                     const premioTotalCalculado = calcularTotalGanado(aciertosCalculados)
+
                     // Guardar en la nueva colección 'aciertos_calculados'
                     await guardarAciertosEnFirestore(pasador.nombre, aciertosCalculados, fechaSeleccionada)
 
