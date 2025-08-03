@@ -118,6 +118,8 @@ function obtenerFechaArgentinaRobusta(): Date {
 }
 
 // 🆕 FUNCIÓN PARA PARSEAR FECHA DE CONSULTA (yyyy-MM-dd)
+// Esta función ya no se usa directamente para generar fechaDisplayConsulta en GET,
+// pero se mantiene por si otras partes del código la usan o para referencia.
 function parsearFechaConsulta(fechaString: string): Date {
     try {
         console.log(`📥 PARSEANDO FECHA CONSULTA: ${fechaString}`)
@@ -168,18 +170,19 @@ function detectarEntorno(): string {
     const railwayService = process.env.RAILWAY_SERVICE_NAME || "unknown"
 
     console.log(`🌍 ENTORNO DETECTADO:`)
-    console.log(`   - NODE_ENV: ${entorno}`)
-    console.log(`   - Railway: ${esRailway}`)
-    console.log(`   - Railway Region: ${railwayRegion}`)
-    console.log(`   - Railway Service: ${railwayService}`)
-    console.log(`   - Vercel: ${esVercel}`)
-    console.log(`   - TZ: ${process.env.TZ || "No definida"}`)
-    console.log(`   - Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
+    console.log(`  - NODE_ENV: ${entorno}`)
+    console.log(`  - Railway: ${esRailway}`)
+    console.log(`  - Railway Region: ${railwayRegion}`)
+    console.log(`  - Railway Service: ${railwayService}`)
+    console.log(`  - Vercel: ${esVercel}`)
+    console.log(`  - TZ: ${process.env.TZ || "No definida"}`)
+    console.log(`  - Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
     return esRailway ? "railway" : esVercel ? "vercel" : "local"
 }
 
 // Constantes
 const TIEMPO_ESPERA_FETCH = 60000 // 60 segundos
+
 const URLS_PIZARRAS = {
     NACION: "https://vivitusuerte.com/pizarra/ciudad",
     PROVINCIA: "https://vivitusuerte.com/pizarra/provincia",
@@ -262,6 +265,7 @@ const LOTTERY_DISPLAY_CUTOFF_OVERRIDES: {
 async function obtenerConTiempoLimite(url: string, opciones: RequestInit = {}): Promise<Response> {
     const controlador = new AbortController()
     const id = setTimeout(() => controlador.abort(), TIEMPO_ESPERA_FETCH)
+
     try {
         const timestamp = Date.now()
         const urlConTimestamp = `${url}${url.includes("?") ? "&" : "?"}_t=${timestamp}`
@@ -351,6 +355,7 @@ function obtenerTiempoSorteo(turno: string, provinciaKey?: string): number {
 function esSorteoFinalizado(turno: string, fecha: Date, provinciaKey?: string): boolean {
     const ahora = obtenerFechaArgentinaRobusta()
     const tiempoActual = ahora.getHours() * 60 + ahora.getMinutes()
+
     // Usar la función mejorada para obtener el tiempo de sorteo
     const tiempoSorteo = obtenerTiempoSorteo(turno, provinciaKey)
 
@@ -370,24 +375,24 @@ function esSorteoFinalizado(turno: string, fecha: Date, provinciaKey?: string): 
     // 🔥 LOGS DETALLADOS PARA DEBUG
     console.log(`⏰ VERIFICANDO SORTEO: ${turno} (${provinciaKey || "N/A"})`)
     console.log(
-        `   - Hora actual: ${ahora.getHours()}:${ahora.getMinutes().toString().padStart(2, "0")} (${tiempoActual} min)`,
+        `  - Hora actual: ${ahora.getHours()}:${ahora.getMinutes().toString().padStart(2, "0")} (${tiempoActual} min)`,
     )
     console.log(
-        `   - Hora sorteo: ${Math.floor(tiempoSorteo / 60)}:${(tiempoSorteo % 60).toString().padStart(2, "0")} (${tiempoSorteo} min)`,
+        `  - Hora sorteo: ${Math.floor(tiempoSorteo / 60)}:${(tiempoSorteo % 60).toString().padStart(2, "0")} (${tiempoSorteo} min)`,
     )
-    console.log(`   - Offset de visualización: ${effectiveDisplayOffsetMinutes} min`)
-    console.log(`   - Fecha consulta: ${formatearFechaArgentina(fecha, "dd/MM/yyyy")}`)
-    console.log(`   - Hoy Argentina: ${formatearFechaArgentina(hoyArgentina, "dd/MM/yyyy")}`)
+    console.log(`  - Offset de visualización: ${effectiveDisplayOffsetMinutes} min`)
+    console.log(`  - Fecha consulta: ${formatearFechaArgentina(fecha, "dd/MM/yyyy")}`)
+    console.log(`  - Hoy Argentina: ${formatearFechaArgentina(hoyArgentina, "dd/MM/yyyy")}`)
 
     if (isAfter(hoyArgentina, fecha)) {
-        console.log(`   ✅ FINALIZADO: Fecha pasada`)
+        console.log(`  ✅ FINALIZADO: Fecha pasada`)
         return true
     }
 
     // Considerar finalizado 'effectiveDisplayOffsetMinutes' después de la hora del sorteo
     const finalizado = tiempoActual > tiempoSorteo + effectiveDisplayOffsetMinutes
     console.log(
-        `   ${finalizado ? "✅" : "⏰"} ${finalizado ? "FINALIZADO" : "PENDIENTE"}: ${tiempoActual} > ${tiempoSorteo + effectiveDisplayOffsetMinutes}`,
+        `  ${finalizado ? "✅" : "⏰"} ${finalizado ? "FINALIZADO" : "PENDIENTE"}: ${tiempoActual} > ${tiempoSorteo + effectiveDisplayOffsetMinutes}`,
     )
     return finalizado
 }
@@ -396,9 +401,11 @@ function esSorteoFinalizado(turno: string, fecha: Date, provinciaKey?: string): 
 function extraerNumerosFormato5($: cheerio.CheerioAPI, turno: string, provincia: string): string[] {
     console.log(`🔢 EXTRACCIÓN FORMATO 5 NÚMEROS: ${provincia} - ${turno}`)
     const textoCompleto = $("body").text()
+
     // Buscar el turno específico en el texto
     const regexTurno = new RegExp(`\\b${turno}\\b`, "gi")
     let match: RegExpExecArray | null
+
     while ((match = regexTurno.exec(textoCompleto)) !== null) {
         const indiceInicio = match.index
         // Buscar en los próximos 1000 caracteres después del turno (aumentado para capturar más)
@@ -410,11 +417,13 @@ function extraerNumerosFormato5($: cheerio.CheerioAPI, turno: string, provincia:
         const patronEspaciado = /(\d+)\.\s*(\d{4,5})/g // Simplificado \s*\s* a \s*
         const numerosEncontrados: string[] = []
         let matchPatron: RegExpExecArray | null
+
         console.log(`🔍 Buscando patrón espaciado en segmento...`)
         while ((matchPatron = patronEspaciado.exec(segmento)) !== null) {
             const posicion = matchPatron[1] // El número antes del punto (1, 2, 3, etc.)
             const numero = matchPatron[2] // El número de 4-5 dígitos
             console.log(`🎯 Encontrado: Posición ${posicion} → Número ${numero}`)
+
             if (numero.length === 4) {
                 numerosEncontrados.push(numero)
             } else if (numero.length === 5) {
@@ -424,6 +433,7 @@ function extraerNumerosFormato5($: cheerio.CheerioAPI, turno: string, provincia:
                 console.log(`🔄 Número de 5 dígitos: ${numero} → ${ultimosCuatro}`)
             }
         }
+
         console.log(`🔢 Números extraídos del patrón espaciado:`, numerosEncontrados)
         if (numerosEncontrados.length >= 18) {
             console.log(`✅ FORMATO ESPACIADO: Encontrados ${numerosEncontrados.length} números válidos`)
@@ -619,6 +629,7 @@ function extraerNumerosMisiones($: cheerio.CheerioAPI, turno: string): string[] 
 // 🔥 FUNCIÓN ULTRA ESPECÍFICA MEJORADA CON FORMATO ESPACIADO
 function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, provincia: string): string[] {
     console.log(`🎯 EXTRACCIÓN ULTRA ESPECÍFICA: ${provincia} - ${turno}`)
+
     // 🔥 PRIMERO: Intentar formato espaciado
     const numerosFormato5 = extraerNumerosFormato5($, turno, provincia)
     if (numerosFormato5.length >= 18) {
@@ -645,6 +656,7 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
             const regexOtroTurno = new RegExp(`\\b${otroTurno}\\b`, "i")
             return regexOtroTurno.test(textoElemento)
         })
+
         if (contieneOtroTurno) {
             console.log(`⚠️ Elemento contiene otros turnos, DESCARTANDO`)
             continue
@@ -663,6 +675,7 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
     const textoCompleto = $("body").text()
     const regexTurno = new RegExp(`\\b${turno}\\b`, "gi")
     let match: RegExpExecArray | null
+
     while ((match = regexTurno.exec(textoCompleto)) !== null) {
         const indiceInicio = match.index
         // Encontrar el PRIMER otro turno que aparezca después
@@ -711,6 +724,7 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
             const regexOtroTurno = new RegExp(`\\b${otroTurno}\\b`, "i")
             return regexOtroTurno.test(textoTabla)
         })
+
         if (!contieneOtrosTurnos) {
             // Tabla EXCLUSIVA para nuestro turno
             const numeros: string[] = []
@@ -734,7 +748,7 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
 // Validación ULTRA estricta - Solo acepta resultados muy confiables
 function validarResultadosUltraEstricto(numeros: string[], provincia: string, turno: string): boolean {
     console.log(`🔍 Validación ultra estricta: ${provincia} - ${turno}`)
-    console.log(`   - Números recibidos para validación: ${numeros.join(", ")}`)
+    console.log(`  - Números recibidos para validación: ${numeros.join(", ")}`)
 
     if (numeros.length < 18) {
         console.log(`❌ Validación fallida: Muy pocos números (${numeros.length} < 18)`)
@@ -743,7 +757,7 @@ function validarResultadosUltraEstricto(numeros: string[], provincia: string, tu
 
     // Filtrar números válidos (4 dígitos, no placeholders)
     const numerosValidos = numeros.filter((num) => /^\d{4}$/.test(num) && num !== PLACEHOLDER_RESULT)
-    console.log(`   - Números válidos después de filtro: ${numerosValidos.join(", ")} (${numerosValidos.length})`)
+    console.log(`  - Números válidos después de filtro: ${numerosValidos.join(", ")} (${numerosValidos.length})`)
 
     if (numerosValidos.length < 18) {
         console.log(`❌ Validación fallida: Muy pocos números válidos (${numerosValidos.length} < 18)`)
@@ -754,26 +768,27 @@ function validarResultadosUltraEstricto(numeros: string[], provincia: string, tu
     let patronesSospechosos = 0
     for (const num of numerosValidos) {
         const numInt = Number.parseInt(num)
+
         // Números muy bajos (posibles errores)
         if (numInt <= 30) {
             patronesSospechosos++
-            console.log(`   ⚠️ Patrón sospechoso (número bajo): ${num}`)
+            console.log(`  ⚠️ Patrón sospechoso (número bajo): ${num}`)
         }
         // Números repetitivos (1111, 2222, etc.)
         if (/^(\d)\1{3}$/.test(num)) {
             patronesSospechosos++
-            console.log(`   ⚠️ Patrón sospechoso (repetitivo): ${num}`)
+            console.log(`  ⚠️ Patrón sospechoso (repetitivo): ${num}`)
         }
         // Secuencias obvias (0001, 0002, etc.)
         if (numInt <= 50 && num.startsWith("0")) {
             patronesSospechosos++
-            console.log(`   ⚠️ Patrón sospechoso (secuencia obvia): ${num}`)
+            console.log(`  ⚠️ Patrón sospechoso (secuencia obvia): ${num}`)
         }
     }
 
     // Máximo 15% de patrones sospechosos
     const porcentajeSospechosos = (patronesSospechosos / numerosValidos.length) * 100
-    console.log(`   - Patrones sospechosos: ${patronesSospechosos} (${porcentajeSospechosos.toFixed(1)}%)`)
+    console.log(`  - Patrones sospechosos: ${patronesSospechosos} (${porcentajeSospechosos.toFixed(1)}%)`)
     if (porcentajeSospechosos > 15) {
         console.log(`❌ Validación fallida: Demasiados patrones sospechosos (${porcentajeSospechosos.toFixed(1)}% > 15%)`)
         return false
@@ -781,7 +796,7 @@ function validarResultadosUltraEstricto(numeros: string[], provincia: string, tu
 
     // Verificar diversidad de números
     const numerosUnicos = new Set(numerosValidos)
-    console.log(`   - Números únicos: ${numerosUnicos.size} (vs. ${numerosValidos.length} válidos)`)
+    console.log(`  - Números únicos: ${numerosUnicos.size} (vs. ${numerosValidos.length} válidos)`)
     if (numerosUnicos.size < numerosValidos.length * 0.9) {
         console.log(`❌ Validación fallida: Demasiados números repetidos (pocos únicos)`)
         return false
@@ -817,6 +832,7 @@ async function obtenerResultadoEspecifico(provincia: string, turno: string): Pro
         let intentos = 0
         const maxIntentos = 3
         let pizarraHtml: Response | null = null
+
         while (intentos < maxIntentos && !pizarraHtml?.ok) {
             try {
                 intentos++
@@ -844,6 +860,7 @@ async function obtenerResultadoEspecifico(provincia: string, turno: string): Pro
         const contenidoPizarra = await pizarraHtml.text()
         console.log(`📄 Contenido HTML recibido (primeros 500 chars): ${contenidoPizarra.substring(0, 500)}...`)
         const $ = cheerio.load(contenidoPizarra)
+
         let numeros: string[] = []
 
         // 🆕 USAR FUNCIONES ESPECÍFICAS PARA NUEVAS PROVINCIAS
@@ -909,11 +926,13 @@ async function obtenerResultadosConfiables(): Promise<Extracto[]> {
     // Procesar cada provincia (incluyendo las nuevas y San Luis)
     for (const [provinciaKey, pizarraUrl] of Object.entries(URLS_PIZARRAS)) {
         console.log(`🏛️ === PROVINCIA: ${provinciaKey} ===`)
+
         const provinciaData = {
             loteria: provinciaKey === "NACION" ? "Nacional" : provinciaKey === "PROVINCIA" ? "Provincial" : provinciaKey,
             provincia: provinciaKey,
             sorteos: {} as { [key: string]: string[] },
         }
+
         let tieneResultadosValidos = false
         let turnosParaProvincia: string[] = []
 
@@ -938,8 +957,26 @@ async function obtenerResultadosConfiables(): Promise<Extracto[]> {
                 // Lunes-Sábado
                 turnosParaProvincia = allTurnos
             }
+        } else if (provinciaKey === "SALTA") {
+            // Salta
+            if (diaSemana === 0) {
+                // Domingo
+                turnosParaProvincia = ["Matutina", "Vespertina"]
+            } else {
+                // Lunes-Sábado
+                turnosParaProvincia = ["Primera", "Matutina", "Vespertina", "Nocturna"] // Salta no tiene Previa
+            }
+        } else if (provinciaKey === "JUJUY") {
+            // Jujuy
+            if (diaSemana === 0) {
+                // Domingo
+                turnosParaProvincia = ["Primera", "Matutina"]
+            } else {
+                // Lunes-Sábado
+                turnosParaProvincia = allTurnos
+            }
         } else {
-            // Otras provincias (incluyendo Formosa, Jujuy, Salta, y SAN LUIS)
+            // Otras provincias (incluyendo Formosa, y SAN LUIS)
             if (diaSemana === 0) {
                 // Domingo
                 turnosParaProvincia = [] // No hay sorteos para otras provincias los domingos
@@ -955,6 +992,7 @@ async function obtenerResultadosConfiables(): Promise<Extracto[]> {
             // Solo procesar si el sorteo finalizó, pasando la provincia para el override
             if (esSorteoFinalizado(turno, fechaActual, provinciaKey)) {
                 const numeros = await obtenerResultadoEspecifico(provinciaKey, turno)
+
                 // SOLO agregar si se encontraron números válidos
                 if (numeros !== null && numeros.length > 0) {
                     // Agregar a API - FORMATO CORRECTO PARA LA INTERFAZ EXISTENTE
@@ -996,34 +1034,39 @@ export async function GET(request: Request) {
     console.log("=== 🚀 API ULTRA CONFIABLE - RAILWAY OPTIMIZADA ===")
     try {
         const url = new URL(request.url)
-        const parametroFecha = url.searchParams.get("date")
+        const parametroFecha = url.searchParams.get("date") // This is "yyyy-MM-dd"
         const forceRefresh = url.searchParams.get("forceRefresh") === "true"
         console.log(`📥 PARÁMETROS: fecha=${parametroFecha}, forceRefresh=${forceRefresh}`)
 
-        const fechaActualArgentina = obtenerFechaArgentinaRobusta()
-        let fechaConsulta: Date
+        const fechaActualArgentina = obtenerFechaArgentinaRobusta() // Used for "today" logic and scraping
+
+        let fechaConsulta: Date // Date object representing the queried date
+        let fechaDisplayConsulta: string // String "dd/MM/yyyy" for the nested Firebase key
+
         if (parametroFecha) {
-            // 🔥 USAR FUNCIÓN ROBUSTA PARA PARSEAR FECHA
-            fechaConsulta = parsearFechaConsulta(parametroFecha)
-            console.log(`📅 FECHA PARSEADA: ${parametroFecha} → ${fechaConsulta.toISOString()}`)
+            // Use date-fns parse and format directly for consistency with client
+            fechaConsulta = parse(parametroFecha, "yyyy-MM-dd", new Date())
+            fechaDisplayConsulta = format(fechaConsulta, "dd/MM/yyyy", { locale: es })
+            console.log(
+                `📅 FECHA PARSEADA (GET): ${parametroFecha} → ${fechaDisplayConsulta} (${fechaConsulta.toISOString()})`,
+            )
         } else {
-            fechaConsulta = startOfDay(fechaActualArgentina)
-            console.log(`📅 FECHA ACTUAL: ${fechaConsulta.toISOString()}`)
+            // If no date param, use today's date in Argentina
+            fechaConsulta = startOfDay(fechaActualArgentina) // Ensure it's start of day for consistency
+            fechaDisplayConsulta = format(fechaConsulta, "dd/MM/yyyy", { locale: es })
+            console.log(`📅 FECHA ACTUAL (GET): ${fechaDisplayConsulta} (${fechaConsulta.toISOString()})`)
         }
 
-        const fechaKeyFirebase = formatearFechaArgentina(fechaConsulta, "yyyy-MM-dd")
-        const fechaDisplayConsulta = formatearFechaArgentina(fechaConsulta, "dd/MM/yyyy")
+        const fechaKeyFirebase = format(fechaConsulta, "yyyy-MM-dd") // Document ID (yyyy-MM-dd)
 
-        // 🔥 COMPARACIÓN ROBUSTA DE FECHAS
-        const fechaHoyKey = formatearFechaArgentina(startOfDay(fechaActualArgentina), "yyyy-MM-dd")
-        const esHoyEnArgentina = fechaKeyFirebase === fechaHoyKey
         console.log(`📅 KEY FIREBASE CONSULTA: ${fechaKeyFirebase}`)
+        const fechaHoyKey = format(startOfDay(fechaActualArgentina), "yyyy-MM-dd")
+        const esHoyEnArgentina = fechaKeyFirebase === fechaHoyKey
         console.log(`📅 KEY FIREBASE HOY: ${fechaHoyKey}`)
-        console.log(`📅 FECHA DISPLAY: ${fechaDisplayConsulta}`)
         console.log(`📅 ES HOY: ${esHoyEnArgentina}`)
 
         let extractosFromFirebase: Extracto[] = []
-        console.log(`📂 Consultando Firebase: ${fechaKeyFirebase}`)
+        console.log(`📂 Consultando Firebase: extractos/${fechaKeyFirebase}`)
         const docRef = doc(db, "extractos", fechaKeyFirebase)
         const docSnap = await getDoc(docRef)
 
@@ -1031,20 +1074,17 @@ export async function GET(request: Request) {
             const data = docSnap.data()
             console.log(`📋 Datos encontrados en Firebase para ${fechaKeyFirebase}:`, Object.keys(data))
 
-            // 🔥 BUSCAR EN LA ESTRUCTURA ANIDADA POR FECHA
             let resultadosData: ResultadoDia | null = null
 
-            // Buscar por fecha exacta
+            // 🔥 CRÍTICO: Buscar directamente con la fechaDisplayConsulta generada consistentemente
             if (data[fechaDisplayConsulta]) {
                 resultadosData = data[fechaDisplayConsulta] as ResultadoDia
-                console.log(`✅ Encontrado con fecha exacta: ${fechaDisplayConsulta}`)
-            }
-            // Buscar cualquier fecha en formato dd/MM/yyyy
-            else {
+                console.log(`✅ Encontrado con clave de fecha exacta: ${fechaDisplayConsulta}`)
+            } else {
+                // Fallback: if exact match not found, try to find the closest date (original logic)
                 const fechasEncontradas = Object.keys(data).filter((key) => key.includes("/"))
-                console.log(`🔍 Fechas encontradas en documento:`, fechasEncontradas)
+                console.log(`🔍 Clave exacta no encontrada. Fechas encontradas en documento:`, fechasEncontradas)
                 if (fechasEncontradas.length > 0) {
-                    // 🆕 BUSCAR LA FECHA MÁS CERCANA A LA SOLICITADA
                     let fechaMasCercana = fechasEncontradas[0]
                     let menorDiferencia = Number.MAX_SAFE_INTEGER
                     for (const fechaEncontrada of fechasEncontradas) {
@@ -1060,7 +1100,7 @@ export async function GET(request: Request) {
                         }
                     }
                     resultadosData = data[fechaMasCercana] as ResultadoDia
-                    console.log(`✅ Usando fecha más cercana: ${fechaMasCercana}`)
+                    console.log(`✅ Usando clave de fecha más cercana: ${fechaMasCercana}`)
                 }
             }
 
@@ -1076,7 +1116,7 @@ export async function GET(request: Request) {
                         sorteo: turno,
                         loteria: resultado.loteria,
                         provincia: resultado.provincia,
-                        numeros: numeros as string[], // <--- FIX: Cast 'numeros' to string[]
+                        numeros: numeros as string[],
                         pizarraLink: URLS_PIZARRAS[resultado.provincia as keyof typeof URLS_PIZARRAS] || "",
                         necesita: "No",
                         confirmado: "No",
@@ -1090,23 +1130,20 @@ export async function GET(request: Request) {
             console.log(`❌ No existe documento para ${fechaKeyFirebase} en Firebase`)
         }
 
-        let finalResults: Extracto[] = [...extractosFromFirebase] // Empezar con los resultados de Firebase
+        let finalResults: Extracto[] = [...extractosFromFirebase]
         const resultsMap = new Map<string, Extracto>(finalResults.map((r) => [r.id, r]))
 
-        // Si es hoy o se fuerza, hacer scraping y MERGEAR con los resultados de Firebase
         if (forceRefresh || esHoyEnArgentina) {
             console.log(forceRefresh ? "🔄 FORZANDO ACTUALIZACIÓN (Scraping)" : "📅 CONSULTANDO HOY (Scraping)")
-            const scrapedResults = await obtenerResultadosConfiables() // Esto realiza el scraping
+            const scrapedResults = await obtenerResultadosConfiables()
             console.log(`📤 ${scrapedResults.length} resultados de scraping obtenidos`)
 
-            // Fusionar los resultados del scraping en el mapa, sobrescribiendo si el ID ya existe
             for (const scraped of scrapedResults) {
                 resultsMap.set(scraped.id, scraped)
             }
             finalResults = Array.from(resultsMap.values())
             console.log(`✅ Resultados finales después de la fusión con scraping: ${finalResults.length}`)
 
-            // 🔥 NUEVA LÓGICA: Guardar los resultados finales en Firebase
             if (finalResults.length > 0) {
                 const resultadosAgrupadosPorProvincia = new Map<string, Resultado>()
                 for (const extracto of finalResults) {
@@ -1123,15 +1160,13 @@ export async function GET(request: Request) {
                 }
                 const resultadosParaGuardar: Resultado[] = Array.from(resultadosAgrupadosPorProvincia.values())
                 const dataToSave: ResultadoDia = {
-                    fecha: fechaDisplayConsulta, // "dd/MM/yyyy"
+                    fecha: fechaDisplayConsulta, // Use the consistently generated dd/MM/yyyy string
                     dia: formatearFechaArgentina(fechaConsulta, "EEEE").replace(/^\w/, (c) => c.toUpperCase()),
                     resultados: resultadosParaGuardar,
                 }
-
-                // Guardar en Firebase, usando la fecha de visualización como clave anidada
                 const docRefToSave = doc(db, "extractos", fechaKeyFirebase)
                 const dataObjectForFirebase = {
-                    [fechaDisplayConsulta]: dataToSave,
+                    [fechaDisplayConsulta]: dataToSave, // Use the consistently generated dd/MM/yyyy string as nested key
                 }
                 await setDoc(docRefToSave, dataObjectForFirebase, { merge: true })
                 console.log(
@@ -1171,20 +1206,20 @@ export async function OPTIONS() {
 export async function POST(request: Request) {
     console.log("📝 Actualización manual")
     try {
-        const { provincia, turno, fecha, numeros } = await request.json()
+        const { provincia, turno, fecha, numeros } = await request.json() // 'fecha' is "dd/MM/yyyy" from client
+        console.log(`📝 POST request received for provincia: ${provincia}, turno: ${turno}, fecha: ${fecha}`)
 
         if (!provincia || !turno || !fecha || !numeros || !Array.isArray(numeros) || numeros.length !== 20) {
             throw new Error("Datos incompletos o inválidos")
         }
 
-        // 🔥 USAR FUNCIONES ROBUSTAS PARA FECHAS
+        // Parse the "dd/MM/yyyy" string to a Date object to get the yyyy-MM-dd for the document ID
         const fechaObj = parse(fecha, "dd/MM/yyyy", new Date())
-        const fechaArgentina = toZonedTime(fechaObj, "America/Argentina/Buenos_Aires")
-        const fechaKeyFirebase = formatearFechaArgentina(fechaArgentina, "yyyy-MM-dd")
-        const nombreDia = formatearFechaArgentina(fechaArgentina, "EEEE").replace(/^\w/, (c) => c.toUpperCase())
+        const fechaKeyFirebase = format(fechaObj, "yyyy-MM-dd") // Document ID (yyyy-MM-dd)
+        const nombreDia = format(fechaObj, "EEEE", { locale: es }).replace(/^\w/, (c) => c.toUpperCase())
 
-        console.log(`📅 POST - Fecha recibida: ${fecha}`)
-        console.log(`📅 POST - Key Firebase: ${fechaKeyFirebase}`)
+        console.log(`📅 POST - Fecha recibida (dd/MM/yyyy): ${fecha}`)
+        console.log(`📅 POST - Key Firebase (yyyy-MM-dd): ${fechaKeyFirebase}`)
         console.log(`📅 POST - Nombre día: ${nombreDia}`)
 
         const docRef = doc(db, "extractos", fechaKeyFirebase)
@@ -1192,59 +1227,54 @@ export async function POST(request: Request) {
 
         let datosDia: ResultadoDia
 
-        // 🔥 LECTURA CORREGIDA: Buscar en estructura anidada
         if (docSnap.exists()) {
             const data = docSnap.data()
+            // Use the exact 'fecha' string received from the client as the nested key
             if (data[fecha]) {
-                // Estructura anidada por fecha
                 datosDia = data[fecha] as ResultadoDia
-                console.log(`📋 POST - Datos existentes encontrados para ${fecha}`)
+                console.log(`📋 POST - Datos existentes encontrados para clave anidada ${fecha}`)
             } else {
-                // Crear nueva estructura
+                // If the exact nested key doesn't exist, initialize a new structure for this date
                 datosDia = {
-                    fecha: fecha,
+                    fecha: fecha, // Use the exact 'fecha' string from client
                     dia: nombreDia,
                     resultados: [],
                 }
-                console.log(`📋 POST - Creando nueva estructura para ${fecha}`)
+                console.log(`📋 POST - Creando nueva estructura anidada para clave ${fecha}`)
             }
         } else {
+            // If the document itself doesn't exist, create a new one with the nested structure
             datosDia = {
-                fecha: fecha,
+                fecha: fecha, // Use the exact 'fecha' string from client
                 dia: nombreDia,
                 resultados: [],
             }
-            console.log(`📋 POST - Creando documento nuevo para ${fechaKeyFirebase}`)
+            console.log(`📋 POST - Creando documento nuevo para ${fechaKeyFirebase} con clave anidada ${fecha}`)
         }
 
-        // Buscar si ya existe la provincia
         let provinciaResultado = datosDia.resultados.find((r) => r.provincia === provincia)
         if (!provinciaResultado) {
-            // Si no existe la provincia, crearla
             provinciaResultado = {
                 loteria: provincia === "NACION" ? "Nacional" : provincia === "PROVINCIA" ? "Provincial" : provincia,
                 provincia: provincia,
                 sorteos: {},
             }
             datosDia.resultados.push(provinciaResultado)
-            console.log(`📋 POST - Provincia ${provincia} creada`)
+            console.log(`📋 POST - Provincia ${provincia} creada en resultados del día`)
         }
 
-        // 🔥 CRÍTICO: PRESERVAR TODOS LOS SORTEOS EXISTENTES DE LA PROVINCIA
-        // Solo actualizar el turno específico, mantener los demás
         provinciaResultado.sorteos[turno] = numeros
         console.log(
             `✅ Guardando ${provincia} - ${turno}. Sorteos totales de ${provincia}:`,
             Object.keys(provinciaResultado.sorteos),
         )
 
-        // 🔥 GUARDADO CORREGIDO: Mantener estructura anidada por fecha siempre
         const dataParaGuardar = {
-            [fecha]: datosDia,
+            [fecha]: datosDia, // Use the exact 'fecha' string from client as the nested key
         }
         await setDoc(docRef, dataParaGuardar, { merge: true })
+        console.log(`✅ Manual: ${provincia} - ${turno} guardado en Firebase bajo ${fechaKeyFirebase}/${fecha}`)
 
-        console.log(`✅ Manual: ${provincia} - ${turno}`)
         return NextResponse.json({ success: true, message: "Actualizado manualmente" }, { headers: corsHeaders })
     } catch (error) {
         console.error("❌ Error manual:", error)
