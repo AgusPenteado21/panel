@@ -119,7 +119,7 @@ const DEDICATED_BUTTON_LOTERIAS = [
     "SANTIAGO DEL ESTERO",
     "MONTEVIDEO",
     "SALTA",
-    // Removed "SAN JUAN" from here
+    "JUJUY", // Added JUJUY
 ]
 
 // Lista de todas las loterías para las que queremos mostrar un botón (incluyendo las que no tienen modal dedicado)
@@ -133,10 +133,8 @@ const ALL_LOTERIAS_TO_DISPLAY = [
     "CORRIENTES",
     "CHACO",
     "RIO NEGRO",
-    // Removed "SAN JUAN" from here
     "FORMOSA",
-    "JUJUY",
-    "SAN LUIS", // Added San Luis
+    "SAN LUIS",
 ].sort() // Ordenar alfabéticamente para consistencia
 
 // Filtrar las loterías que ya tienen botones dedicados para generar los dinámicos
@@ -242,6 +240,17 @@ export default function ExtractosPage() {
         Nocturna: Array(20).fill(""),
     })
     const [isSavingSalta, setIsSavingSalta] = useState(false)
+
+    // Estados para el modal de Jujuy (NUEVO)
+    const [showJujuyModal, setShowJujuyModal] = useState(false)
+    const [jujuyData, setJujuyData] = useState<ProvinciaData>({
+        Previa: Array(20).fill(""),
+        Primera: Array(20).fill(""),
+        Matutina: Array(20).fill(""),
+        Vespertina: Array(20).fill(""),
+        Nocturna: Array(20).fill(""),
+    })
+    const [isSavingJujuy, setIsSavingJujuy] = useState(false)
 
     // Estados para el modal genérico de tipear loterías (NUEVO)
     const [showGenericModal, setShowGenericModal] = useState(false)
@@ -399,6 +408,10 @@ export default function ExtractosPage() {
     const handleSaltaNumberChange = (turno: string, index: number, value: string) => {
         handleProvinciaNumberChange("SALTA", turno, index, value, setSaltaData, saltaData)
     }
+    // Handler para Jujuy (NUEVO)
+    const handleJujuyNumberChange = (turno: string, index: number, value: string) => {
+        handleProvinciaNumberChange("JUJUY", turno, index, value, setJujuyData, jujuyData)
+    }
 
     // Función genérica para manejar cambios de números en el modal genérico (NUEVO)
     const handleGenericNumberChange = (loteria: string, turno: string, index: number, value: string) => {
@@ -477,7 +490,6 @@ export default function ExtractosPage() {
         const turnosYaGuardados = getTurnosYaGuardados(provincia)
         const diaSemana = getDay(selectedDate) // 0 = domingo, 1 = lunes, ..., 6 = sábado
         let todosTurnos: string[] = []
-
         if (provincia === "MONTEVIDEO") {
             todosTurnos = getTurnosDisponiblesMontevideo(selectedDate)
         } else if (provincia === "SANTIAGO DEL ESTERO") {
@@ -491,21 +503,29 @@ export default function ExtractosPage() {
         } else if (provincia === "SALTA") {
             // Lógica específica para Salta
             if (diaSemana === 0) {
-                todosTurnos = [] // Domingo: no hay sorteos
+                // Domingo: Matutina (12:00) y Vespertina (15:00)
+                todosTurnos = ["Matutina", "Vespertina"]
             } else {
                 todosTurnos = ["Primera", "Matutina", "Vespertina", "Nocturna"] // Lunes a Sábado: sin Previa
             }
-        } else {
-            // Para todas las demás provincias (incluyendo San Luis, Formosa y Jujuy)
+        } else if (provincia === "JUJUY") {
+            // NEW JUJUY LOGIC
             if (diaSemana === 0) {
-                // Domingo para otras provincias (no Santiago, no Montevideo, no Salta)
+                // Domingo: Primera (12:00) y Matutina (15:00)
+                todosTurnos = ["Primera", "Matutina"]
+            } else {
+                todosTurnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"] // Lunes a Sábado: todos los turnos
+            }
+        } else {
+            // Para todas las demás provincias (incluyendo San Luis, Formosa)
+            if (diaSemana === 0) {
+                // Domingo para otras provincias (no Santiago, no Montevideo, no Salta, no Jujuy)
                 todosTurnos = [] // No hay sorteos para tipear en domingo para estas provincias
             } else {
                 // Lunes a Sábado para otras provincias
                 todosTurnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
             }
         }
-
         const pendientes = todosTurnos.filter((turno) => !turnosYaGuardados.includes(turno))
         console.log(
             `DEBUG ${provincia}: Todos los turnos: ${todosTurnos}, Ya guardados: ${turnosYaGuardados}, Pendientes: ${pendientes}`,
@@ -675,6 +695,10 @@ export default function ExtractosPage() {
     const handleConfirmarSalta = () => {
         handleConfirmarProvincia("SALTA", saltaData, setSaltaData, setIsSavingSalta, setShowSaltaModal)
     }
+    // Handler para confirmar Jujuy (NUEVO)
+    const handleConfirmarJujuy = () => {
+        handleConfirmarProvincia("JUJUY", jujuyData, setJujuyData, setIsSavingJujuy, setShowJujuyModal)
+    }
 
     // Función genérica para confirmar resultados de cualquier lotería (NUEVO)
     const handleConfirmarGenericLoteria = async () => {
@@ -748,6 +772,7 @@ export default function ExtractosPage() {
             console.log(
                 `🎉 ${turnosGuardadosExitosamente} turnos de ${currentGenericLoteria} guardados exitosamente para ${fecha}`,
             )
+
             setCurrentGenericLoteriaData((prev) => {
                 const newData = { ...prev }
                 turnosConDatos.forEach((turno) => {
@@ -755,10 +780,12 @@ export default function ExtractosPage() {
                 })
                 return newData
             })
+
             setError(null)
             console.log("🔄 Refrescando datos desde Firebase...")
             await fetchExtractos(selectedDate)
             console.log("✅ Datos refrescados")
+
             setTimeout(() => {
                 setShowGenericModal(false)
                 alert(
@@ -949,6 +976,13 @@ export default function ExtractosPage() {
         console.log("🔓 Abriendo modal Salta")
         setShowSaltaModal(true)
     }
+    // Función para abrir modal de Jujuy (NUEVO)
+    const abrirModalJujuy = (e: React.MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        console.log("🔓 Abriendo modal Jujuy")
+        setShowJujuyModal(true)
+    }
 
     // Función para abrir el modal genérico de tipear loterías (NUEVO)
     const abrirGenericModal = (loteria: string) => {
@@ -1009,18 +1043,25 @@ export default function ExtractosPage() {
             return getMensajeDisponibilidadMontevideo()
         } else if (loteria === "SANTIAGO DEL ESTERO") {
             if (diaSemana === 0) {
-                return `Los domingos, solo Matutina y Vespertina disponibles para Santiago.`
+                return `Los domingos, solo Matutina (11:30) y Vespertina (14:00) disponibles para Santiago.`
             } else {
                 return `Todos los turnos disponibles para Santiago.` // Mensaje para L-S
             }
         } else if (loteria === "SALTA") {
             if (diaSemana === 0) {
-                return `Los domingos no hay sorteos para Salta.`
+                return `Los domingos, solo Matutina (12:00) y Vespertina (15:00) disponibles para Salta.`
             } else {
                 return `Primera, Matutina, Vespertina y Nocturna disponibles para Salta.`
             }
+        } else if (loteria === "JUJUY") {
+            // NEW JUJUY MESSAGE LOGIC
+            if (diaSemana === 0) {
+                return `Los domingos, solo Primera (12:00) y Matutina (15:00) disponibles para Jujuy.`
+            } else {
+                return `Todos los turnos disponibles para Jujuy.`
+            }
         } else if (diaSemana === 0) {
-            // Cualquier otra lotería en domingo (que no sea Santiago ni Montevideo ni Salta)
+            // Cualquier otra lotería en domingo (que no sea Santiago ni Montevideo ni Salta ni Jujuy)
             return `Los domingos no hay sorteos para ${loteria}.`
         } else {
             return `Todos los turnos disponibles para ${loteria}`
@@ -1044,6 +1085,8 @@ export default function ExtractosPage() {
                 return "border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-500"
             case "SALTA": // Added
                 return "border-green-300 text-green-700 hover:bg-green-50 hover:border-green-500"
+            case "JUJUY": // Added
+                return "border-lime-300 text-lime-700 hover:bg-lime-50 hover:border-lime-500"
             case "NACIONAL":
                 return "border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-500"
             case "PROVINCIA":
@@ -1064,8 +1107,6 @@ export default function ExtractosPage() {
                 return "border-fuchsia-300 text-fuchsia-700 hover:bg-fuchsia-50 hover:border-fuchsia-500"
             case "FORMOSA": // Added
                 return "border-amber-300 text-amber-700 hover:bg-amber-50 hover:border-amber-500"
-            case "JUJUY": // Added
-                return "border-lime-300 text-lime-700 hover:bg-lime-50 hover:border-lime-500"
             case "LA PAMPA":
                 return "border-sky-300 text-sky-700 hover:bg-sky-50 hover:border-sky-500"
             case "LA RIOJA":
@@ -1100,6 +1141,8 @@ export default function ExtractosPage() {
                 return "MVD"
             case "SALTA": // Added
                 return "SAL"
+            case "JUJUY": // Added
+                return "JUJ"
             case "NACIONAL":
                 return "NAC"
             case "PROVINCIA":
@@ -1120,8 +1163,6 @@ export default function ExtractosPage() {
                 return "CHU"
             case "FORMOSA": // Added
                 return "FSA"
-            case "JUJUY": // Added
-                return "JUJ"
             case "LA PAMPA":
                 return "LPA"
             case "LA RIOJA":
@@ -1214,6 +1255,7 @@ export default function ExtractosPage() {
                                 </Button>
                             </div>
                         </div>
+
                         {/* Botones de acción - Responsive */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 mb-6 bg-white p-3 rounded-lg shadow-sm border border-blue-200">
                             <Button
@@ -1239,6 +1281,7 @@ export default function ExtractosPage() {
                                     </>
                                 )}
                             </Button>
+
                             {/* Botones Tipear - Específicos (EXISTENTES) */}
                             <Button
                                 variant="outline"
@@ -1347,6 +1390,22 @@ export default function ExtractosPage() {
                                 </span>
                                 <span className="sm:hidden">{getTurnosPendientes("SALTA").length === 0 ? "SAL✓" : "SAL"}</span>
                             </Button>
+                            <Button // NEW JUJUY BUTTON
+                                variant="outline"
+                                size="sm"
+                                onClick={abrirModalJujuy}
+                                className="border-lime-300 text-lime-700 hover:bg-lime-50 hover:border-lime-500 bg-transparent text-xs h-8"
+                                disabled={getTurnosPendientes("JUJUY").length === 0}
+                            >
+                                <Keyboard className="h-3 w-3 mr-1" />
+                                <span className="hidden sm:inline">
+                                    {getTurnosPendientes("JUJUY").length === 0
+                                        ? "Jujuy OK"
+                                        : `Jujuy (${getTurnosPendientes("JUJUY").length})`}
+                                </span>
+                                <span className="sm:hidden">{getTurnosPendientes("JUJUY").length === 0 ? "JUJ✓" : "JUJ"}</span>
+                            </Button>
+
                             {/* Botones Tipear - Dinámicos para OTRAS loterías (NUEVO) */}
                             {OTHER_LOTERIAS_FOR_DYNAMIC_BUTTONS.map((loteria) => {
                                 const turnosPendientes = getTurnosPendientes(loteria)
@@ -1370,6 +1429,7 @@ export default function ExtractosPage() {
                                     </Button>
                                 )
                             })}
+
                             {/* Botones de acción adicionales */}
                             <Button
                                 variant="outline"
@@ -1419,6 +1479,7 @@ export default function ExtractosPage() {
                                 <span className="sm:hidden">EXP</span>
                             </Button>
                         </div>
+
                         {/* Nota informativa - Responsive */}
                         <div className="mb-4 p-3 sm:p-4 bg-blue-100 border border-blue-300 rounded-lg flex items-start">
                             <Info className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -1432,6 +1493,7 @@ export default function ExtractosPage() {
                                 </p>
                             </div>
                         </div>
+
                         {error && (
                             <Alert variant="destructive" className="mb-4 bg-red-100 border-red-400 text-red-700 flex items-start">
                                 <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-red-600 flex-shrink-0 mt-0.5" />
@@ -1463,6 +1525,7 @@ export default function ExtractosPage() {
                                 </AlertDescription>
                             </Alert>
                         )}
+
                         {/* Tabla responsive */}
                         <div className="rounded-lg overflow-x-auto shadow-md border border-blue-200 bg-white">
                             <Table className="w-full min-w-[800px] [&_th]:p-1 [&_td]:p-1 sm:[&_th]:p-2 sm:[&_td]:p-2 [&_th]:text-xs [&_td]:text-xs">
@@ -1586,6 +1649,7 @@ export default function ExtractosPage() {
                                 </TableBody>
                             </Table>
                         </div>
+
                         {/* Sección de diagnóstico - Responsive */}
                         <div className="mt-6 p-3 sm:p-4 bg-gray-100 border border-gray-300 rounded-lg">
                             <h3 className="text-xs sm:text-sm font-bold mb-2 text-gray-700 flex items-center">
@@ -1598,6 +1662,7 @@ export default function ExtractosPage() {
                         </div>
                     </CardContent>
                 </Card>
+
                 {/* Modal de Tucumán */}
                 <Dialog open={showTucumanModal} onOpenChange={(open) => !open && cerrarModal("TUCUMAN", setShowTucumanModal)}>
                     <DialogContent
@@ -1700,6 +1765,7 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
+
                 {/* Modal de Neuquén */}
                 <Dialog open={showNeuquenModal} onOpenChange={(open) => !open && cerrarModal("NEUQUEN", setShowNeuquenModal)}>
                     <DialogContent
@@ -1802,6 +1868,7 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
+
                 {/* Modal de Santa Fe */}
                 <Dialog open={showSantaFeModal} onOpenChange={(open) => !open && cerrarModal("SANTA FE", setShowSantaFeModal)}>
                     <DialogContent
@@ -1907,6 +1974,7 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
+
                 {/* Modal de Misiones */}
                 <Dialog
                     open={showMisionesModal}
@@ -2015,6 +2083,7 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
+
                 {/* Modal de Santiago */}
                 <Dialog
                     open={showSantiagoModal}
@@ -2136,6 +2205,7 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
+
                 {/* Modal de Montevideo con lógica específica de días */}
                 <Dialog
                     open={showMontevideoModal}
@@ -2254,6 +2324,7 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
+
                 {/* Modal de Salta (NUEVO) */}
                 <Dialog open={showSaltaModal} onOpenChange={(open) => !open && cerrarModal("SALTA", setShowSaltaModal)}>
                     <DialogContent
@@ -2357,6 +2428,119 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
+
+                {/* Modal de Jujuy (NUEVO) */}
+                <Dialog open={showJujuyModal} onOpenChange={(open) => !open && cerrarModal("JUJUY", setShowJujuyModal)}>
+                    <DialogContent
+                        className="max-w-4xl max-h-[80vh] overflow-y-auto"
+                        onPointerDownOutside={(e) => e.preventDefault()}
+                    >
+                        <DialogHeader>
+                            <DialogTitle className="text-lg font-bold text-center">
+                                Tipear Resultados - JUJUY ({format(selectedDate, "dd/MM/yyyy", { locale: es })})
+                            </DialogTitle>
+                            <div className="text-center text-sm text-gray-600 mt-2">{getMensajeDisponibilidad("JUJUY")}</div>
+                        </DialogHeader>
+                        {getTurnosPendientes("JUJUY").length === 0 ? (
+                            <div className="text-center py-8">
+                                <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                                <p className="text-lg font-semibold text-green-700">
+                                    {getDay(selectedDate) === 0
+                                        ? "¡Todos los turnos de Primera y Matutina de Jujuy ya están guardados para este domingo!"
+                                        : "¡Todos los turnos de JUJUY ya están guardados!"}
+                                </p>
+                                <p className="text-sm text-gray-600 mt-2">
+                                    {getDay(selectedDate) === 0
+                                        ? "No hay más turnos pendientes para tipear en Jujuy este domingo."
+                                        : "No hay turnos pendientes para tipear."}
+                                </p>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="space-y-6">
+                                    {getTurnosPendientes("JUJUY").map((turno) => {
+                                        const numerosCompletados = contarNumerosCompletados(turno, jujuyData)
+                                        const turnoCompleto = isTurnoCompleto(turno, jujuyData)
+                                        return (
+                                            <div key={turno} className="border rounded-lg p-4">
+                                                <div className="flex justify-between items-center mb-3">
+                                                    <Label className="text-sm font-semibold">{turno}</Label>
+                                                    <div className="flex items-center gap-2">
+                                                        <span
+                                                            className={`text-xs px-2 py-1 rounded ${turnoCompleto ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
+                                                                }`}
+                                                        >
+                                                            {numerosCompletados}/20
+                                                        </span>
+                                                        {turnoCompleto && <CheckCircle className="h-4 w-4 text-green-500" />}
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
+                                                    {jujuyData[turno].map((numero, index) => (
+                                                        <Input
+                                                            key={index}
+                                                            type="text"
+                                                            value={numero}
+                                                            onChange={(e) => handleJujuyNumberChange(turno, index, e.target.value)}
+                                                            className={`text-center text-xs h-8 ${numero.length === 4 && /^\d{4}$/.test(numero)
+                                                                    ? "border-green-300 bg-green-50"
+                                                                    : numero.length > 0
+                                                                        ? "border-yellow-300 bg-yellow-50"
+                                                                        : "border-gray-300"
+                                                                }`}
+                                                            placeholder={`${index + 1}`}
+                                                            maxLength={4}
+                                                            data-provincia="JUJUY"
+                                                            data-turno={turno}
+                                                            data-index={index}
+                                                        />
+                                                    ))}
+                                                </div>
+                                                {!turnoCompleto && numerosCompletados > 0 && (
+                                                    <p className="text-xs text-yellow-600 mt-2">
+                                                        Faltan {20 - numerosCompletados} números de 4 dígitos para completar este turno
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                                <div className="flex justify-end gap-2 pt-4 border-t">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => cerrarModal("JUJUY", setShowJujuyModal)}
+                                        disabled={isSavingJujuy}
+                                    >
+                                        Cancelar
+                                    </Button>
+                                    <Button
+                                        onClick={handleConfirmarJujuy}
+                                        disabled={
+                                            isSavingJujuy ||
+                                            getTurnosPendientes("JUJUY").filter((turno) => isTurnoCompleto(turno, jujuyData)).length === 0
+                                        }
+                                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
+                                    >
+                                        {isSavingJujuy ? (
+                                            <>
+                                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                                Guardando...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <CheckCircle className="h-4 w-4 mr-2" />
+                                                Confirmar (
+                                                {getTurnosPendientes("JUJUY").filter((turno) => isTurnoCompleto(turno, jujuyData)).length}{" "}
+                                                turnos listos)
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+                            </>
+                        )}
+                    </DialogContent>
+                </Dialog>
+
                 {/* Modal Genérico para tipear cualquier lotería (NUEVO) */}
                 <Dialog open={showGenericModal} onOpenChange={(open) => !open && cerrarGenericModal()}>
                     <DialogContent
@@ -2478,6 +2662,7 @@ export default function ExtractosPage() {
                         )}
                     </DialogContent>
                 </Dialog>
+
                 {debugInfo && (
                     <Card className="mt-4">
                         <CardHeader>
