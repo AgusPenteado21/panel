@@ -862,6 +862,61 @@ export default function ExtractosPage() {
         }
     }
 
+    // NEW: Función para manejar la eliminación de extractos
+    const handleDeleteExtractos = async () => {
+        if (extractosSeleccionados.length === 0) {
+            setError("Por favor, selecciona al menos un extracto para eliminar.")
+            return
+        }
+
+        if (
+            !window.confirm(
+                `¿Estás seguro de que quieres eliminar ${extractosSeleccionados.length} extracto(s) seleccionado(s)?`,
+            )
+        ) {
+            return // El usuario canceló la eliminación
+        }
+
+        try {
+            setIsLoading(true)
+            setError(null)
+            console.log(`🗑️ Eliminando ${extractosSeleccionados.length} extractos...`)
+
+            const fechaParaEliminar = format(selectedDate, "dd/MM/yyyy", { locale: es })
+
+            const response = await fetch("/api/extractos", {
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    fecha: fechaParaEliminar,
+                    extractoIds: extractosSeleccionados,
+                }),
+            })
+
+            const responseData = await response.json()
+            console.log("Respuesta de eliminación recibida:", responseData)
+
+            if (!response.ok) {
+                throw new Error(responseData.error || "Error desconocido al eliminar extractos.")
+            }
+
+            setError(null)
+            setExtractosSeleccionados([])
+            setSelectAll(false)
+            await fetchExtractos(selectedDate) // Refrescar la lista después de eliminar
+            alert("✅ Extractos eliminados exitosamente.")
+            console.log("Extractos eliminados con éxito y lista refrescada.")
+        } catch (err) {
+            console.error("Error al eliminar extractos:", err)
+            const errorMessage = err instanceof Error ? err.message : "Error desconocido al eliminar los extractos"
+            setError(`Error al eliminar: ${errorMessage}`)
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
     const handleSelectAll = (checked: boolean) => {
         setSelectAll(checked)
         if (checked) {
@@ -1453,7 +1508,9 @@ export default function ExtractosPage() {
                             <Button
                                 variant="outline"
                                 size="sm"
+                                onClick={handleDeleteExtractos} // Conectado a la nueva función de eliminación
                                 className="border-red-300 text-red-700 hover:bg-red-50 hover:border-red-500 bg-transparent text-xs h-8"
+                                disabled={extractosSeleccionados.length === 0 || isLoading} // Deshabilitar si no hay selección o está cargando
                             >
                                 <Trash2 className="h-3 w-3 mr-1" />
                                 <span className="hidden sm:inline">Eliminar</span>

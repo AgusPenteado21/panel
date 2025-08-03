@@ -4,7 +4,7 @@ import { parse, format, startOfDay, isAfter } from "date-fns"
 import { toZonedTime } from "date-fns-tz"
 import { es } from "date-fns/locale"
 import { db } from "@/lib/firebase"
-import { doc, setDoc, getDoc } from "firebase/firestore"
+import { doc, setDoc, getDoc, updateDoc } from "firebase/firestore"
 
 // Interfaces y tipos
 interface ResultadoDia {
@@ -118,8 +118,6 @@ function obtenerFechaArgentinaRobusta(): Date {
 }
 
 // 🆕 FUNCIÓN PARA PARSEAR FECHA DE CONSULTA (yyyy-MM-dd)
-// Esta función ya no se usa directamente para generar fechaDisplayConsulta en GET,
-// pero se mantiene por si otras partes del código la usan o para referencia.
 function parsearFechaConsulta(fechaString: string): Date {
     try {
         console.log(`📥 PARSEANDO FECHA CONSULTA: ${fechaString}`)
@@ -170,13 +168,13 @@ function detectarEntorno(): string {
     const railwayService = process.env.RAILWAY_SERVICE_NAME || "unknown"
 
     console.log(`🌍 ENTORNO DETECTADO:`)
-    console.log(`  - NODE_ENV: ${entorno}`)
-    console.log(`  - Railway: ${esRailway}`)
-    console.log(`  - Railway Region: ${railwayRegion}`)
-    console.log(`  - Railway Service: ${railwayService}`)
-    console.log(`  - Vercel: ${esVercel}`)
-    console.log(`  - TZ: ${process.env.TZ || "No definida"}`)
-    console.log(`  - Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
+    console.log(`   - NODE_ENV: ${entorno}`)
+    console.log(`   - Railway: ${esRailway}`)
+    console.log(`   - Railway Region: ${railwayRegion}`)
+    console.log(`   - Railway Service: ${railwayService}`)
+    console.log(`   - Vercel: ${esVercel}`)
+    console.log(`   - TZ: ${process.env.TZ || "No definida"}`)
+    console.log(`   - Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
     return esRailway ? "railway" : esVercel ? "vercel" : "local"
 }
 
@@ -259,6 +257,13 @@ const LOTTERY_DISPLAY_CUTOFF_OVERRIDES: {
     // "CORDOBA": {
     //   "Matutina": { displayOffsetMinutes: 20 }, // Ejemplo: Córdoba Matutina un poco más tarde
     // },
+}
+
+// NUEVO: Loterías y turnos que son de entrada manual los domingos y NO deben ser scrapeados
+const MANUAL_ENTRY_LOTTERIES_ON_SUNDAY: { [provincia: string]: string[] } = {
+    JUJUY: ["Primera", "Matutina"], // Jujuy Primera y Matutina son manuales los domingos
+    SALTA: ["Matutina", "Vespertina"], // Salta Matutina y Vespertina son manuales los domingos
+    SANTIAGO: ["Matutina", "Vespertina"], // Santiago Matutina y Vespertina son manuales los domingos
 }
 
 // 🔥 FUNCIÓN CORREGIDA CON HEADERS COMPATIBLES
@@ -348,6 +353,7 @@ function obtenerTiempoSorteo(turno: string, provinciaKey?: string): number {
         console.error(`Formato de horario inválido para el turno: ${turno} (${horario})`)
         return -1
     }
+
     return horas * 60 + minutos
 }
 
@@ -375,24 +381,24 @@ function esSorteoFinalizado(turno: string, fecha: Date, provinciaKey?: string): 
     // 🔥 LOGS DETALLADOS PARA DEBUG
     console.log(`⏰ VERIFICANDO SORTEO: ${turno} (${provinciaKey || "N/A"})`)
     console.log(
-        `  - Hora actual: ${ahora.getHours()}:${ahora.getMinutes().toString().padStart(2, "0")} (${tiempoActual} min)`,
+        `   - Hora actual: ${ahora.getHours()}:${ahora.getMinutes().toString().padStart(2, "0")} (${tiempoActual} min)`,
     )
     console.log(
-        `  - Hora sorteo: ${Math.floor(tiempoSorteo / 60)}:${(tiempoSorteo % 60).toString().padStart(2, "0")} (${tiempoSorteo} min)`,
+        `   - Hora sorteo: ${Math.floor(tiempoSorteo / 60)}:${(tiempoSorteo % 60).toString().padStart(2, "0")} (${tiempoSorteo} min)`,
     )
-    console.log(`  - Offset de visualización: ${effectiveDisplayOffsetMinutes} min`)
-    console.log(`  - Fecha consulta: ${formatearFechaArgentina(fecha, "dd/MM/yyyy")}`)
-    console.log(`  - Hoy Argentina: ${formatearFechaArgentina(hoyArgentina, "dd/MM/yyyy")}`)
+    console.log(`   - Offset de visualización: ${effectiveDisplayOffsetMinutes} min`)
+    console.log(`   - Fecha consulta: ${formatearFechaArgentina(fecha, "dd/MM/yyyy")}`)
+    console.log(`   - Hoy Argentina: ${formatearFechaArgentina(hoyArgentina, "dd/MM/yyyy")}`)
 
     if (isAfter(hoyArgentina, fecha)) {
-        console.log(`  ✅ FINALIZADO: Fecha pasada`)
+        console.log(`   ✅ FINALIZADO: Fecha pasada`)
         return true
     }
 
     // Considerar finalizado 'effectiveDisplayOffsetMinutes' después de la hora del sorteo
     const finalizado = tiempoActual > tiempoSorteo + effectiveDisplayOffsetMinutes
     console.log(
-        `  ${finalizado ? "✅" : "⏰"} ${finalizado ? "FINALIZADO" : "PENDIENTE"}: ${tiempoActual} > ${tiempoSorteo + effectiveDisplayOffsetMinutes}`,
+        `   ${finalizado ? "✅" : "⏰"} ${finalizado ? "FINALIZADO" : "PENDIENTE"}: ${tiempoActual} > ${tiempoSorteo + effectiveDisplayOffsetMinutes}`,
     )
     return finalizado
 }
@@ -497,6 +503,7 @@ function extraerNumerosFormato5($: cheerio.CheerioAPI, turno: string, provincia:
 // 🆕 FUNCIÓN ESPECÍFICA PARA NEUQUÉN CON FORMATO ESPACIADO
 function extraerNumerosNeuquen($: cheerio.CheerioAPI, turno: string): string[] {
     console.log(`🏔️ EXTRACCIÓN ESPECÍFICA NEUQUÉN: ${turno}`)
+
     // 🔥 PRIMERO: Intentar formato espaciado (nuevo)
     const numerosFormato5 = extraerNumerosFormato5($, turno, "NEUQUEN")
     if (numerosFormato5.length >= 18) {
@@ -552,6 +559,7 @@ function extraerNumerosNeuquen($: cheerio.CheerioAPI, turno: string): string[] {
 // 🆕 FUNCIÓN ESPECÍFICA PARA MISIONES CON FORMATO ESPACIADO
 function extraerNumerosMisiones($: cheerio.CheerioAPI, turno: string): string[] {
     console.log(`🌿 EXTRACCIÓN ESPECÍFICA MISIONES: ${turno}`)
+
     // 🔥 PRIMERO: Intentar formato espaciado (nuevo)
     const numerosFormato5 = extraerNumerosFormato5($, turno, "MISIONES")
     if (numerosFormato5.length >= 18) {
@@ -748,7 +756,7 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
 // Validación ULTRA estricta - Solo acepta resultados muy confiables
 function validarResultadosUltraEstricto(numeros: string[], provincia: string, turno: string): boolean {
     console.log(`🔍 Validación ultra estricta: ${provincia} - ${turno}`)
-    console.log(`  - Números recibidos para validación: ${numeros.join(", ")}`)
+    console.log(`   - Números recibidos para validación: ${numeros.join(", ")}`)
 
     if (numeros.length < 18) {
         console.log(`❌ Validación fallida: Muy pocos números (${numeros.length} < 18)`)
@@ -757,7 +765,7 @@ function validarResultadosUltraEstricto(numeros: string[], provincia: string, tu
 
     // Filtrar números válidos (4 dígitos, no placeholders)
     const numerosValidos = numeros.filter((num) => /^\d{4}$/.test(num) && num !== PLACEHOLDER_RESULT)
-    console.log(`  - Números válidos después de filtro: ${numerosValidos.join(", ")} (${numerosValidos.length})`)
+    console.log(`   - Números válidos después de filtro: ${numerosValidos.join(", ")} (${numerosValidos.length})`)
 
     if (numerosValidos.length < 18) {
         console.log(`❌ Validación fallida: Muy pocos números válidos (${numerosValidos.length} < 18)`)
@@ -772,23 +780,23 @@ function validarResultadosUltraEstricto(numeros: string[], provincia: string, tu
         // Números muy bajos (posibles errores)
         if (numInt <= 30) {
             patronesSospechosos++
-            console.log(`  ⚠️ Patrón sospechoso (número bajo): ${num}`)
+            console.log(`   ⚠️ Patrón sospechoso (número bajo): ${num}`)
         }
         // Números repetitivos (1111, 2222, etc.)
         if (/^(\d)\1{3}$/.test(num)) {
             patronesSospechosos++
-            console.log(`  ⚠️ Patrón sospechoso (repetitivo): ${num}`)
+            console.log(`   ⚠️ Patrón sospechoso (repetitivo): ${num}`)
         }
         // Secuencias obvias (0001, 0002, etc.)
         if (numInt <= 50 && num.startsWith("0")) {
             patronesSospechosos++
-            console.log(`  ⚠️ Patrón sospechoso (secuencia obvia): ${num}`)
+            console.log(`   ⚠️ Patrón sospechoso (secuencia obvia): ${num}`)
         }
     }
 
     // Máximo 15% de patrones sospechosos
     const porcentajeSospechosos = (patronesSospechosos / numerosValidos.length) * 100
-    console.log(`  - Patrones sospechosos: ${patronesSospechosos} (${porcentajeSospechosos.toFixed(1)}%)`)
+    console.log(`   - Patrones sospechosos: ${patronesSospechosos} (${porcentajeSospechosos.toFixed(1)}%)`)
     if (porcentajeSospechosos > 15) {
         console.log(`❌ Validación fallida: Demasiados patrones sospechosos (${porcentajeSospechosos.toFixed(1)}% > 15%)`)
         return false
@@ -796,7 +804,7 @@ function validarResultadosUltraEstricto(numeros: string[], provincia: string, tu
 
     // Verificar diversidad de números
     const numerosUnicos = new Set(numerosValidos)
-    console.log(`  - Números únicos: ${numerosUnicos.size} (vs. ${numerosValidos.length} válidos)`)
+    console.log(`   - Números únicos: ${numerosUnicos.size} (vs. ${numerosValidos.length} válidos)`)
     if (numerosUnicos.size < numerosValidos.length * 0.9) {
         console.log(`❌ Validación fallida: Demasiados números repetidos (pocos únicos)`)
         return false
@@ -817,97 +825,10 @@ function reordenarNumeros(numeros: string[]): string[] {
     return numerosOrdenados
 }
 
-// 🆕 FUNCIÓN PRINCIPAL MEJORADA - Incluye lógica específica para nuevas provincias
-async function obtenerResultadoEspecifico(provincia: string, turno: string): Promise<string[] | null> {
-    try {
-        const url = URLS_PIZARRAS[provincia as keyof typeof URLS_PIZARRAS]
-        if (!url) {
-            console.error(`❌ URL no encontrada para: ${provincia}`)
-            return null
-        }
-
-        console.log(`🔍 PROCESANDO: ${provincia} - ${turno}`)
-
-        // 🔥 RETRY LOGIC PARA RAILWAY
-        let intentos = 0
-        const maxIntentos = 3
-        let pizarraHtml: Response | null = null
-
-        while (intentos < maxIntentos && !pizarraHtml?.ok) {
-            try {
-                intentos++
-                console.log(`🔄 Intento ${intentos}/${maxIntentos} para ${provincia}`)
-                pizarraHtml = await obtenerConTiempoLimite(url)
-                if (!pizarraHtml.ok) {
-                    console.error(`❌ Error HTTP ${pizarraHtml.status} para ${url} (intento ${intentos})`)
-                    if (intentos < maxIntentos) {
-                        await new Promise((resolve) => setTimeout(resolve, 2000)) // Esperar 2 segundos
-                    }
-                }
-            } catch (error) {
-                console.error(`❌ Error en intento ${intentos} para ${provincia}:`, error)
-                if (intentos < maxIntentos) {
-                    await new Promise((resolve) => setTimeout(resolve, 2000))
-                }
-            }
-        }
-
-        if (!pizarraHtml?.ok) {
-            console.error(`❌ Falló después de ${maxIntentos} intentos: ${provincia}`)
-            return null
-        }
-
-        const contenidoPizarra = await pizarraHtml.text()
-        console.log(`📄 Contenido HTML recibido (primeros 500 chars): ${contenidoPizarra.substring(0, 500)}...`)
-        const $ = cheerio.load(contenidoPizarra)
-
-        let numeros: string[] = []
-
-        // 🆕 USAR FUNCIONES ESPECÍFICAS PARA NUEVAS PROVINCIAS
-        if (provincia === "NEUQUEN") {
-            numeros = extraerNumerosNeuquen($, turno)
-        } else if (provincia === "MISIONES") {
-            numeros = extraerNumerosMisiones($, turno)
-        } else {
-            // Usar extracción ULTRA específica para provincias existentes y nuevas genéricas (incluyendo San Luis)
-            numeros = extraerNumerosUltraEspecificos($, turno, provincia)
-        }
-
-        if (numeros.length === 0) {
-            console.log(`❌ NO se encontraron números para ${provincia} - ${turno}`)
-            return null
-        }
-
-        // Completar a 20 números si es necesario
-        const numerosCompletos = [...numeros.slice(0, 20)]
-        while (numerosCompletos.length < 20) {
-            numerosCompletos.push(PLACEHOLDER_RESULT)
-        }
-
-        // APLICAR EL REORDENAMIENTO ESPECÍFICO
-        const numerosReordenados = reordenarNumeros(numerosCompletos)
-
-        // Validación ultra estricta
-        if (!validarResultadosUltraEstricto(numerosReordenados, provincia, turno)) {
-            console.log(`❌ VALIDACIÓN FALLÓ para ${provincia} - ${turno}`)
-            return null
-        }
-
-        console.log(`✅ ÉXITO: ${provincia} - ${turno} → Números válidos encontrados`)
-        console.log(`📊 NÚMEROS: ${numerosReordenados.slice(0, 10).join(", ")}...`)
-        return numerosReordenados
-    } catch (error) {
-        console.error(`❌ ERROR: ${provincia} - ${turno}:`, error)
-        return null
-    }
-}
-
-// 🔥 FUNCIÓN PRINCIPAL CORREGIDA - SIN FILTROS RESTRICTIVOS GLOBALES DE DOMINGO
+// 🔥 FUNCIÓN PRINCIPAL CORREGIDA - PRIORIZANDO OMISIÓN DE SCRAPING PARA ENTRADA MANUAL
 async function obtenerResultadosConfiables(): Promise<Extracto[]> {
-    // Changed return type to Extracto[]
     console.log("🚀 INICIANDO EXTRACCIÓN ULTRA CONFIABLE - TODOS LOS RESULTADOS")
 
-    // 🔥 DETECTAR ENTORNO AL INICIO
     const entorno = detectarEntorno()
     console.log(`🌍 EJECUTÁNDOSE EN: ${entorno.toUpperCase()}`)
 
@@ -920,98 +841,81 @@ async function obtenerResultadosConfiables(): Promise<Extracto[]> {
     console.log(`📅 PROCESANDO FECHA: ${fechaDisplay} (${nombreDia})`)
     console.log(`📅 KEY FIREBASE: ${fechaKeyFirebase}`)
 
-    const scrapedResults: Extracto[] = [] // Changed to Extracto[]
+    const scrapedResults: Extracto[] = []
     const allTurnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
 
-    // Procesar cada provincia (incluyendo las nuevas y San Luis)
     for (const [provinciaKey, pizarraUrl] of Object.entries(URLS_PIZARRAS)) {
         console.log(`🏛️ === PROVINCIA: ${provinciaKey} ===`)
 
-        const provinciaData = {
-            loteria: provinciaKey === "NACION" ? "Nacional" : provinciaKey === "PROVINCIA" ? "Provincial" : provinciaKey,
-            provincia: provinciaKey,
-            sorteos: {} as { [key: string]: string[] },
-        }
-
-        let tieneResultadosValidos = false
         let turnosParaProvincia: string[] = []
 
         // Determinar qué turnos son relevantes para esta provincia y día
         if (provinciaKey === "MONTEVIDEO") {
             if (diaSemana === 0) {
-                // Domingo
                 turnosParaProvincia = []
             } else if (diaSemana === 6) {
-                // Sábado
                 turnosParaProvincia = ["Nocturna"]
             } else {
-                // Lunes-Viernes
                 turnosParaProvincia = ["Matutina", "Nocturna"]
             }
         } else if (provinciaKey === "SANTIAGO") {
-            // Santiago del Estero
             if (diaSemana === 0) {
-                // Domingo
                 turnosParaProvincia = ["Matutina", "Vespertina"]
             } else {
-                // Lunes-Sábado
                 turnosParaProvincia = allTurnos
             }
         } else if (provinciaKey === "SALTA") {
-            // Salta
             if (diaSemana === 0) {
-                // Domingo
                 turnosParaProvincia = ["Matutina", "Vespertina"]
             } else {
-                // Lunes-Sábado
-                turnosParaProvincia = ["Primera", "Matutina", "Vespertina", "Nocturna"] // Salta no tiene Previa
+                turnosParaProvincia = ["Primera", "Matutina", "Vespertina", "Nocturna"]
             }
         } else if (provinciaKey === "JUJUY") {
-            // Jujuy
             if (diaSemana === 0) {
-                // Domingo
                 turnosParaProvincia = ["Primera", "Matutina"]
             } else {
-                // Lunes-Sábado
                 turnosParaProvincia = allTurnos
             }
         } else {
-            // Otras provincias (incluyendo Formosa, y SAN LUIS)
             if (diaSemana === 0) {
-                // Domingo
-                turnosParaProvincia = [] // No hay sorteos para otras provincias los domingos
+                turnosParaProvincia = []
             } else {
-                // Lunes-Sábado
                 turnosParaProvincia = allTurnos
             }
         }
 
         // Procesar cada turno relevante para la provincia y el día
         for (const turno of turnosParaProvincia) {
-            console.log(`🔍 Intentando obtener: ${provinciaKey} - ${turno}`)
-            // Solo procesar si el sorteo finalizó, pasando la provincia para el override
+            // NUEVA LÓGICA: Determinar si este sorteo debe ser de entrada manual hoy
+            const isManualEntryToday =
+                diaSemana === 0 && // Solo aplica a domingos
+                MANUAL_ENTRY_LOTTERIES_ON_SUNDAY[provinciaKey] &&
+                MANUAL_ENTRY_LOTTERIES_ON_SUNDAY[provinciaKey].includes(turno)
+
+            if (isManualEntryToday) {
+                console.log(`🚫 OMITIENDO SCRAPING: ${provinciaKey} - ${turno} (Entrada manual en domingo)`)
+                // No se añade a scrapedResults, por lo que no se guardará automáticamente.
+                // El frontend lo detectará como "necesita" si no está en Firebase.
+                continue // Pasa al siguiente turno sin intentar scrapear
+            }
+
+            // Si no es un sorteo de entrada manual para hoy, procede con la lógica de scraping normal
             if (esSorteoFinalizado(turno, fechaActual, provinciaKey)) {
                 const numeros = await obtenerResultadoEspecifico(provinciaKey, turno)
 
-                // SOLO agregar si se encontraron números válidos
                 if (numeros !== null && numeros.length > 0) {
-                    // Agregar a API - FORMATO CORRECTO PARA LA INTERFAZ EXISTENTE
                     scrapedResults.push({
-                        // Changed to scrapedResults
                         id: `${provinciaKey}-${turno}-${fechaDisplay}`,
                         fecha: fechaDisplay,
                         dia: nombreDia,
                         sorteo: turno,
-                        loteria: provinciaData.loteria,
+                        loteria: provinciaKey === "NACION" ? "Nacional" : provinciaKey === "PROVINCIA" ? "Provincial" : provinciaKey,
                         provincia: provinciaKey,
                         numeros: numeros,
                         pizarraLink: URLS_PIZARRAS[provinciaKey as keyof typeof URLS_PIZARRAS] || "",
-                        necesita: "No",
+                        necesita: "No", // Fue scrapeado, no necesita entrada manual
                         confirmado: "No",
                     })
-                    // No necesitamos agregar a provinciaData.sorteos aquí si solo vamos a devolver scrapedResults
-                    // y la lógica de Firebase se manejará en la función GET principal.
-                    tieneResultadosValidos = true
                     console.log(`✅ AGREGADO A SCRAPED RESULTS: ${provinciaKey} - ${turno}`)
                 } else {
                     console.log(`⏭️ OMITIDO: ${provinciaKey} - ${turno} (sin resultados confiables)`)
@@ -1034,39 +938,37 @@ export async function GET(request: Request) {
     console.log("=== 🚀 API ULTRA CONFIABLE - RAILWAY OPTIMIZADA ===")
     try {
         const url = new URL(request.url)
-        const parametroFecha = url.searchParams.get("date") // This is "yyyy-MM-dd"
+        const parametroFecha = url.searchParams.get("date")
         const forceRefresh = url.searchParams.get("forceRefresh") === "true"
         console.log(`📥 PARÁMETROS: fecha=${parametroFecha}, forceRefresh=${forceRefresh}`)
 
-        const fechaActualArgentina = obtenerFechaArgentinaRobusta() // Used for "today" logic and scraping
-
-        let fechaConsulta: Date // Date object representing the queried date
-        let fechaDisplayConsulta: string // String "dd/MM/yyyy" for the nested Firebase key
+        const fechaActualArgentina = obtenerFechaArgentinaRobusta()
+        let fechaConsulta: Date
 
         if (parametroFecha) {
-            // Use date-fns parse and format directly for consistency with client
-            fechaConsulta = parse(parametroFecha, "yyyy-MM-dd", new Date())
-            fechaDisplayConsulta = format(fechaConsulta, "dd/MM/yyyy", { locale: es })
-            console.log(
-                `📅 FECHA PARSEADA (GET): ${parametroFecha} → ${fechaDisplayConsulta} (${fechaConsulta.toISOString()})`,
-            )
+            // 🔥 USAR FUNCIÓN ROBUSTA PARA PARSEAR FECHA
+            fechaConsulta = parsearFechaConsulta(parametroFecha)
+            console.log(`📅 FECHA PARSEADA: ${parametroFecha} → ${fechaConsulta.toISOString()}`)
         } else {
-            // If no date param, use today's date in Argentina
-            fechaConsulta = startOfDay(fechaActualArgentina) // Ensure it's start of day for consistency
-            fechaDisplayConsulta = format(fechaConsulta, "dd/MM/yyyy", { locale: es })
-            console.log(`📅 FECHA ACTUAL (GET): ${fechaDisplayConsulta} (${fechaConsulta.toISOString()})`)
+            fechaConsulta = startOfDay(fechaActualArgentina)
+            console.log(`📅 FECHA ACTUAL: ${fechaConsulta.toISOString()}`)
         }
 
-        const fechaKeyFirebase = format(fechaConsulta, "yyyy-MM-dd") // Document ID (yyyy-MM-dd)
+        // Asegurar que fechaDisplayConsulta se derive consistentemente de fechaConsulta
+        const fechaDisplayConsulta = format(fechaConsulta, "dd/MM/yyyy", { locale: es })
+        const fechaKeyFirebase = format(fechaConsulta, "yyyy-MM-dd") // Key para el documento principal
+
+        // 🔥 COMPARACIÓN ROBUSTA DE FECHAS
+        const fechaHoyKey = formatearFechaArgentina(startOfDay(fechaActualArgentina), "yyyy-MM-dd")
+        const esHoyEnArgentina = fechaKeyFirebase === fechaHoyKey
 
         console.log(`📅 KEY FIREBASE CONSULTA: ${fechaKeyFirebase}`)
-        const fechaHoyKey = format(startOfDay(fechaActualArgentina), "yyyy-MM-dd")
-        const esHoyEnArgentina = fechaKeyFirebase === fechaHoyKey
         console.log(`📅 KEY FIREBASE HOY: ${fechaHoyKey}`)
+        console.log(`📅 FECHA DISPLAY: ${fechaDisplayConsulta}`)
         console.log(`📅 ES HOY: ${esHoyEnArgentina}`)
 
         let extractosFromFirebase: Extracto[] = []
-        console.log(`📂 Consultando Firebase: extractos/${fechaKeyFirebase}`)
+        console.log(`📂 Consultando Firebase: ${fechaKeyFirebase}`)
         const docRef = doc(db, "extractos", fechaKeyFirebase)
         const docSnap = await getDoc(docRef)
 
@@ -1076,31 +978,34 @@ export async function GET(request: Request) {
 
             let resultadosData: ResultadoDia | null = null
 
-            // 🔥 CRÍTICO: Buscar directamente con la fechaDisplayConsulta generada consistentemente
+            // Buscar por la clave de fecha exacta (dd/MM/yyyy)
             if (data[fechaDisplayConsulta]) {
                 resultadosData = data[fechaDisplayConsulta] as ResultadoDia
                 console.log(`✅ Encontrado con clave de fecha exacta: ${fechaDisplayConsulta}`)
             } else {
-                // Fallback: if exact match not found, try to find the closest date (original logic)
+                // Si no se encuentra con la clave exacta, buscar cualquier clave que parezca una fecha dd/MM/yyyy
                 const fechasEncontradas = Object.keys(data).filter((key) => key.includes("/"))
-                console.log(`🔍 Clave exacta no encontrada. Fechas encontradas en documento:`, fechasEncontradas)
+                console.log(`🔍 Fechas encontradas en documento (buscando dd/MM/yyyy):`, fechasEncontradas)
+
                 if (fechasEncontradas.length > 0) {
-                    let fechaMasCercana = fechasEncontradas[0]
+                    // Si hay múltiples, intentar encontrar la más cercana a la fecha de consulta
+                    let fechaMasCercanaKey = fechasEncontradas[0]
                     let menorDiferencia = Number.MAX_SAFE_INTEGER
-                    for (const fechaEncontrada of fechasEncontradas) {
+
+                    for (const fechaEncontradaKey of fechasEncontradas) {
                         try {
-                            const fechaEncontradaObj = parse(fechaEncontrada, "dd/MM/yyyy", new Date())
+                            const fechaEncontradaObj = parse(fechaEncontradaKey, "dd/MM/yyyy", new Date())
                             const diferencia = Math.abs(fechaEncontradaObj.getTime() - fechaConsulta.getTime())
                             if (diferencia < menorDiferencia) {
                                 menorDiferencia = diferencia
-                                fechaMasCercana = fechaEncontrada
+                                fechaMasCercanaKey = fechaEncontradaKey
                             }
                         } catch (error) {
-                            console.log(`⚠️ Error parseando fecha ${fechaEncontrada}:`, error)
+                            console.log(`⚠️ Error parseando fecha ${fechaEncontradaKey}:`, error)
                         }
                     }
-                    resultadosData = data[fechaMasCercana] as ResultadoDia
-                    console.log(`✅ Usando clave de fecha más cercana: ${fechaMasCercana}`)
+                    resultadosData = data[fechaMasCercanaKey] as ResultadoDia
+                    console.log(`✅ Usando clave de fecha más cercana: ${fechaMasCercanaKey}`)
                 }
             }
 
@@ -1116,7 +1021,7 @@ export async function GET(request: Request) {
                         sorteo: turno,
                         loteria: resultado.loteria,
                         provincia: resultado.provincia,
-                        numeros: numeros as string[],
+                        numeros: numeros as string[], // <--- FIX: Cast 'numeros' to string[]
                         pizarraLink: URLS_PIZARRAS[resultado.provincia as keyof typeof URLS_PIZARRAS] || "",
                         necesita: "No",
                         confirmado: "No",
@@ -1130,20 +1035,23 @@ export async function GET(request: Request) {
             console.log(`❌ No existe documento para ${fechaKeyFirebase} en Firebase`)
         }
 
-        let finalResults: Extracto[] = [...extractosFromFirebase]
+        let finalResults: Extracto[] = [...extractosFromFirebase] // Empezar con los resultados de Firebase
         const resultsMap = new Map<string, Extracto>(finalResults.map((r) => [r.id, r]))
 
+        // Si es hoy o se fuerza, hacer scraping y MERGEAR con los resultados de Firebase
         if (forceRefresh || esHoyEnArgentina) {
             console.log(forceRefresh ? "🔄 FORZANDO ACTUALIZACIÓN (Scraping)" : "📅 CONSULTANDO HOY (Scraping)")
-            const scrapedResults = await obtenerResultadosConfiables()
+            const scrapedResults = await obtenerResultadosConfiables() // Esto realiza el scraping
             console.log(`📤 ${scrapedResults.length} resultados de scraping obtenidos`)
 
+            // Fusionar los resultados del scraping en el mapa, sobrescribiendo si el ID ya existe
             for (const scraped of scrapedResults) {
                 resultsMap.set(scraped.id, scraped)
             }
             finalResults = Array.from(resultsMap.values())
             console.log(`✅ Resultados finales después de la fusión con scraping: ${finalResults.length}`)
 
+            // 🔥 NUEVA LÓGICA: Guardar los resultados finales en Firebase
             if (finalResults.length > 0) {
                 const resultadosAgrupadosPorProvincia = new Map<string, Resultado>()
                 for (const extracto of finalResults) {
@@ -1158,15 +1066,19 @@ export async function GET(request: Request) {
                     }
                     provinciaResultado.sorteos[extracto.sorteo] = extracto.numeros
                 }
+
                 const resultadosParaGuardar: Resultado[] = Array.from(resultadosAgrupadosPorProvincia.values())
+
                 const dataToSave: ResultadoDia = {
-                    fecha: fechaDisplayConsulta, // Use the consistently generated dd/MM/yyyy string
+                    fecha: fechaDisplayConsulta, // "dd/MM/yyyy"
                     dia: formatearFechaArgentina(fechaConsulta, "EEEE").replace(/^\w/, (c) => c.toUpperCase()),
                     resultados: resultadosParaGuardar,
                 }
+
+                // Guardar en Firebase, usando la fecha de visualización como clave anidada
                 const docRefToSave = doc(db, "extractos", fechaKeyFirebase)
                 const dataObjectForFirebase = {
-                    [fechaDisplayConsulta]: dataToSave, // Use the consistently generated dd/MM/yyyy string as nested key
+                    [fechaDisplayConsulta]: dataToSave,
                 }
                 await setDoc(docRefToSave, dataObjectForFirebase, { merge: true })
                 console.log(
@@ -1189,7 +1101,7 @@ export async function GET(request: Request) {
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS", // Added DELETE
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
     Pragma: "no-cache",
@@ -1206,20 +1118,20 @@ export async function OPTIONS() {
 export async function POST(request: Request) {
     console.log("📝 Actualización manual")
     try {
-        const { provincia, turno, fecha, numeros } = await request.json() // 'fecha' is "dd/MM/yyyy" from client
-        console.log(`📝 POST request received for provincia: ${provincia}, turno: ${turno}, fecha: ${fecha}`)
+        const { provincia, turno, fecha, numeros } = await request.json()
 
         if (!provincia || !turno || !fecha || !numeros || !Array.isArray(numeros) || numeros.length !== 20) {
             throw new Error("Datos incompletos o inválidos")
         }
 
-        // Parse the "dd/MM/yyyy" string to a Date object to get the yyyy-MM-dd for the document ID
+        // 🔥 USAR FUNCIONES ROBUSTAS PARA FECHAS
         const fechaObj = parse(fecha, "dd/MM/yyyy", new Date())
-        const fechaKeyFirebase = format(fechaObj, "yyyy-MM-dd") // Document ID (yyyy-MM-dd)
-        const nombreDia = format(fechaObj, "EEEE", { locale: es }).replace(/^\w/, (c) => c.toUpperCase())
+        const fechaArgentina = toZonedTime(fechaObj, "America/Argentina/Buenos_Aires")
+        const fechaKeyFirebase = formatearFechaArgentina(fechaArgentina, "yyyy-MM-dd")
+        const nombreDia = formatearFechaArgentina(fechaArgentina, "EEEE").replace(/^\w/, (c) => c.toUpperCase())
 
-        console.log(`📅 POST - Fecha recibida (dd/MM/yyyy): ${fecha}`)
-        console.log(`📅 POST - Key Firebase (yyyy-MM-dd): ${fechaKeyFirebase}`)
+        console.log(`📅 POST - Fecha recibida: ${fecha}`)
+        console.log(`📅 POST - Key Firebase: ${fechaKeyFirebase}`)
         console.log(`📅 POST - Nombre día: ${nombreDia}`)
 
         const docRef = doc(db, "extractos", fechaKeyFirebase)
@@ -1227,53 +1139,60 @@ export async function POST(request: Request) {
 
         let datosDia: ResultadoDia
 
+        // 🔥 LECTURA CORREGIDA: Buscar en estructura anidada
         if (docSnap.exists()) {
             const data = docSnap.data()
-            // Use the exact 'fecha' string received from the client as the nested key
             if (data[fecha]) {
+                // Estructura anidada por fecha
                 datosDia = data[fecha] as ResultadoDia
-                console.log(`📋 POST - Datos existentes encontrados para clave anidada ${fecha}`)
+                console.log(`📋 POST - Datos existentes encontrados para ${fecha}`)
             } else {
-                // If the exact nested key doesn't exist, initialize a new structure for this date
+                // Crear nueva estructura si la clave de fecha no existe dentro del documento
                 datosDia = {
-                    fecha: fecha, // Use the exact 'fecha' string from client
+                    fecha: fecha,
                     dia: nombreDia,
                     resultados: [],
                 }
-                console.log(`📋 POST - Creando nueva estructura anidada para clave ${fecha}`)
+                console.log(`📋 POST - Creando nueva estructura para ${fecha} dentro del documento existente`)
             }
         } else {
-            // If the document itself doesn't exist, create a new one with the nested structure
             datosDia = {
-                fecha: fecha, // Use the exact 'fecha' string from client
+                fecha: fecha,
                 dia: nombreDia,
                 resultados: [],
             }
-            console.log(`📋 POST - Creando documento nuevo para ${fechaKeyFirebase} con clave anidada ${fecha}`)
+            console.log(`📋 POST - Creando documento nuevo para ${fechaKeyFirebase}`)
         }
 
+        // Buscar si ya existe la provincia
         let provinciaResultado = datosDia.resultados.find((r) => r.provincia === provincia)
+
         if (!provinciaResultado) {
+            // Si no existe la provincia, crearla
             provinciaResultado = {
                 loteria: provincia === "NACION" ? "Nacional" : provincia === "PROVINCIA" ? "Provincial" : provincia,
                 provincia: provincia,
                 sorteos: {},
             }
             datosDia.resultados.push(provinciaResultado)
-            console.log(`📋 POST - Provincia ${provincia} creada en resultados del día`)
+            console.log(`📋 POST - Provincia ${provincia} creada`)
         }
 
+        // 🔥 CRÍTICO: PRESERVAR TODOS LOS SORTEOS EXISTENTES DE LA PROVINCIA
+        // Solo actualizar el turno específico, mantener los demás
         provinciaResultado.sorteos[turno] = numeros
         console.log(
             `✅ Guardando ${provincia} - ${turno}. Sorteos totales de ${provincia}:`,
             Object.keys(provinciaResultado.sorteos),
         )
 
+        // 🔥 GUARDADO CORREGIDO: Mantener estructura anidada por fecha siempre
         const dataParaGuardar = {
-            [fecha]: datosDia, // Use the exact 'fecha' string from client as the nested key
+            [fecha]: datosDia,
         }
+
         await setDoc(docRef, dataParaGuardar, { merge: true })
-        console.log(`✅ Manual: ${provincia} - ${turno} guardado en Firebase bajo ${fechaKeyFirebase}/${fecha}`)
+        console.log(`✅ Manual: ${provincia} - ${turno}`)
 
         return NextResponse.json({ success: true, message: "Actualizado manualmente" }, { headers: corsHeaders })
     } catch (error) {
@@ -1285,6 +1204,140 @@ export async function POST(request: Request) {
             },
             { status: 500, headers: corsHeaders },
         )
+    }
+}
+
+export async function DELETE(request: Request) {
+    console.log("🗑️ Iniciando eliminación de extractos")
+    try {
+        const { fecha, extractoIds } = await request.json()
+
+        if (!fecha || !extractoIds || !Array.isArray(extractoIds) || extractoIds.length === 0) {
+            throw new Error("Datos incompletos o inválidos para la eliminación.")
+        }
+
+        console.log(`🗑️ Solicitud de eliminación para fecha: ${fecha}, IDs: ${extractoIds.join(", ")}`)
+
+        // Parsear la fecha recibida del frontend (dd/MM/yyyy) para obtener la clave del documento (yyyy-MM-dd)
+        const fechaObj = parse(fecha, "dd/MM/yyyy", new Date())
+        const fechaKeyFirebase = format(fechaObj, "yyyy-MM-dd")
+
+        const docRef = doc(db, "extractos", fechaKeyFirebase)
+        const docSnap = await getDoc(docRef)
+
+        if (!docSnap.exists()) {
+            console.log(`⚠️ Documento no encontrado para la fecha ${fechaKeyFirebase}. No hay nada que eliminar.`)
+            return NextResponse.json({ success: true, message: "No hay extractos para eliminar." }, { headers: corsHeaders })
+        }
+
+        const data = docSnap.data()
+        const datosDia = data[fecha] as ResultadoDia // Acceder a la estructura anidada por la fecha dd/MM/yyyy
+
+        if (!datosDia || !datosDia.resultados) {
+            console.log(`⚠️ No se encontraron resultados para la fecha ${fecha} dentro del documento.`)
+            return NextResponse.json(
+                { success: true, message: "No hay extractos para eliminar en esta fecha." },
+                { status: 200, headers: corsHeaders },
+            )
+        }
+
+        console.log(
+            `📊 Resultados actuales antes de filtrar (${datosDia.resultados.length} provincias):`,
+            datosDia.resultados.map((r) => r.provincia),
+        )
+
+        // Filtrar los resultados para eliminar los extractos con los IDs proporcionados
+        const nuevosResultados = datosDia.resultados
+            .map((provinciaResultado) => {
+                const nuevosSorteos: { [key: string]: string[] } = {}
+                for (const turno in provinciaResultado.sorteos) {
+                    const extractoId = `${provinciaResultado.provincia}-${turno}-${fecha}`
+                    if (!extractoIds.includes(extractoId)) {
+                        nuevosSorteos[turno] = provinciaResultado.sorteos[turno]
+                    } else {
+                        console.log(`🗑️ Eliminando extracto: ${extractoId}`)
+                    }
+                }
+                return { ...provinciaResultado, sorteos: nuevosSorteos }
+            })
+            .filter((provinciaResultado) => Object.keys(provinciaResultado.sorteos).length > 0) // Eliminar provincias sin sorteos
+
+        console.log(
+            `📊 Resultados después de filtrar (${nuevosResultados.length} provincias):`,
+            nuevosResultados.map((r) => r.provincia),
+        )
+
+        // Actualizar el documento en Firebase
+        const dataToUpdate = {
+            [fecha]: {
+                ...datosDia,
+                resultados: nuevosResultados,
+            },
+        }
+
+        await updateDoc(docRef, dataToUpdate)
+        console.log(
+            `✅ Extractos eliminados y documento de Firebase actualizado para ${fechaKeyFirebase} bajo la clave ${fecha}.`,
+        )
+
+        return NextResponse.json({ success: true, message: "Extractos eliminados exitosamente." }, { headers: corsHeaders })
+    } catch (error) {
+        console.error("❌ Error en DELETE:", error)
+        return NextResponse.json(
+            {
+                error: "Error al eliminar extractos",
+                detalles: error instanceof Error ? error.message : "Error desconocido",
+            },
+            { status: 500, headers: corsHeaders },
+        )
+    }
+}
+
+async function obtenerResultadoEspecifico(provinciaKey: string, turno: string): Promise<string[] | null> {
+    try {
+        const pizarraUrl = URLS_PIZARRAS[provinciaKey as keyof typeof URLS_PIZARRAS]
+        if (!pizarraUrl) {
+            console.error(`❌ URL no encontrada para la provincia: ${provinciaKey}`)
+            return null
+        }
+
+        console.log(`🔥 Obteniendo resultados para ${provinciaKey} - ${turno} desde ${pizarraUrl}`)
+        const respuesta = await obtenerConTiempoLimite(pizarraUrl)
+        if (!respuesta.ok) {
+            console.error(`❌ Error al obtener la pizarra para ${provinciaKey}: ${respuesta.status}`)
+            return null
+        }
+
+        const html = await respuesta.text()
+        const $ = cheerio.load(html)
+
+        let numeros: string[] = []
+
+        // Lógica específica para cada provincia
+        switch (provinciaKey) {
+            case "NEUQUEN":
+                numeros = extraerNumerosNeuquen($, turno)
+                break
+            case "MISIONES":
+                numeros = extraerNumerosMisiones($, turno)
+                break
+            default:
+                // Lógica general (ultra específica) para el resto
+                numeros = extraerNumerosUltraEspecificos($, turno, provinciaKey)
+                break
+        }
+
+        // Validar los resultados obtenidos
+        if (validarResultadosUltraEstricto(numeros, provinciaKey, turno)) {
+            console.log(`✅ Resultados validados para ${provinciaKey} - ${turno}`)
+            return reordenarNumeros(numeros)
+        } else {
+            console.warn(`⚠️ Resultados NO VALIDADOS para ${provinciaKey} - ${turno}`)
+            return null
+        }
+    } catch (error) {
+        console.error(`❌ Error en obtenerResultadoEspecifico para ${provinciaKey} - ${turno}:`, error)
+        return null
     }
 }
 
