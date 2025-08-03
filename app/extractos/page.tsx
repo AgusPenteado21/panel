@@ -36,15 +36,15 @@ import { Label } from "@/components/ui/label"
 
 interface Extracto {
     id: string
-    fecha: string
+    fecha: string // "dd/MM/yyyy"
     dia: string
-    sorteo: string
+    sorteo: string // "Previa", "Primera", etc.
     loteria: string
     numeros: string[]
     pizarraLink: string
     necesita: string
     confirmado: string
-    provincia?: string
+    provincia?: string // "NACION", "PROVINCIA", etc.
 }
 
 interface ProvinciaData {
@@ -264,16 +264,20 @@ export default function ExtractosPage() {
     })
     const [isSavingGenericLoteria, setIsSavingGenericLoteria] = useState(false)
 
+    const [manualInput, setManualInput] = useState<{ [key: string]: string[] }>({})
+    const [saving, setSaving] = useState(false)
+    const [saveMessage, setSaveMessage] = useState<string | null>(null)
+
     const fetchExtractos = useCallback(
-        async (date: Date) => {
-            console.log(`Fetching extractos for date: ${date.toISOString()}`)
+        async (date: Date | string, forceRefresh = false) => {
+            setIsLoading(true)
+            setError(null)
+            setSaveMessage(null)
+            setDebugInfo("Iniciando fetchExtractos")
             try {
-                setIsLoading(true)
-                setError(null)
-                setDebugInfo("Iniciando fetchExtractos")
-                const dateParam = format(date, "yyyy-MM-dd")
+                const dateParam = typeof date === "string" ? date : format(date, "yyyy-MM-dd")
                 const hoy = new Date()
-                const esHoy = format(date, "yyyy-MM-dd") === format(hoy, "yyyy-MM-dd")
+                const esHoy = format(hoy, "yyyy-MM-dd") === dateParam
                 // Usar RAILWAY_STATIC_URL si está disponible, sino usar ruta relativa
                 const baseUrl = process.env.RAILWAY_STATIC_URL || ""
                 let apiUrl = `${baseUrl}/api/extractos?date=${dateParam}`
@@ -309,6 +313,14 @@ export default function ExtractosPage() {
                         const fechaRecibida = extractosConCamposAdicionales[0].fecha
                         setDebugInfo((prev) => prev + `\nFecha recibida en los datos: ${fechaRecibida}`)
                     }
+
+                    // Initialize manual input state
+                    const initialManualInput: { [key: string]: string[] } = {}
+                    extractosConCamposAdicionales.forEach((ext) => {
+                        const key = `${ext.provincia}-${ext.sorteo}-${ext.fecha}`
+                        initialManualInput[key] = ext.numeros || Array(20).fill("----")
+                    })
+                    setManualInput(initialManualInput)
                 } else {
                     setError("No se encontraron extractos para la fecha seleccionada.")
                     setDebugInfo((prev) => prev + "\nNo se encontraron extractos")
@@ -926,7 +938,7 @@ export default function ExtractosPage() {
         }
     }
 
-    const handleDateSelect = (newDate: Date | undefined) => {
+    const handleDateChange = (newDate: Date | undefined) => {
         if (newDate) {
             const today = startOfDay(new Date())
             if (isFuture(newDate)) {
@@ -1235,6 +1247,12 @@ export default function ExtractosPage() {
         }
     }
 
+    const getLotteryDisplayName = (provincia: string, loteria: string) => {
+        if (provincia === "NACION") return "Nacional"
+        if (provincia === "PROVINCIA") return "Provincial"
+        return loteria
+    }
+
     useEffect(() => {
         fetchExtractos(selectedDate)
     }, [fetchExtractos, selectedDate])
@@ -1276,7 +1294,7 @@ export default function ExtractosPage() {
                                         <Calendar
                                             mode="single"
                                             selected={selectedDate}
-                                            onSelect={handleDateSelect}
+                                            onSelect={handleDateChange}
                                             initialFocus
                                             disabled={(date) => isFuture(date)}
                                             className="rounded-md"

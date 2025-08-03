@@ -4,7 +4,7 @@ import { parse, format, startOfDay, isAfter } from "date-fns"
 import { toZonedTime } from "date-fns-tz"
 import { es } from "date-fns/locale"
 import { db } from "@/lib/firebase"
-import { doc, setDoc, getDoc, updateDoc } from "firebase/firestore"
+import { doc, setDoc, getDoc } from "firebase/firestore"
 
 // Interfaces y tipos
 interface ResultadoDia {
@@ -871,11 +871,9 @@ async function obtenerResultadosConfiables(): Promise<Extracto[]> {
                 turnosParaProvincia = ["Primera", "Matutina", "Vespertina", "Nocturna"]
             }
         } else if (provinciaKey === "JUJUY") {
-            if (diaSemana === 0) {
-                turnosParaProvincia = ["Primera", "Matutina"]
-            } else {
-                turnosParaProvincia = allTurnos
-            }
+            // Deshabilitar scraping para Jujuy completamente, siempre será entrada manual
+            turnosParaProvincia = []
+            console.log(`🚫 OMITIENDO SCRAPING COMPLETO: ${provinciaKey} (Siempre entrada manual)`)
         } else {
             if (diaSemana === 0) {
                 turnosParaProvincia = []
@@ -909,7 +907,8 @@ async function obtenerResultadosConfiables(): Promise<Extracto[]> {
                         fecha: fechaDisplay,
                         dia: nombreDia,
                         sorteo: turno,
-                        loteria: provinciaKey === "NACION" ? "Nacional" : provinciaKey === "PROVINCIA" ? "Provincial" : provinciaKey,
+                        loteria:
+                            provinciaKey === "NACION" ? "Nacional" : provinciaKey === "PROVINCIA" ? "Provincial" : provinciaKey,
                         provincia: provinciaKey,
                         numeros: numeros,
                         pizarraLink: URLS_PIZARRAS[provinciaKey as keyof typeof URLS_PIZARRAS] || "",
@@ -1116,22 +1115,26 @@ export async function OPTIONS() {
 }
 
 export async function POST(request: Request) {
-    console.log("📝 Actualización manual")
+    console.log("📝 Iniciando actualización manual (POST)")
     try {
         const { provincia, turno, fecha, numeros } = await request.json()
 
+        console.log(
+            `📥 POST - Datos recibidos: Provincia=${provincia}, Turno=${turno}, Fecha=${fecha}, Numeros.length=${numeros.length}`,
+        )
+
         if (!provincia || !turno || !fecha || !numeros || !Array.isArray(numeros) || numeros.length !== 20) {
+            console.error("❌ POST - Datos incompletos o inválidos recibidos.")
             throw new Error("Datos incompletos o inválidos")
         }
 
-        // 🔥 USAR FUNCIONES ROBUSTAS PARA FECHAS
         const fechaObj = parse(fecha, "dd/MM/yyyy", new Date())
         const fechaArgentina = toZonedTime(fechaObj, "America/Argentina/Buenos_Aires")
         const fechaKeyFirebase = formatearFechaArgentina(fechaArgentina, "yyyy-MM-dd")
         const nombreDia = formatearFechaArgentina(fechaArgentina, "EEEE").replace(/^\w/, (c) => c.toUpperCase())
 
         console.log(`📅 POST - Fecha recibida: ${fecha}`)
-        console.log(`📅 POST - Key Firebase: ${fechaKeyFirebase}`)
+        console.log(`📅 POST - Key Firebase (document ID): ${fechaKeyFirebase}`)
         console.log(`📅 POST - Nombre día: ${nombreDia}`)
 
         const docRef = doc(db, "extractos", fechaKeyFirebase)
@@ -1139,21 +1142,19 @@ export async function POST(request: Request) {
 
         let datosDia: ResultadoDia
 
-        // 🔥 LECTURA CORREGIDA: Buscar en estructura anidada
         if (docSnap.exists()) {
             const data = docSnap.data()
+            console.log(`📋 POST - Documento Firebase existe para ${fechaKeyFirebase}. Data keys: ${Object.keys(data)}`)
             if (data[fecha]) {
-                // Estructura anidada por fecha
                 datosDia = data[fecha] as ResultadoDia
-                console.log(`📋 POST - Datos existentes encontrados para ${fecha}`)
+                console.log(`📋 POST - Estructura anidada para fecha ${fecha} encontrada.`)
             } else {
-                // Crear nueva estructura si la clave de fecha no existe dentro del documento
                 datosDia = {
                     fecha: fecha,
                     dia: nombreDia,
                     resultados: [],
                 }
-                console.log(`📋 POST - Creando nueva estructura para ${fecha} dentro del documento existente`)
+                console.log(`📋 POST - Creando nueva estructura para fecha ${fecha} dentro del documento existente.`)
             }
         } else {
             datosDia = {
@@ -1161,131 +1162,46 @@ export async function POST(request: Request) {
                 dia: nombreDia,
                 resultados: [],
             }
-            console.log(`📋 POST - Creando documento nuevo para ${fechaKeyFirebase}`)
+            console.log(`📋 POST - Documento no existe. Creando nuevo documento para ${fechaKeyFirebase}.`)
         }
 
-        // Buscar si ya existe la provincia
         let provinciaResultado = datosDia.resultados.find((r) => r.provincia === provincia)
 
         if (!provinciaResultado) {
-            // Si no existe la provincia, crearla
             provinciaResultado = {
                 loteria: provincia === "NACION" ? "Nacional" : provincia === "PROVINCIA" ? "Provincial" : provincia,
                 provincia: provincia,
                 sorteos: {},
             }
             datosDia.resultados.push(provinciaResultado)
-            console.log(`📋 POST - Provincia ${provincia} creada`)
+            console.log(`📋 POST - Provincia ${provincia} no encontrada, agregando nueva provincia.`)
+        } else {
+            console.log(`📋 POST - Provincia ${provincia} encontrada, actualizando sorteos.`)
         }
 
-        // 🔥 CRÍTICO: PRESERVAR TODOS LOS SORTEOS EXISTENTES DE LA PROVINCIA
-        // Solo actualizar el turno específico, mantener los demás
         provinciaResultado.sorteos[turno] = numeros
         console.log(
-            `✅ Guardando ${provincia} - ${turno}. Sorteos totales de ${provincia}:`,
+            `✅ POST - Sorteo ${turno} de ${provincia} actualizado. Sorteos actuales para ${provincia}:`,
             Object.keys(provinciaResultado.sorteos),
         )
 
-        // 🔥 GUARDADO CORREGIDO: Mantener estructura anidada por fecha siempre
         const dataParaGuardar = {
             [fecha]: datosDia,
         }
+        console.log(
+            `💾 POST - Datos a guardar en Firebase para ${fechaKeyFirebase} bajo clave ${fecha}:`,
+            JSON.stringify(dataParaGuardar).substring(0, 500) + "...",
+        )
 
         await setDoc(docRef, dataParaGuardar, { merge: true })
-        console.log(`✅ Manual: ${provincia} - ${turno}`)
+        console.log(`✅ POST - Operación setDoc completada exitosamente para ${provincia} - ${turno}.`)
 
         return NextResponse.json({ success: true, message: "Actualizado manualmente" }, { headers: corsHeaders })
     } catch (error) {
-        console.error("❌ Error manual:", error)
+        console.error("❌ POST - Error en la actualización manual:", error)
         return NextResponse.json(
             {
                 error: "Error al actualizar",
-                detalles: error instanceof Error ? error.message : "Error desconocido",
-            },
-            { status: 500, headers: corsHeaders },
-        )
-    }
-}
-
-export async function DELETE(request: Request) {
-    console.log("🗑️ Iniciando eliminación de extractos")
-    try {
-        const { fecha, extractoIds } = await request.json()
-
-        if (!fecha || !extractoIds || !Array.isArray(extractoIds) || extractoIds.length === 0) {
-            throw new Error("Datos incompletos o inválidos para la eliminación.")
-        }
-
-        console.log(`🗑️ Solicitud de eliminación para fecha: ${fecha}, IDs: ${extractoIds.join(", ")}`)
-
-        // Parsear la fecha recibida del frontend (dd/MM/yyyy) para obtener la clave del documento (yyyy-MM-dd)
-        const fechaObj = parse(fecha, "dd/MM/yyyy", new Date())
-        const fechaKeyFirebase = format(fechaObj, "yyyy-MM-dd")
-
-        const docRef = doc(db, "extractos", fechaKeyFirebase)
-        const docSnap = await getDoc(docRef)
-
-        if (!docSnap.exists()) {
-            console.log(`⚠️ Documento no encontrado para la fecha ${fechaKeyFirebase}. No hay nada que eliminar.`)
-            return NextResponse.json({ success: true, message: "No hay extractos para eliminar." }, { headers: corsHeaders })
-        }
-
-        const data = docSnap.data()
-        const datosDia = data[fecha] as ResultadoDia // Acceder a la estructura anidada por la fecha dd/MM/yyyy
-
-        if (!datosDia || !datosDia.resultados) {
-            console.log(`⚠️ No se encontraron resultados para la fecha ${fecha} dentro del documento.`)
-            return NextResponse.json(
-                { success: true, message: "No hay extractos para eliminar en esta fecha." },
-                { status: 200, headers: corsHeaders },
-            )
-        }
-
-        console.log(
-            `📊 Resultados actuales antes de filtrar (${datosDia.resultados.length} provincias):`,
-            datosDia.resultados.map((r) => r.provincia),
-        )
-
-        // Filtrar los resultados para eliminar los extractos con los IDs proporcionados
-        const nuevosResultados = datosDia.resultados
-            .map((provinciaResultado) => {
-                const nuevosSorteos: { [key: string]: string[] } = {}
-                for (const turno in provinciaResultado.sorteos) {
-                    const extractoId = `${provinciaResultado.provincia}-${turno}-${fecha}`
-                    if (!extractoIds.includes(extractoId)) {
-                        nuevosSorteos[turno] = provinciaResultado.sorteos[turno]
-                    } else {
-                        console.log(`🗑️ Eliminando extracto: ${extractoId}`)
-                    }
-                }
-                return { ...provinciaResultado, sorteos: nuevosSorteos }
-            })
-            .filter((provinciaResultado) => Object.keys(provinciaResultado.sorteos).length > 0) // Eliminar provincias sin sorteos
-
-        console.log(
-            `📊 Resultados después de filtrar (${nuevosResultados.length} provincias):`,
-            nuevosResultados.map((r) => r.provincia),
-        )
-
-        // Actualizar el documento en Firebase
-        const dataToUpdate = {
-            [fecha]: {
-                ...datosDia,
-                resultados: nuevosResultados,
-            },
-        }
-
-        await updateDoc(docRef, dataToUpdate)
-        console.log(
-            `✅ Extractos eliminados y documento de Firebase actualizado para ${fechaKeyFirebase} bajo la clave ${fecha}.`,
-        )
-
-        return NextResponse.json({ success: true, message: "Extractos eliminados exitosamente." }, { headers: corsHeaders })
-    } catch (error) {
-        console.error("❌ Error en DELETE:", error)
-        return NextResponse.json(
-            {
-                error: "Error al eliminar extractos",
                 detalles: error instanceof Error ? error.message : "Error desconocido",
             },
             { status: 500, headers: corsHeaders },
