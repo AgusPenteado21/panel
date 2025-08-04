@@ -161,6 +161,7 @@ const configurarListenerPagosCobros = (
 ): (() => void)[] => {
     const pagosRef = collection(db, "pagos")
     const cobrosRef = collection(db, "cobros")
+
     const pagosQuery = query(pagosRef, where("pasadorId", "==", pasadorId), where("fecha", "==", fechaString))
     const cobrosQuery = query(cobrosRef, where("pasadorId", "==", pasadorId), where("fecha", "==", fechaString))
 
@@ -432,24 +433,11 @@ export default function ListadoDiario() {
                             }
                         })
 
-                        // ✅ OBTENER PREMIO TOTAL DE 'aciertos_calculados' O CALCULARLO
-                        let premioTotalCalculado = 0.0
-                        const aciertosCalculadosDocRef = doc(db, "aciertos_calculados", `${pasador.nombre}_${fechaString}`)
-                        const aciertosCalculadosSnapshot = await getDoc(aciertosCalculadosDocRef)
-
-                        if (aciertosCalculadosSnapshot.exists()) {
-                            const data = aciertosCalculadosSnapshot.data()
-                            premioTotalCalculado = data.totalGanado || 0.0
-                            console.log(
-                                `✅ Premio total obtenido de aciertos_calculados para ${pasador.nombre}: ${premioTotalCalculado}`,
-                            )
-                        } else {
-                            // Si no existe en aciertos_calculados, calcular y guardar
-                            const aciertosCalculados = procesarJugadasYEncontrarAciertos(jugadasData, resultadosExtracto)
-                            premioTotalCalculado = calcularTotalGanado(aciertosCalculados)
-                            await guardarAciertosEnFirestore(pasador.nombre, aciertosCalculados, fecha)
-                            console.log(`⚠️ Premio total calculado y guardado para ${pasador.nombre}: ${premioTotalCalculado}`)
-                        }
+                        // ✅ SIEMPRE CALCULAR Y GUARDAR PREMIO TOTAL EN 'aciertos_calculados' PARA DATOS HISTÓRICOS
+                        const aciertosCalculados = procesarJugadasYEncontrarAciertos(jugadasData, resultadosExtracto)
+                        const premioTotalCalculado = calcularTotalGanado(aciertosCalculados)
+                        await guardarAciertosEnFirestore(pasador.nombre, aciertosCalculados, fecha)
+                        console.log(`⚠️ Premio total calculado y guardado para ${pasador.nombre}: ${premioTotalCalculado}`)
 
                         const comisionCalculada = (pasador.comisionPorcentaje / 100) * ventasOnlineAcumuladas
                         const saldosCalculados = calcularSaldos(
@@ -630,7 +618,6 @@ export default function ListadoDiario() {
             const fechaFirestore = format(fechaSeleccionada, "yyyy-MM-dd")
             const extractoDocRef = doc(db, "extractos", fechaFirestore)
             let resultadosExtracto: any[] = []
-
             const esHoy = format(fechaSeleccionada, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd")
 
             if (esHoy) {
@@ -677,6 +664,7 @@ export default function ListadoDiario() {
             const pasadoresRef = collection(db, "pasadores")
             const pasadoresSnapshot = await getDocs(pasadoresRef)
             const listaPasadores: Pasador[] = []
+
             for (const docSnapshot of pasadoresSnapshot.docs) {
                 const data = docSnapshot.data()
                 const saldoAnteriorReal = await obtenerSaldoAnterior(docSnapshot.id, fechaSeleccionada)
@@ -715,12 +703,13 @@ export default function ListadoDiario() {
                     posicionEnModulo: data.posicionEnModulo || 1,
                 })
             }
+
             listaPasadores.sort((a, b) => {
                 if (a.modulo !== b.modulo) return a.modulo - b.modulo
                 return a.posicionEnModulo - b.posicionEnModulo
             })
-            setPasadores(listaPasadores) // Set initial pasadores state
 
+            setPasadores(listaPasadores) // Set initial pasadores state
             const modulosUnicos = Array.from(new Set(listaPasadores.map((p) => p.modulo.toString()))).sort(
                 (a, b) => Number.parseInt(a) - Number.parseInt(b),
             )
@@ -823,6 +812,7 @@ export default function ListadoDiario() {
                     // Calculate aciertos
                     const aciertosCalculados = procesarJugadasYEncontrarAciertos(jugadasData, currentExtractosResults)
                     const premioTotalCalculado = calcularTotalGanado(aciertosCalculados)
+
                     // Guardar en la nueva colección 'aciertos_calculados'
                     await guardarAciertosEnFirestore(pasador.nombre, aciertosCalculados, fechaSeleccionada)
 

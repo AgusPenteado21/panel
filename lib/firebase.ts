@@ -1,3 +1,6 @@
+// Este es un archivo de configuración de Firebase de ejemplo.
+// DEBES REEMPLAZAR ESTO CON LA CONFIGURACIÓN REAL DE TU PROYECTO DE FIREBASE.
+
 import { initializeApp, getApp, type FirebaseApp } from "firebase/app"
 import { getAuth, type Auth } from "firebase/auth"
 import { getFirestore, type Firestore } from "firebase/firestore"
@@ -36,10 +39,10 @@ if (typeof window !== "undefined" && process.env.NODE_ENV !== "development") {
 }
 
 export { app, auth, db, analytics }
+
 export type FirebaseInstance = {
     app: FirebaseApp
     auth: Auth
     db: Firestore
     analytics: Analytics | null
 }
-
