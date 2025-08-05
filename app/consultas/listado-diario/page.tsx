@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { db } from "@/lib/firebase"
 import { collection, getDocs, doc, query, where, onSnapshot, setDoc, Timestamp, getDoc } from "firebase/firestore"
 import toast from "react-hot-toast"
+import { ScrollArea } from "@/components/ui/scroll-area" // Importar ScrollArea
 
 // INICIO DE LAS FUNCIONES MOVIDAS DE aciertos-utils.tsx
 import {
@@ -65,8 +66,6 @@ interface ExtractoData {
         // ... otros campos del extracto
     }
 }
-
-const ITEMS_POR_PAGINA = 15
 
 // Componente BotonSelectorFecha
 const BotonSelectorFecha = ({
@@ -352,7 +351,6 @@ export default function ListadoDiario() {
     const [pasadores, setPasadores] = useState<Pasador[]>([])
     const [modulos, setModulos] = useState<string[]>([])
     const [moduloSeleccionado, setModuloSeleccionado] = useState<string>("70")
-    const [paginaActual, setPaginaActual] = useState(1)
     const [estaCargando, setEstaCargando] = useState(false)
     const [estaCargandoAciertos, setEstaCargandoAciertos] = useState(false)
     const [fechaSeleccionada, setFechaSeleccionada] = useState<Date>(startOfDay(new Date()))
@@ -440,6 +438,7 @@ export default function ListadoDiario() {
                         console.log(`⚠️ Premio total calculado y guardado para ${pasador.nombre}: ${premioTotalCalculado}`)
 
                         const comisionCalculada = (pasador.comisionPorcentaje / 100) * ventasOnlineAcumuladas
+
                         const saldosCalculados = calcularSaldos(
                             pasador.saldoAnterior, // Saldo de cierre del día anterior
                             ventasOnlineAcumuladas,
@@ -522,6 +521,7 @@ export default function ListadoDiario() {
                     await guardarAciertosEnFirestore(pasador.nombre, aciertosCalculados, fechaSeleccionada)
 
                     const comisionCalculada = (pasador.comisionPorcentaje / 100) * ventasOnlineAcumuladas
+
                     const saldosCalculados = calcularSaldos(
                         pasador.saldoAnterior,
                         ventasOnlineAcumuladas,
@@ -664,7 +664,6 @@ export default function ListadoDiario() {
             const pasadoresRef = collection(db, "pasadores")
             const pasadoresSnapshot = await getDocs(pasadoresRef)
             const listaPasadores: Pasador[] = []
-
             for (const docSnapshot of pasadoresSnapshot.docs) {
                 const data = docSnapshot.data()
                 const saldoAnteriorReal = await obtenerSaldoAnterior(docSnapshot.id, fechaSeleccionada)
@@ -703,13 +702,12 @@ export default function ListadoDiario() {
                     posicionEnModulo: data.posicionEnModulo || 1,
                 })
             }
-
             listaPasadores.sort((a, b) => {
                 if (a.modulo !== b.modulo) return a.modulo - b.modulo
                 return a.posicionEnModulo - b.posicionEnModulo
             })
-
             setPasadores(listaPasadores) // Set initial pasadores state
+
             const modulosUnicos = Array.from(new Set(listaPasadores.map((p) => p.modulo.toString()))).sort(
                 (a, b) => Number.parseInt(a) - Number.parseInt(b),
             )
@@ -876,20 +874,32 @@ export default function ListadoDiario() {
         }).format(monto)
     }, [])
 
-    const pasadoresFiltrados = useMemo(
-        () => pasadores.filter((p) => p.modulo.toString() === moduloSeleccionado),
-        [pasadores, moduloSeleccionado],
-    )
+    const pasadoresFiltrados = useMemo(() => {
+        const filtered = pasadores.filter((p) => p.modulo.toString() === moduloSeleccionado)
+        return filtered.sort((a, b) => {
+            const aPlayed = a.jugado > 0
+            const bPlayed = b.jugado > 0
 
-    const totalPaginas = useMemo(
-        () => Math.ceil(pasadoresFiltrados.length / ITEMS_POR_PAGINA),
-        [pasadoresFiltrados.length],
-    )
+            // 1. Priorizar pasadores que jugaron (jugado > 0)
+            if (aPlayed && !bPlayed) return -1 // 'a' jugó, 'b' no, 'a' va primero
+            if (!aPlayed && bPlayed) return 1 // 'b' jugó, 'a' no, 'b' va primero
 
-    const pasadoresPaginados = useMemo(
-        () => pasadoresFiltrados.slice((paginaActual - 1) * ITEMS_POR_PAGINA, paginaActual * ITEMS_POR_PAGINA),
-        [pasadoresFiltrados, paginaActual],
-    )
+            // 2. Si ambos jugaron o ambos no jugaron, ordenar alfabéticamente por nombre
+            // Usamos localeCompare para un ordenamiento alfabético correcto con caracteres especiales
+            const nameComparison = a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" })
+            if (nameComparison !== 0) {
+                return nameComparison
+            }
+
+            // 3. Si los nombres son iguales (o como fallback), ordenar por módulo
+            if (a.modulo !== b.modulo) {
+                return a.modulo - b.modulo
+            }
+
+            // 4. Finalmente, ordenar por posición dentro del módulo
+            return a.posicionEnModulo - b.posicionEnModulo
+        })
+    }, [pasadores, moduloSeleccionado])
 
     const totalesModulo = useMemo(() => {
         return pasadoresFiltrados.reduce(
@@ -954,52 +964,52 @@ export default function ListadoDiario() {
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mt-4 p-3 bg-white rounded-lg border border-blue-200 text-center">
                         <div>
-                            <div className="text-xs text-gray-600">S. Anterior</div>
+                            <div className="text-sm text-gray-600">S. Anterior</div>
                             <div
-                                className={`font-bold text-sm ${totalesModulo.saldoAnterior >= 0 ? "text-blue-600" : "text-red-600"}`}
+                                className={`font-bold text-base ${totalesModulo.saldoAnterior >= 0 ? "text-blue-600" : "text-red-600"}`}
                             >
                                 {formatearMoneda(totalesModulo.saldoAnterior)}
                             </div>
                         </div>
                         <div>
-                            <div className="text-xs text-gray-600">S. Actual</div>
+                            <div className="text-sm text-gray-600">S. Actual</div>
                             <div
-                                className={`font-bold text-sm ${totalesModulo.saldoActual >= 0 ? "text-green-600" : "text-red-600"}`}
+                                className={`font-bold text-base ${totalesModulo.saldoActual >= 0 ? "text-green-600" : "text-red-600"}`}
                             >
                                 {formatearMoneda(totalesModulo.saldoActual)}
                             </div>
                         </div>
                         <div>
-                            <div className="text-xs text-gray-600">S. Total</div>
+                            <div className="text-sm text-gray-600">S. Total</div>
                             <div
-                                className={`font-bold text-sm ${totalesModulo.saldoTotal >= 0 ? "text-purple-600" : "text-red-600"}`}
+                                className={`font-bold text-base ${totalesModulo.saldoTotal >= 0 ? "text-purple-600" : "text-red-600"}`}
                             >
                                 {formatearMoneda(totalesModulo.saldoTotal)}
                             </div>
                         </div>
                         <div>
-                            <div className="text-xs text-gray-600">Jugado</div>
-                            <div className="font-bold text-sm text-indigo-600">{formatearMoneda(totalesModulo.jugado)}</div>
+                            <div className="text-sm text-gray-600">Jugado</div>
+                            <div className="font-bold text-base text-indigo-600">{formatearMoneda(totalesModulo.jugado)}</div>
                         </div>
                         <div>
-                            <div className="text-xs text-gray-600">Comisión</div>
-                            <div className="font-bold text-sm text-orange-600">{formatearMoneda(totalesModulo.comision)}</div>
+                            <div className="text-sm text-gray-600">Comisión</div>
+                            <div className="font-bold text-base text-orange-600">{formatearMoneda(totalesModulo.comision)}</div>
                         </div>
                         <div>
-                            <div className="text-xs text-gray-600">Premios</div>
-                            <div className="font-bold text-sm text-teal-600">{formatearMoneda(totalesModulo.premios)}</div>
+                            <div className="text-sm text-gray-600">Premios</div>
+                            <div className="font-bold text-base text-teal-600">{formatearMoneda(totalesModulo.premios)}</div>
                         </div>
                         <div>
-                            <div className="text-xs text-gray-600">Cobrado 🔒</div>
-                            <div className="font-bold text-sm text-green-600">{formatearMoneda(totalesModulo.cobrado)}</div>
+                            <div className="text-sm text-gray-600">Cobrado 🔒</div>
+                            <div className="font-bold text-base text-green-600">{formatearMoneda(totalesModulo.cobrado)}</div>
                         </div>
                         <div>
-                            <div className="text-xs text-gray-600">Pagado 🔒</div>
-                            <div className="font-bold text-sm text-red-600">{formatearMoneda(totalesModulo.pagado)}</div>
+                            <div className="text-sm text-gray-600">Pagado 🔒</div>
+                            <div className="font-bold text-base text-red-600">{formatearMoneda(totalesModulo.pagado)}</div>
                         </div>
                     </div>
                     <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
-                        <div className="text-xs text-green-800">
+                        <div className="text-sm text-green-800">
                             <p>
                                 <strong>🔒 PAGOS Y COBROS INMUTABLES:</strong>
                             </p>
@@ -1021,7 +1031,7 @@ export default function ListadoDiario() {
                         </div>
                     </div>
                 </div>
-                <div className="text-xs text-gray-500 mt-2 flex justify-between items-center">
+                <div className="text-sm text-gray-500 mt-2 flex justify-between items-center">
                     <span>
                         Última actualización: {format(ultimaActualizacion, "dd/MM/yyyy HH:mm:ss", { locale: es })}
                         {estaCargandoAciertos && (
@@ -1066,66 +1076,67 @@ export default function ListadoDiario() {
                             </div>
                         ) : (
                             <>
-                                <div className="bg-white rounded-lg shadow-lg overflow-x-auto border border-gray-200 mt-4">
+                                {/* Eliminamos la altura fija del ScrollArea */}
+                                <ScrollArea className="bg-white rounded-lg shadow-lg overflow-x-auto border border-gray-200 mt-4">
                                     <Table>
-                                        <TableHeader className="bg-gradient-to-r from-blue-600 to-indigo-700">
+                                        <TableHeader className="bg-gradient-to-r from-blue-600 to-indigo-700 sticky top-0 z-10">
                                             <TableRow>
-                                                <TableHead className="text-white font-bold">Pasador</TableHead>
-                                                <TableHead className="text-right text-white font-bold">S. Anterior</TableHead>
-                                                <TableHead className="text-right text-white font-bold">S. Actual</TableHead>
-                                                <TableHead className="text-right text-white font-bold">S. Total</TableHead>
-                                                <TableHead className="text-right text-white font-bold">Cobrado 🔒</TableHead>
-                                                <TableHead className="text-right text-white font-bold">Pagado 🔒</TableHead>
-                                                <TableHead className="text-right text-white font-bold">Jugado</TableHead>
-                                                <TableHead className="text-right text-white font-bold">Comisión</TableHead>
-                                                <TableHead className="text-right text-white font-bold">Premios</TableHead>
+                                                <TableHead className="text-white font-bold text-sm py-3">Pasador</TableHead>
+                                                <TableHead className="text-right text-white font-bold text-sm py-3">S. Anterior</TableHead>
+                                                <TableHead className="text-right text-white font-bold text-sm py-3">S. Actual</TableHead>
+                                                <TableHead className="text-right text-white font-bold text-sm py-3">S. Total</TableHead>
+                                                <TableHead className="text-right text-white font-bold text-sm py-3">Cobrado 🔒</TableHead>
+                                                <TableHead className="text-right text-white font-bold text-sm py-3">Pagado 🔒</TableHead>
+                                                <TableHead className="text-right text-white font-bold text-sm py-3">Jugado</TableHead>
+                                                <TableHead className="text-right text-white font-bold text-sm py-3">Comisión</TableHead>
+                                                <TableHead className="text-right text-white font-bold text-sm py-3">Premios</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {pasadoresPaginados.map((pasador, index) => (
+                                            {pasadoresFiltrados.map((pasador, index) => (
                                                 <TableRow key={pasador.id} className={index % 2 === 0 ? "bg-blue-50/50" : "bg-white"}>
-                                                    <TableCell className="font-medium">
+                                                    <TableCell className="font-medium text-sm py-2">
                                                         <div className="flex items-center">
-                                                            <div className="h-8 w-8 rounded-full bg-blue-600 text-white flex items-center justify-center mr-3 text-sm font-bold">
+                                                            <div className="h-9 w-9 rounded-full bg-blue-600 text-white flex items-center justify-center mr-3 text-base font-bold">
                                                                 {pasador.nombre.charAt(0).toUpperCase()}
                                                             </div>
                                                             <div>
-                                                                <div className="font-bold text-blue-800">{pasador.displayId}</div>
-                                                                <div className="text-xs text-gray-600">{pasador.nombre}</div>
+                                                                <div className="font-bold text-blue-800 text-base">{pasador.displayId}</div>
+                                                                <div className="text-sm text-gray-600">{pasador.nombre}</div>
                                                             </div>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell
-                                                        className={`text-right font-semibold ${pasador.saldoAnterior >= 0 ? "text-blue-700" : "text-red-600"}`}
+                                                        className={`text-right font-semibold text-sm py-2 ${pasador.saldoAnterior >= 0 ? "text-blue-700" : "text-red-600"}`}
                                                     >
                                                         {formatearMoneda(pasador.saldoAnterior)}
                                                     </TableCell>
                                                     <TableCell
-                                                        className={`text-right font-semibold ${pasador.saldoActual >= 0 ? "text-green-600" : "text-red-600"}`}
+                                                        className={`text-right font-semibold text-sm py-2 ${pasador.saldoActual >= 0 ? "text-green-600" : "text-red-600"}`}
                                                     >
                                                         {formatearMoneda(pasador.saldoActual)}
                                                     </TableCell>
                                                     <TableCell
-                                                        className={`text-right font-bold ${pasador.saldoTotal >= 0 ? "text-purple-700" : "text-red-600"}`}
+                                                        className={`text-right font-bold text-sm py-2 ${pasador.saldoTotal >= 0 ? "text-purple-700" : "text-red-600"}`}
                                                     >
                                                         {formatearMoneda(pasador.saldoTotal)}
                                                     </TableCell>
-                                                    <TableCell className="text-right text-green-600 font-semibold">
+                                                    <TableCell className="text-right text-green-600 font-semibold text-sm py-2">
                                                         {formatearMoneda(pasador.cobrado)}
                                                         <div className="text-xs text-gray-500">🔒 Inmutable</div>
                                                     </TableCell>
-                                                    <TableCell className="text-right text-red-600 font-semibold">
+                                                    <TableCell className="text-right text-red-600 font-semibold text-sm py-2">
                                                         {formatearMoneda(pasador.pagado)}
                                                         <div className="text-xs text-gray-500">🔒 Inmutable</div>
                                                     </TableCell>
-                                                    <TableCell className="text-right text-indigo-600">
+                                                    <TableCell className="text-right text-indigo-600 text-sm py-2">
                                                         {formatearMoneda(pasador.jugado)}
                                                     </TableCell>
-                                                    <TableCell className="text-right text-orange-600">
+                                                    <TableCell className="text-right text-orange-600 text-sm py-2">
                                                         {formatearMoneda(pasador.comisionPasador)}
                                                     </TableCell>
                                                     <TableCell
-                                                        className={`text-right font-bold ${pasador.premioTotal > 0 ? "text-teal-500" : "text-gray-400"}`}
+                                                        className={`text-right font-bold text-sm py-2 ${pasador.premioTotal > 0 ? "text-teal-500" : "text-gray-400"}`}
                                                     >
                                                         {formatearMoneda(pasador.premioTotal)}
                                                     </TableCell>
@@ -1133,30 +1144,11 @@ export default function ListadoDiario() {
                                             ))}
                                         </TableBody>
                                     </Table>
-                                </div>
+                                </ScrollArea>
                                 <div className="flex items-center justify-between mt-6 bg-gray-50 p-3 rounded-lg shadow-sm border border-gray-200">
                                     <div className="text-sm text-blue-700 font-medium">
-                                        Página {paginaActual} de {totalPaginas} - Módulo {moduloSeleccionado}: {pasadoresFiltrados.length}{" "}
-                                        pasadores
+                                        Módulo {moduloSeleccionado}: {pasadoresFiltrados.length} pasadores
                                     </div>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setPaginaActual((prev) => Math.max(prev - 1, 1))}
-                                        disabled={paginaActual === 1}
-                                        className="border-blue-300 text-blue-700 hover:bg-blue-50"
-                                    >
-                                        Anterior
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setPaginaActual((prev) => Math.min(prev + 1, totalPaginas))}
-                                        disabled={paginaActual === totalPaginas}
-                                        className="border-blue-300 text-blue-700 hover:bg-blue-50"
-                                    >
-                                        Siguiente
-                                    </Button>
                                 </div>
                             </>
                         )}
