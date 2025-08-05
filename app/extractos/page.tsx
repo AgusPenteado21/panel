@@ -278,12 +278,14 @@ export default function ExtractosPage() {
                 const dateParam = typeof date === "string" ? date : format(date, "yyyy-MM-dd")
                 const hoy = new Date()
                 const esHoy = format(hoy, "yyyy-MM-dd") === dateParam
+
                 // Usar RAILWAY_STATIC_URL si está disponible, sino usar ruta relativa
                 const baseUrl = process.env.RAILWAY_STATIC_URL || ""
                 let apiUrl = `${baseUrl}/api/extractos?date=${dateParam}`
                 if (esHoy || usarFechaForzada) {
                     apiUrl += "&forceRefresh=true"
                 }
+
                 setDebugInfo((prev) => prev + `\nIntentando cargar datos de: ${apiUrl}`)
                 const response = await fetch(apiUrl, {
                     method: "GET",
@@ -295,11 +297,14 @@ export default function ExtractosPage() {
                     },
                 })
                 setDebugInfo((prev) => prev + `\nRespuesta recibida. Status: ${response.status}`)
+
                 if (!response.ok) {
                     throw new Error(`Error HTTP! status: ${response.status}`)
                 }
+
                 const data = await response.json()
                 setDebugInfo((prev) => prev + `\nDatos recibidos: ${JSON.stringify(data).substring(0, 200)}...`)
+
                 if (data && Array.isArray(data) && data.length > 0) {
                     const extractosConCamposAdicionales = data.map((extracto: any) => ({
                         ...extracto,
@@ -365,6 +370,7 @@ export default function ExtractosPage() {
             ...prev,
             [turno]: prev[turno].map((num, i) => (i === index ? numeroLimpio : num)),
         }))
+
         // Auto-focus al siguiente campo cuando se completen 4 dígitos
         if (numeroLimpio.length === 4) {
             const nextIndex = index + 1
@@ -420,6 +426,7 @@ export default function ExtractosPage() {
     const handleSaltaNumberChange = (turno: string, index: number, value: string) => {
         handleProvinciaNumberChange("SALTA", turno, index, value, setSaltaData, saltaData)
     }
+
     // Handler para Jujuy (NUEVO)
     const handleJujuyNumberChange = (turno: string, index: number, value: string) => {
         handleProvinciaNumberChange("JUJUY", turno, index, value, setJujuyData, jujuyData)
@@ -483,6 +490,7 @@ export default function ExtractosPage() {
         const normalizedLoteriaBoton = loteriaBoton.toUpperCase()
         // Obtener todos los nombres posibles para esta lotería (incluyendo abreviaciones o nombres completos)
         const targetNames = LOTERIA_NAME_MAP[normalizedLoteriaBoton] || [normalizedLoteriaBoton]
+
         const turnosLoteria = extractos
             .filter((extracto) => {
                 const extractoLoteriaNormalizada = extracto.loteria.toUpperCase()
@@ -493,6 +501,7 @@ export default function ExtractosPage() {
                 )
             })
             .map((extracto) => extracto.sorteo)
+
         console.log(`DEBUG ${loteriaBoton}: Turnos ya guardados para ${loteriaBoton}:`, turnosLoteria)
         return turnosLoteria
     }
@@ -502,6 +511,7 @@ export default function ExtractosPage() {
         const turnosYaGuardados = getTurnosYaGuardados(provincia)
         const diaSemana = getDay(selectedDate) // 0 = domingo, 1 = lunes, ..., 6 = sábado
         let todosTurnos: string[] = []
+
         if (provincia === "MONTEVIDEO") {
             todosTurnos = getTurnosDisponiblesMontevideo(selectedDate)
         } else if (provincia === "SANTIAGO DEL ESTERO") {
@@ -538,6 +548,7 @@ export default function ExtractosPage() {
                 todosTurnos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
             }
         }
+
         const pendientes = todosTurnos.filter((turno) => !turnosYaGuardados.includes(turno))
         console.log(
             `DEBUG ${provincia}: Todos los turnos: ${todosTurnos}, Ya guardados: ${turnosYaGuardados}, Pendientes: ${pendientes}`,
@@ -569,6 +580,7 @@ export default function ExtractosPage() {
         try {
             setIsSaving(true)
             setError(null)
+
             // Usar la fecha seleccionada
             const fecha = format(selectedDate, "dd/MM/yyyy", { locale: es })
             console.log(`🗓️ Guardando con fecha seleccionada: ${fecha}`)
@@ -636,6 +648,7 @@ export default function ExtractosPage() {
                     console.error(`Respuesta no exitosa del servidor para ${provinciaParaBackend} ${turno}:`, responseData)
                     throw new Error(`Error al guardar ${turno}: ${responseData.error || "Respuesta no exitosa del servidor"}`)
                 }
+
                 turnosGuardadosExitosamente++
                 console.log(`✅ ${provinciaParaBackend} ${turno} guardado exitosamente para ${fecha}`)
             }
@@ -654,6 +667,7 @@ export default function ExtractosPage() {
 
             // Mostrar mensaje de éxito
             setError(null)
+
             // Refrescar datos inmediatamente
             console.log("🔄 Refrescando datos desde Firebase...")
             await fetchExtractos(selectedDate)
@@ -707,6 +721,7 @@ export default function ExtractosPage() {
     const handleConfirmarSalta = () => {
         handleConfirmarProvincia("SALTA", saltaData, setSaltaData, setIsSavingSalta, setShowSaltaModal)
     }
+
     // Handler para confirmar Jujuy (NUEVO)
     const handleConfirmarJujuy = () => {
         handleConfirmarProvincia("JUJUY", jujuyData, setJujuyData, setIsSavingJujuy, setShowJujuyModal)
@@ -777,6 +792,7 @@ export default function ExtractosPage() {
                     console.error(`Respuesta no exitosa del servidor para ${provinciaParaBackend} ${turno}:`, responseData)
                     throw new Error(`Error al guardar ${turno}: ${responseData.error || "Respuesta no exitosa del servidor"}`)
                 }
+
                 turnosGuardadosExitosamente++
                 console.log(`✅ ${provinciaParaBackend} ${turno} guardado exitosamente para ${fecha}`)
             }
@@ -880,7 +896,6 @@ export default function ExtractosPage() {
             setError("Por favor, selecciona al menos un extracto para eliminar.")
             return
         }
-
         if (
             !window.confirm(
                 `¿Estás seguro de que quieres eliminar ${extractosSeleccionados.length} extracto(s) seleccionado(s)?`,
@@ -893,7 +908,6 @@ export default function ExtractosPage() {
             setIsLoading(true)
             setError(null)
             console.log(`🗑️ Eliminando ${extractosSeleccionados.length} extractos...`)
-
             const fechaParaEliminar = format(selectedDate, "dd/MM/yyyy", { locale: es })
 
             const response = await fetch("/api/extractos", {
@@ -961,8 +975,10 @@ export default function ExtractosPage() {
             setIsLoading(true)
             setError(null)
             setDebugInfo("Obteniendo fecha forzada de Argentina...")
-            const apiUrl = `${window.location.origin}/api/extractos/forzar-fecha` // Usar ruta absoluta
+            // CAMBIO AQUÍ: Usar ruta relativa
+            const apiUrl = "/api/extractos/forzar-fecha"
             console.log(`API URL para forzar fecha: ${apiUrl}`)
+
             const response = await fetch(apiUrl, {
                 method: "GET",
                 headers: {
@@ -971,6 +987,7 @@ export default function ExtractosPage() {
                     Expires: "0",
                 },
             })
+
             if (!response.ok) {
                 throw new Error(`Error HTTP! status: ${response.status}`)
             }
@@ -1043,6 +1060,7 @@ export default function ExtractosPage() {
         console.log("🔓 Abriendo modal Salta")
         setShowSaltaModal(true)
     }
+
     // Función para abrir modal de Jujuy (NUEVO)
     const abrirModalJujuy = (e: React.MouseEvent) => {
         e.preventDefault()
@@ -1106,6 +1124,7 @@ export default function ExtractosPage() {
     const getMensajeDisponibilidad = (loteria: string) => {
         const diaSemana = getDay(selectedDate) // 0 = domingo, 1 = lunes, ..., 6 = sábado
         const nombreDia = format(selectedDate, "EEEE", { locale: es })
+
         if (loteria === "MONTEVIDEO") {
             return getMensajeDisponibilidadMontevideo()
         } else if (loteria === "SANTIAGO DEL ESTERO") {
@@ -1575,12 +1594,14 @@ export default function ExtractosPage() {
                                 <AlertDescription className="text-xs sm:text-sm">{error}</AlertDescription>
                             </Alert>
                         )}
+
                         {extractos.length > 0 && (
                             <Alert variant="default" className="mb-4 bg-green-100 border-green-400 text-green-700 flex items-start">
                                 <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-green-600 flex-shrink-0 mt-0.5" />
                                 <AlertDescription className="text-xs sm:text-sm">{`Se cargaron ${extractos.length} extractos correctamente.`}</AlertDescription>
                             </Alert>
                         )}
+
                         {extractos.length === 0 && !isLoading && (
                             <Alert
                                 variant="default"
@@ -1592,6 +1613,7 @@ export default function ExtractosPage() {
                                 </AlertDescription>
                             </Alert>
                         )}
+
                         {usarFechaForzada && (
                             <Alert variant="default" className="mb-4 bg-blue-100 border-blue-400 text-blue-700 flex items-start">
                                 <Info className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -2812,6 +2834,7 @@ const ProvinciaModal: React.FC<ProvinciaModalProps> = ({
                     </AlertDescription>
                 </Alert>
             )}
+
             {todosTurnos.map((turno) => (
                 <div key={turno} className="mb-4">
                     <Label className="block font-medium text-gray-700 mb-2">{turno}</Label>
@@ -2834,6 +2857,7 @@ const ProvinciaModal: React.FC<ProvinciaModalProps> = ({
                     <div className="mt-2 text-sm text-gray-500">{contarNumerosCompletados(turno, data)}/20 números completos</div>
                 </div>
             ))}
+
             <div className="flex justify-end gap-2">
                 <Button type="button" variant="secondary" onClick={onClose}>
                     Cancelar

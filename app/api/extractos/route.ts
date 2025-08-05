@@ -166,7 +166,6 @@ function detectarEntorno(): string {
     // 🔥 INFORMACIÓN ESPECÍFICA DE RAILWAY
     const railwayRegion = process.env.RAILWAY_REGION || "unknown"
     const railwayService = process.env.RAILWAY_SERVICE_NAME || "unknown"
-
     console.log(`🌍 ENTORNO DETECTADO:`)
     console.log(`   - NODE_ENV: ${entorno}`)
     console.log(`   - Railway: ${esRailway}`)
@@ -175,13 +174,11 @@ function detectarEntorno(): string {
     console.log(`   - Vercel: ${esVercel}`)
     console.log(`   - TZ: ${process.env.TZ || "No definida"}`)
     console.log(`   - Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
-
     return esRailway ? "railway" : esVercel ? "vercel" : "local"
 }
 
 // Constantes
 const TIEMPO_ESPERA_FETCH = 60000 // 60 segundos
-
 const URLS_PIZARRAS = {
     NACION: "https://vivitusuerte.com/pizarra/ciudad",
     PROVINCIA: "https://vivitusuerte.com/pizarra/provincia",
@@ -271,7 +268,6 @@ const MANUAL_ENTRY_LOTTERIES_ON_SUNDAY: { [provincia: string]: string[] } = {
 async function obtenerConTiempoLimite(url: string, opciones: RequestInit = {}): Promise<Response> {
     const controlador = new AbortController()
     const id = setTimeout(() => controlador.abort(), TIEMPO_ESPERA_FETCH)
-
     try {
         const timestamp = Date.now()
         const urlConTimestamp = `${url}${url.includes("?") ? "&" : "?"}_t=${timestamp}`
@@ -333,7 +329,6 @@ async function obtenerConTiempoLimite(url: string, opciones: RequestInit = {}): 
 // 🔥 FUNCIÓN MEJORADA PARA OBTENER TIEMPO DE SORTEO ESPECÍFICO
 function obtenerTiempoSorteo(turno: string, provinciaKey?: string): number {
     let horario: string | undefined
-
     // 1. Intentar obtener el horario específico por provincia y turno
     if (provinciaKey && LOTTERY_SPECIFIC_DRAW_TIMES[provinciaKey]?.[turno]) {
         horario = LOTTERY_SPECIFIC_DRAW_TIMES[provinciaKey][turno]
@@ -505,7 +500,6 @@ function extraerNumerosFormato5($: cheerio.CheerioAPI, turno: string, provincia:
 // 🆕 FUNCIÓN ESPECÍFICA PARA NEUQUÉN CON FORMATO ESPACIADO
 function extraerNumerosNeuquen($: cheerio.CheerioAPI, turno: string): string[] {
     console.log(`🏔️ EXTRACCIÓN ESPECÍFICA NEUQUÉN: ${turno}`)
-
     // 🔥 PRIMERO: Intentar formato espaciado (nuevo)
     const numerosFormato5 = extraerNumerosFormato5($, turno, "NEUQUEN")
     if (numerosFormato5.length >= 18) {
@@ -520,7 +514,6 @@ function extraerNumerosNeuquen($: cheerio.CheerioAPI, turno: string): string[] {
         `[data-sorteo="${turno}"]`,
         `.resultado-${turno.toLowerCase()}`,
     ]
-
     for (const selector of selectoresNeuquen) {
         const elemento = $(selector)
         if (elemento.length > 0) {
@@ -562,7 +555,6 @@ function extraerNumerosNeuquen($: cheerio.CheerioAPI, turno: string): string[] {
 // 🆕 FUNCIÓN ESPECÍFICA PARA MISIONES CON FORMATO ESPACIADO
 function extraerNumerosMisiones($: cheerio.CheerioAPI, turno: string): string[] {
     console.log(`🌿 EXTRACCIÓN ESPECÍFICA MISIONES: ${turno}`)
-
     // 🔥 PRIMERO: Intentar formato espaciado (nuevo)
     const numerosFormato5 = extraerNumerosFormato5($, turno, "MISIONES")
     if (numerosFormato5.length >= 18) {
@@ -577,7 +569,6 @@ function extraerNumerosMisiones($: cheerio.CheerioAPI, turno: string): string[] 
         `[data-provincia="misiones"][data-turno="${turno}"]`,
         `.resultado-misiones-${turno.toLowerCase()}`,
     ]
-
     for (const selector of selectoresMisiones) {
         const elemento = $(selector)
         if (elemento.length > 0) {
@@ -596,7 +587,6 @@ function extraerNumerosMisiones($: cheerio.CheerioAPI, turno: string): string[] 
         `#sorteo-misiones-${turno.toLowerCase()}`,
         `#resultado-${turno.toLowerCase()}-misiones`,
     ]
-
     for (const id of idsMisiones) {
         const elemento = $(id)
         if (elemento.length > 0) {
@@ -614,7 +604,6 @@ function extraerNumerosMisiones($: cheerio.CheerioAPI, turno: string): string[] 
     for (const seccion of seccionesMisiones) {
         const $seccion = $(seccion)
         const textoSeccion = $seccion.text().toLowerCase()
-
         if (textoSeccion.includes("misiones") && textoSeccion.includes(turno.toLowerCase())) {
             console.log(`🔍 MISIONES: Intentando sección que contiene "misiones" y "${turno.toLowerCase()}"`)
             // Verificar que no contenga otros turnos
@@ -626,7 +615,6 @@ function extraerNumerosMisiones($: cheerio.CheerioAPI, turno: string): string[] 
                     textoSeccion.includes(otroTurno) &&
                     textoSeccion.indexOf(otroTurno) !== textoSeccion.indexOf(turno.toLowerCase()),
             )
-
             if (!contieneOtroTurno) {
                 const numeros = textoSeccion.match(/\b\d{4}\b/g) || []
                 if (numeros.length >= 18) {
@@ -644,7 +632,6 @@ function extraerNumerosMisiones($: cheerio.CheerioAPI, turno: string): string[] 
 // 🔥 FUNCIÓN ULTRA ESPECÍFICA MEJORADA CON FORMATO ESPACIADO
 function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, provincia: string): string[] {
     console.log(`🎯 EXTRACCIÓN ULTRA ESPECÍFICA: ${provincia} - ${turno}`)
-
     // 🔥 PRIMERO: Intentar formato espaciado
     const numerosFormato5 = extraerNumerosFormato5($, turno, provincia)
     if (numerosFormato5.length >= 18) {
@@ -658,7 +645,6 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
     console.log(`📋 Estrategia 1: Contenedores exclusivos para ${turno}`)
     // Buscar todos los elementos que contengan el turno
     const elementosConTurno = $(`*:contains("${turno}")`).toArray()
-
     for (const elemento of elementosConTurno) {
         const $elemento = $(elemento)
         const textoElemento = $elemento.text()
@@ -718,7 +704,6 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
         const segmento = textoCompleto.substring(indiceInicio, indiceFin)
         console.log(`📄 Segmento aislado (primeros 80 chars): "${segmento.substring(0, 80)}..."`)
         const numeros = segmento.match(/\b\d{4}\b/g) || []
-
         if (numeros.length >= 18) {
             console.log(`✅ ENCONTRADO en segmento aislado: ${numeros.length} números`)
             return numeros.slice(0, 20)
@@ -839,12 +824,14 @@ async function obtenerResultadosConfiables(): Promise<Extracto[]> {
     const entorno = detectarEntorno()
     console.log(`🌍 EJECUTÁNDOSE EN: ${entorno.toUpperCase()}`)
 
+    // Log Firebase Project ID to confirm env var is loaded
+    console.log(`🔥 Firebase Project ID (from env): ${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "NOT SET"}`)
+
     const fechaActual = obtenerFechaArgentinaRobusta()
     const diaSemana = fechaActual.getDay() // 0 = domingo, 1 = lunes, ..., 6 = sábado
     const fechaDisplay = formatearFechaArgentina(fechaActual, "dd/MM/yyyy")
     const nombreDia = formatearFechaArgentina(fechaActual, "EEEE").replace(/^\w/, (c) => c.toUpperCase())
     const fechaKeyFirebase = formatearFechaArgentina(fechaActual, "yyyy-MM-dd")
-
     console.log(`📅 PROCESANDO FECHA: ${fechaDisplay} (${nombreDia})`)
     console.log(`📅 KEY FIREBASE: ${fechaKeyFirebase}`)
 
@@ -968,6 +955,7 @@ export async function GET(request: Request) {
         // 🔥 COMPARACIÓN ROBUSTA DE FECHAS
         const fechaHoyKey = formatearFechaArgentina(startOfDay(fechaActualArgentina), "yyyy-MM-dd")
         const esHoyEnArgentina = fechaKeyFirebase === fechaHoyKey
+
         console.log(`📅 KEY FIREBASE CONSULTA: ${fechaKeyFirebase}`)
         console.log(`📅 KEY FIREBASE HOY: ${fechaHoyKey}`)
         console.log(`📅 FECHA DISPLAY: ${fechaDisplayConsulta}`)
@@ -981,8 +969,8 @@ export async function GET(request: Request) {
         if (docSnap.exists()) {
             const data = docSnap.data()
             console.log(`📋 Datos encontrados en Firebase para ${fechaKeyFirebase}:`, Object.keys(data))
-
             let resultadosData: ResultadoDia | null = null
+
             // Buscar por la clave de fecha exacta (dd/MM/yyyy)
             if (data[fechaDisplayConsulta]) {
                 resultadosData = data[fechaDisplayConsulta] as ResultadoDia
@@ -991,7 +979,6 @@ export async function GET(request: Request) {
                 // Si no se encuentra con la clave exacta, buscar cualquier clave que parezca una fecha dd/MM/yyyy
                 const fechasEncontradas = Object.keys(data).filter((key) => key.includes("/"))
                 console.log(`🔍 Fechas encontradas en documento (buscando dd/MM/yyyy):`, fechasEncontradas)
-
                 if (fechasEncontradas.length > 0) {
                     // Si hay múltiples, intentar encontrar la más cercana a la fecha de consulta
                     let fechaMasCercanaKey = fechasEncontradas[0]
@@ -1120,6 +1107,9 @@ export async function OPTIONS() {
 
 export async function POST(request: Request) {
     console.log("📝 Iniciando actualización manual (POST)")
+    // Log Firebase Project ID to confirm env var is loaded
+    console.log(`🔥 Firebase Project ID (from env): ${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "NOT SET"}`)
+
     try {
         const { provincia, turno, fecha, numeros } = await request.json()
         console.log(
@@ -1142,8 +1132,8 @@ export async function POST(request: Request) {
 
         const docRef = doc(db, "extractos", fechaKeyFirebase)
         const docSnap = await getDoc(docRef)
-
         let datosDia: ResultadoDia
+
         if (docSnap.exists()) {
             const data = docSnap.data()
             console.log(`📋 POST - Documento Firebase existe para ${fechaKeyFirebase}. Data keys: ${Object.keys(data)}`)
@@ -1189,7 +1179,6 @@ export async function POST(request: Request) {
         const dataParaGuardar = {
             [fecha]: datosDia,
         }
-
         console.log(
             `💾 POST - Datos a guardar en Firebase para ${fechaKeyFirebase} bajo clave ${fecha}:`,
             JSON.stringify(dataParaGuardar).substring(0, 500) + "...",
@@ -1228,8 +1217,8 @@ async function obtenerResultadoEspecifico(provinciaKey: string, turno: string): 
 
         const html = await respuesta.text()
         const $ = cheerio.load(html)
-
         let numeros: string[] = []
+
         // Lógica específica para cada provincia
         switch (provinciaKey) {
             case "NEUQUEN":
