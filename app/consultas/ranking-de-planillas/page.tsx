@@ -1,10 +1,11 @@
 "use client"
-import { useState, useCallback, useEffect } from "react"
+
+import { useState, useCallback, useEffect, useMemo } from "react"
 import Navbar from "../../components/Navbar"
 import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, RefreshCcw, CalendarIcon, FileText, Download, AlertTriangle } from "lucide-react"
+import { Loader2, RefreshCcw, CalendarIcon, FileText, Download, AlertTriangle } from 'lucide-react'
 import * as XLSX from "xlsx"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -12,8 +13,10 @@ import { format, startOfDay, endOfDay, isFuture, parseISO } from "date-fns"
 import { cn } from "@/lib/utils"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { db } from "@/lib/firebase" // Importa tu instancia de Firebase
+import { db } from "@/lib/firebase"
 import { collection, getDocs, query, where } from "firebase/firestore"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog" // Importar componentes de Dialog
+import DailyRecordsModal from "@/components/daily-records-modal" // Importar el nuevo componente modal
 
 // Interfaz para los documentos de la colección 'pasadores'
 interface PasadorMeta {
@@ -27,6 +30,7 @@ interface PasadorMeta {
 
 // Interfaz para los documentos de la colección 'saldos_diarios'
 interface SaldoDiarioDoc {
+    id: string // Añadir ID para poder referenciar el documento al editar
     pasador_id: string
     pasador_nombre: string
     display_id: string
@@ -50,7 +54,7 @@ interface PlanillaRanking {
     id: string
     displayId: string
     nombre: string
-    pasadorSaldo: number // Saldo final del último día en el rango
+    pasadorSaldo: number // Saldo inicial del primer día + el movimiento neto total del rango
     pagado: number // Suma de total_pagos en el rango
     cobrado: number // Suma de total_cobros en el rango
     juego: number // Suma de ventas_online en el rango
@@ -59,6 +63,8 @@ interface PlanillaRanking {
     juegoNeto: number // Calculado: juego - comisionPasador
     aciertos: number // Suma de total_ganado en el rango
     subTotalNeto: number // Calculado: juegoNeto - aciertos
+    totalMovimientoDiario: number // Suma de saldo_actual en el rango
+    totalSaldosAnteriores: number // Suma de saldo_anterior en el rango
     diasTrabajados: number // Número de días con actividad
     promedioJuego: number // Calculado: juego / diasTrabajados
     promedioJuegoNeto: number // Calculado: juegoNeto / diasTrabajados
@@ -74,6 +80,10 @@ export default function RankingPlanillasPage() {
     const [selectedDateHasta, setSelectedDateHasta] = useState<Date>(() => endOfDay(new Date()))
     const [selectedModulo, setSelectedModulo] = useState<string>("Todos")
     const [modulos, setModulos] = useState<string[]>([])
+
+    // Estado para el modal de edición
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+    const [selectedPasadorForEdit, setSelectedPasadorForEdit] = useState<PlanillaRanking | null>(null)
 
     const formatearMoneda = useCallback((monto: number): string => {
         return new Intl.NumberFormat("es-AR", {
@@ -136,16 +146,18 @@ export default function RankingPlanillasPage() {
                 let totalJuego = 0
                 let totalComisionPasador = 0
                 let totalAciertos = 0
+                let totalMovimientoDiario = 0
+                let totalSaldosAnteriores = 0
                 let diasActivos = 0
-                let lastDaySaldoFinal = 0
+                let firstDaySaldoAnterior = 0
 
                 const dailyRecords: SaldoDiarioDoc[] = []
                 saldosSnapshot.forEach((doc) => {
-                    const data = doc.data() as SaldoDiarioDoc
-                    dailyRecords.push(data)
+                    const { id: dataId, ...restData } = doc.data() as SaldoDiarioDoc // Desestructura 'id' de los datos y renómbralo para evitar conflictos
+                    dailyRecords.push({ id: doc.id, ...restData }) // Usa doc.id y el resto de los datos
                 })
 
-                // Ordenar registros por fecha para asegurar el saldo_final correcto
+                // Ordenar registros por fecha para asegurar el saldo_final correcto del último día
                 dailyRecords.sort((a, b) => {
                     const dateA = parseISO(a.fecha)
                     const dateB = parseISO(b.fecha)
@@ -153,51 +165,75 @@ export default function RankingPlanillasPage() {
                 })
 
                 if (dailyRecords.length > 0) {
-                    lastDaySaldoFinal = dailyRecords[dailyRecords.length - 1].saldo_final || 0 // Saldo final del último día en el rango
-
+                    firstDaySaldoAnterior = dailyRecords[0].saldo_anterior || 0
                     dailyRecords.forEach((record) => {
                         totalPagado += record.total_pagos || 0
                         totalCobrado += record.total_cobros || 0
                         totalJuego += record.ventas_online || 0
                         totalComisionPasador += record.comision_pasador || 0
                         totalAciertos += record.total_ganado || 0
+                        totalMovimientoDiario += record.saldo_actual || 0
+                        totalSaldosAnteriores += record.saldo_anterior || 0
                         diasActivos++
+                        // DEBUG: Log para aciertos (mantener para depuración si es necesario)
+                        // if (pasadorMeta.nombre.toLowerCase().includes("gaston")) {
+                        //   console.log(
+                        //     `DEBUG: Aciertos para ${pasadorMeta.nombre} (${record.fecha}): total_ganado = ${record.total_ganado}`,
+                        //   )
+                        // }
                     })
 
                     const juegoNeto = totalJuego - totalComisionPasador
                     const subTotalNeto = juegoNeto - totalAciertos
                     const promedioJuego = diasActivos > 0 ? totalJuego / diasActivos : 0
                     const promedioJuegoNeto = diasActivos > 0 ? juegoNeto / diasActivos : 0
+                    const calculatedPasadorSaldo = firstDaySaldoAnterior + totalMovimientoDiario
 
                     aggregatedRankingData.push({
                         id: pasadorMeta.id,
                         displayId: pasadorMeta.displayId,
                         nombre: pasadorMeta.nombre,
-                        pasadorSaldo: lastDaySaldoFinal, // Saldo final del último día en el rango
+                        pasadorSaldo: calculatedPasadorSaldo,
                         pagado: totalPagado,
                         cobrado: totalCobrado,
                         juego: totalJuego,
-                        cant: diasActivos, // Cantidad de días con actividad
+                        cant: diasActivos,
                         comisionPasador: totalComisionPasador,
                         juegoNeto: juegoNeto,
                         aciertos: totalAciertos,
                         subTotalNeto: subTotalNeto,
+                        totalMovimientoDiario: totalMovimientoDiario,
+                        totalSaldosAnteriores: totalSaldosAnteriores,
                         diasTrabajados: diasActivos,
                         promedioJuego: promedioJuego,
                         promedioJuegoNeto: promedioJuegoNeto,
-                        fechaDeA: format(selectedDateHasta, "dd/MM"), // Fecha de fin del rango
-                        modulo: pasadorMeta.modulo, // Añadido el módulo
+                        fechaDeA: format(selectedDateHasta, "dd/MM"),
+                        modulo: pasadorMeta.modulo,
                     })
                 }
             }
 
-            // Filtrar por módulo si no es "Todos"
-            const filteredData =
+            const filteredAndSortedData =
                 selectedModulo === "Todos"
                     ? aggregatedRankingData
                     : aggregatedRankingData.filter((data) => data.modulo.toString() === selectedModulo)
 
-            setRankingData(filteredData)
+            // Aplicar el nuevo ordenamiento: primero los que jugaron, luego los que no, ambos alfabéticamente
+            filteredAndSortedData.sort((a, b) => {
+                const aPlayed = a.juego > 0 || a.diasTrabajados > 0 // Considerar 'juego' o 'diasTrabajados' como indicador de actividad
+                const bPlayed = b.juego > 0 || b.diasTrabajados > 0
+
+                if (aPlayed && !bPlayed) {
+                    return -1 // a va antes que b
+                }
+                if (!aPlayed && bPlayed) {
+                    return 1 // b va antes que a
+                }
+                // Si ambos jugaron o ambos no jugaron, ordenar alfabéticamente por nombre
+                return a.nombre.localeCompare(b.nombre)
+            })
+
+            setRankingData(filteredAndSortedData)
             console.log("✅ Ranking data loaded successfully.")
         } catch (err) {
             console.error("❌ Error fetching ranking data:", err)
@@ -231,28 +267,105 @@ export default function RankingPlanillasPage() {
         }
     }
 
-    const exportToExcel = () => {
-        const workbook = XLSX.utils.book_new()
-        const worksheet = XLSX.utils.json_to_sheet(
-            rankingData.map((row) => ({
-                Pasador: row.nombre, // Añadido el nombre del pasador para el export
-                "ID Pasador": row.displayId, // Añadido el displayId para el export
-                "Pasador Saldo": formatearMoneda(row.pasadorSaldo),
-                Pagado: formatearMoneda(row.pagado),
-                Cobrado: formatearMoneda(row.cobrado),
-                Juego: formatearMoneda(row.juego),
-                Cant: row.cant,
-                "Comisión Pasador": formatearMoneda(row.comisionPasador),
-                "Juego Neto": formatearMoneda(row.juegoNeto),
-                Aciertos: formatearMoneda(row.aciertos),
-                "SubTotal Neto": formatearMoneda(row.subTotalNeto),
-                "Días Trabajados": row.diasTrabajados,
-                "Promedio Juego": formatearMoneda(row.promedioJuego),
-                "Promedio Juego Neto": formatearMoneda(row.promedioJuegoNeto),
-                "Fecha de A": row.fechaDeA,
-                Módulo: row.modulo, // Añadido el módulo para el export
-            })),
+    // Función para abrir el modal de edición
+    const handleEditClick = (pasador: PlanillaRanking) => {
+        setSelectedPasadorForEdit(pasador)
+        setIsEditModalOpen(true)
+    }
+
+    // Función para cerrar el modal y recargar datos
+    const handleCloseEditModal = () => {
+        setIsEditModalOpen(false)
+        setSelectedPasadorForEdit(null)
+        fetchRankingData() // Recargar los datos del ranking después de cerrar el modal
+    }
+
+    // Cálculo de los totales generales
+    const grandTotals = useMemo(() => {
+        return rankingData.reduce(
+            (acc, row) => ({
+                pasadorSaldo: acc.pasadorSaldo + row.pasadorSaldo,
+                pagado: acc.pagado + row.pagado,
+                cobrado: acc.cobrado + row.cobrado,
+                juego: acc.juego + row.juego,
+                cant: acc.cant + row.cant,
+                comisionPasador: acc.comisionPasador + row.comisionPasador,
+                juegoNeto: acc.juegoNeto + row.juegoNeto,
+                aciertos: acc.aciertos + row.aciertos,
+                subTotalNeto: acc.subTotalNeto + row.subTotalNeto,
+                totalMovimientoDiario: acc.totalMovimientoDiario + row.totalMovimientoDiario,
+                totalSaldosAnteriores: acc.totalSaldosAnteriores + row.totalSaldosAnteriores,
+                diasTrabajados: acc.diasTrabajados + row.diasTrabajados,
+                promedioJuego: acc.promedioJuego + row.promedioJuego,
+                promedioJuegoNeto: acc.promedioJuegoNeto + row.promedioJuegoNeto,
+            }),
+            {
+                pasadorSaldo: 0,
+                pagado: 0,
+                cobrado: 0,
+                juego: 0,
+                cant: 0,
+                comisionPasador: 0,
+                juegoNeto: 0,
+                aciertos: 0,
+                subTotalNeto: 0,
+                totalMovimientoDiario: 0,
+                totalSaldosAnteriores: 0,
+                diasTrabajados: 0,
+                promedioJuego: 0,
+                promedioJuegoNeto: 0,
+            },
         )
+    }, [rankingData])
+
+    const exportToExcel = () => {
+        const dataToExport = rankingData.map((row) => ({
+            Pasador: row.nombre,
+            "ID Pasador": row.displayId,
+            "Pasador Saldo": formatearMoneda(row.pasadorSaldo),
+            Pagado: formatearMoneda(row.pagado),
+            Cobrado: formatearMoneda(row.cobrado),
+            Juego: formatearMoneda(row.juego),
+            Cant: row.cant,
+            "Comisión Pasador": formatearMoneda(row.comisionPasador),
+            "Juego Neto": formatearMoneda(row.juegoNeto),
+            Aciertos: row.aciertos,
+            "SubTotal Neto": formatearMoneda(row.subTotalNeto),
+            "Mov. Neto Diario": formatearMoneda(row.totalMovimientoDiario),
+            "Saldos Anteriores": formatearMoneda(row.totalSaldosAnteriores),
+            "Días Trabajados": row.diasTrabajados,
+            "Promedio Juego": formatearMoneda(row.promedioJuego),
+            "Promedio Juego Neto": formatearMoneda(row.promedioJuegoNeto),
+            "Fecha de A": row.fechaDeA,
+            Módulo: row.modulo,
+        }))
+
+        // Añadir la fila de totales al exportar
+        if (rankingData.length > 0) {
+            dataToExport.push({
+                Pasador: "TOTAL GENERAL",
+                "ID Pasador": "",
+                "Pasador Saldo": formatearMoneda(grandTotals.pasadorSaldo),
+                Pagado: formatearMoneda(grandTotals.pagado),
+                Cobrado: formatearMoneda(grandTotals.cobrado),
+                Juego: formatearMoneda(grandTotals.juego),
+                Cant: grandTotals.cant,
+                "Comisión Pasador": formatearMoneda(grandTotals.comisionPasador),
+                "Juego Neto": formatearMoneda(grandTotals.juegoNeto),
+                Aciertos: grandTotals.aciertos,
+                "SubTotal Neto": formatearMoneda(grandTotals.subTotalNeto),
+                "Mov. Neto Diario": formatearMoneda(grandTotals.totalMovimientoDiario),
+                "Saldos Anteriores": formatearMoneda(grandTotals.totalSaldosAnteriores),
+                "Días Trabajados": grandTotals.diasTrabajados,
+                "Promedio Juego": formatearMoneda(grandTotals.juego / (grandTotals.diasTrabajados || 1)),
+                "Promedio Juego Neto": formatearMoneda(grandTotals.juegoNeto / (grandTotals.diasTrabajados || 1)),
+                "Fecha de A": "",
+                Módulo: 0,
+            })
+        }
+
+        const workbook = XLSX.utils.book_new()
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport)
         XLSX.utils.book_append_sheet(workbook, worksheet, "Ranking Planillas")
         XLSX.writeFile(workbook, "Ranking_Planillas.xlsx")
     }
@@ -365,14 +478,12 @@ export default function RankingPlanillasPage() {
                                 </Button>
                             </div>
                         </div>
-
                         {error && (
                             <Alert variant="destructive" className="mb-4 bg-red-100 border-red-400 text-red-700 flex items-start">
                                 <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-red-600 flex-shrink-0 mt-0.5" />
                                 <AlertDescription className="text-xs sm:text-sm">{error}</AlertDescription>
                             </Alert>
                         )}
-
                         {isLoading ? (
                             <div className="text-center py-8">
                                 <Loader2 className="mx-auto h-8 w-8 animate-spin text-blue-600" />
@@ -393,6 +504,8 @@ export default function RankingPlanillasPage() {
                                             <TableHead className="text-white font-bold min-w-[80px]">Juego Neto</TableHead>
                                             <TableHead className="text-white font-bold min-w-[80px]">Aciertos</TableHead>
                                             <TableHead className="text-white font-bold min-w-[80px]">SubTotal Neto</TableHead>
+                                            <TableHead className="text-white font-bold min-w-[80px]">Mov. Neto Diario</TableHead>
+                                            <TableHead className="text-white font-bold min-w-[80px]">Saldos Anteriores</TableHead>
                                             <TableHead className="text-white font-bold min-w-[80px]">Días Trabajados</TableHead>
                                             <TableHead className="text-white font-bold min-w-[80px]">Promedio Juego</TableHead>
                                             <TableHead className="text-white font-bold min-w-[80px]">Promedio Juego Neto</TableHead>
@@ -403,7 +516,8 @@ export default function RankingPlanillasPage() {
                                         {rankingData.map((row, index) => (
                                             <TableRow
                                                 key={row.id}
-                                                className={`${index % 2 === 0 ? "bg-blue-50" : "bg-white"} hover:bg-blue-100 transition-colors`}
+                                                className={`${index % 2 === 0 ? "bg-blue-50" : "bg-white"} hover:bg-blue-100 transition-colors cursor-pointer`}
+                                                onClick={() => handleEditClick(row)} // Hacer la fila clicable
                                             >
                                                 <TableCell className="font-medium">
                                                     <div className="flex items-center">
@@ -427,6 +541,10 @@ export default function RankingPlanillasPage() {
                                                 <TableCell className="text-blue-700 font-medium">{formatearMoneda(row.juegoNeto)}</TableCell>
                                                 <TableCell className="text-green-700 font-medium">{formatearMoneda(row.aciertos)}</TableCell>
                                                 <TableCell className="text-red-700 font-medium">{formatearMoneda(row.subTotalNeto)}</TableCell>
+                                                <TableCell className="text-blue-700 font-medium">
+                                                    {formatearMoneda(row.totalMovimientoDiario)}
+                                                </TableCell>
+                                                <TableCell className="text-gray-800">{formatearMoneda(row.totalSaldosAnteriores)}</TableCell>
                                                 <TableCell className="text-gray-800">{row.diasTrabajados}</TableCell>
                                                 <TableCell className="text-purple-700 font-medium">
                                                     {formatearMoneda(row.promedioJuego)}
@@ -438,6 +556,51 @@ export default function RankingPlanillasPage() {
                                             </TableRow>
                                         ))}
                                     </TableBody>
+                                    {/* Fila de totales generales */}
+                                    <TableFooter className="bg-gradient-to-r from-blue-700 to-indigo-800 text-white font-bold">
+                                        <TableRow>
+                                            <TableCell className="text-white font-bold text-sm py-2">TOTAL GENERAL</TableCell>
+                                            <TableCell className="text-white font-bold text-sm py-2">
+                                                {formatearMoneda(grandTotals.pasadorSaldo)}
+                                            </TableCell>
+                                            <TableCell className="text-white font-bold text-sm py-2">
+                                                {formatearMoneda(grandTotals.pagado)}
+                                            </TableCell>
+                                            <TableCell className="text-white font-bold text-sm py-2">
+                                                {formatearMoneda(grandTotals.cobrado)}
+                                            </TableCell>
+                                            <TableCell className="text-white font-bold text-sm py-2">
+                                                {formatearMoneda(grandTotals.juego)}
+                                            </TableCell>
+                                            <TableCell className="text-white font-bold text-sm py-2">{grandTotals.cant}</TableCell>
+                                            <TableCell className="text-white font-bold text-sm py-2">
+                                                {formatearMoneda(grandTotals.comisionPasador)}
+                                            </TableCell>
+                                            <TableCell className="text-white font-bold text-sm py-2">
+                                                {formatearMoneda(grandTotals.juegoNeto)}
+                                            </TableCell>
+                                            <TableCell className="text-white font-bold text-sm py-2">
+                                                {formatearMoneda(grandTotals.aciertos)}
+                                            </TableCell>
+                                            <TableCell className="text-white font-bold text-sm py-2">
+                                                {formatearMoneda(grandTotals.subTotalNeto)}
+                                            </TableCell>
+                                            <TableCell className="text-white font-bold text-sm py-2">
+                                                {formatearMoneda(grandTotals.totalMovimientoDiario)}
+                                            </TableCell>
+                                            <TableCell className="text-white font-bold text-sm py-2">
+                                                {formatearMoneda(grandTotals.totalSaldosAnteriores)}
+                                            </TableCell>
+                                            <TableCell className="text-white font-bold text-sm py-2">{grandTotals.diasTrabajados}</TableCell>
+                                            <TableCell className="text-white font-bold text-sm py-2">
+                                                {formatearMoneda(grandTotals.juego / (grandTotals.diasTrabajados || 1))}
+                                            </TableCell>
+                                            <TableCell className="text-white font-bold text-sm py-2">
+                                                {formatearMoneda(grandTotals.juegoNeto / (grandTotals.diasTrabajados || 1))}
+                                            </TableCell>
+                                            <TableCell className="text-white font-bold text-sm py-2"></TableCell>
+                                        </TableRow>
+                                    </TableFooter>
                                 </Table>
                             </div>
                         ) : (
@@ -454,6 +617,24 @@ export default function RankingPlanillasPage() {
                     </CardContent>
                 </Card>
             </main>
+            {/* Modal de edición de registros diarios */}
+            <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+                <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>
+                            Editar Registros Diarios para {selectedPasadorForEdit?.nombre} ({selectedPasadorForEdit?.displayId})
+                        </DialogTitle>
+                    </DialogHeader>
+                    {selectedPasadorForEdit && (
+                        <DailyRecordsModal
+                            pasadorId={selectedPasadorForEdit.id}
+                            dateDesde={selectedDateDesde}
+                            dateHasta={selectedDateHasta}
+                            onClose={handleCloseEditModal}
+                        />
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

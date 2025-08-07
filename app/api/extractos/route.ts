@@ -815,27 +815,18 @@ export async function POST(request: Request) {
 
         const docRef = doc(db, "extractos", fechaKeyFirebase)
         const docSnap = await getDoc(docRef)
-
         let datosDia: ResultadoDia
+
         if (docSnap.exists()) {
             const data = docSnap.data()
-            console.log(
-                `📋 POST - Documento Firebase existe para ${fechaKeyFirebase}. Data completa: ${JSON.stringify(data).substring(0, 500)}...`,
-            )
             if (data[fecha]) {
                 datosDia = data[fecha] as ResultadoDia
-                console.log(
-                    `📋 POST - Estructura anidada para fecha ${fecha} encontrada. Resultados existentes: ${datosDia.resultados.length} provincias.`,
-                )
             } else {
                 datosDia = {
                     fecha: fecha,
                     dia: nombreDia,
                     resultados: [],
                 }
-                console.log(
-                    `📋 POST - Creando nueva estructura para fecha ${fecha} dentro del documento existente (clave de fecha no encontrada).`,
-                )
             }
         } else {
             datosDia = {
@@ -843,11 +834,9 @@ export async function POST(request: Request) {
                 dia: nombreDia,
                 resultados: [],
             }
-            console.log(`📋 POST - Documento no existe. Creando nuevo documento para ${fechaKeyFirebase}.`)
         }
 
         let provinciaResultado = datosDia.resultados.find((r) => r.provincia === provincia)
-
         if (!provinciaResultado) {
             provinciaResultado = {
                 loteria: provincia === "NACION" ? "Nacional" : provincia === "PROVINCIA" ? "Provincial" : provincia,
@@ -855,31 +844,13 @@ export async function POST(request: Request) {
                 sorteos: {},
             }
             datosDia.resultados.push(provinciaResultado)
-            console.log(`📋 POST - Provincia ${provincia} no encontrada en resultados, agregando nueva provincia.`)
-        } else {
-            console.log(
-                `📋 POST - Provincia ${provincia} encontrada en resultados. Sorteos existentes: ${Object.keys(provinciaResultado.sorteos).join(", ")}.`,
-            )
         }
 
         provinciaResultado.sorteos[turno] = numeros
 
-        console.log(
-            `✅ POST - Sorteo ${turno} de ${provincia} actualizado en memoria. Números: ${numeros.slice(0, 5).join(", ")}...`,
-        )
-        console.log(
-            `✅ POST - Estado actual de datosDia.resultados para ${provincia}: ${JSON.stringify(provinciaResultado.sorteos)}`,
-        )
-
-        const dataParaGuardar: ResultadoDia = {
-            fecha: fecha,
-            dia: nombreDia,
-            resultados: datosDia.resultados,
+        const dataParaGuardar = {
+            [fecha]: datosDia,
         }
-
-        console.log(
-            `💾 POST - Datos FINALES a guardar en Firebase para ${fechaKeyFirebase} bajo clave ${fecha}: ${JSON.stringify(dataParaGuardar).substring(0, 1000)}...`,
-        )
         await setDoc(docRef, dataParaGuardar, { merge: true })
         console.log(`✅ POST - Operación setDoc completada exitosamente para ${provincia} - ${turno}.`)
 

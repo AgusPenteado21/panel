@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { format, startOfDay, endOfDay } from "date-fns"
 import { es } from "date-fns/locale"
-import { CalendarIcon, Loader2, RefreshCw } from "lucide-react"
+import { CalendarIcon, Loader2, RefreshCw } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import Navbar from "@/app/components/Navbar"
 import { Button } from "@/components/ui/button"
@@ -433,12 +433,12 @@ export default function ListadoDiario() {
 
                         // ✅ SIEMPRE CALCULAR Y GUARDAR PREMIO TOTAL EN 'aciertos_calculados' PARA DATOS HISTÓRICOS
                         const aciertosCalculados = procesarJugadasYEncontrarAciertos(jugadasData, resultadosExtracto)
-                        const premioTotalCalculado = calcularTotalGanado(aciertosCalculados)
+                        // FIX: Pass all required arguments to calcularTotalGanado
+                        const premioTotalCalculado = calcularTotalGanado(pasador.id, fecha, aciertosCalculados)
                         await guardarAciertosEnFirestore(pasador.nombre, aciertosCalculados, fecha)
                         console.log(`⚠️ Premio total calculado y guardado para ${pasador.nombre}: ${premioTotalCalculado}`)
 
                         const comisionCalculada = (pasador.comisionPorcentaje / 100) * ventasOnlineAcumuladas
-
                         const saldosCalculados = calcularSaldos(
                             pasador.saldoAnterior, // Saldo de cierre del día anterior
                             ventasOnlineAcumuladas,
@@ -449,14 +449,14 @@ export default function ListadoDiario() {
                         )
 
                         console.log(`--- Datos Históricos para ${pasador.nombre} (${fechaString}) ---`)
-                        console.log(`   Saldo Anterior: ${pasador.saldoAnterior}`)
-                        console.log(`   Jugado: ${ventasOnlineAcumuladas}`)
-                        console.log(`   Comisión: ${comisionCalculada}`)
-                        console.log(`   Premios Calculados: ${premioTotalCalculado}`)
-                        console.log(`   Pagos: ${totalPagos}`)
-                        console.log(`   Cobros: ${cobroMasGrande}`)
-                        console.log(`   Saldo Actual (Movimiento Neto): ${saldosCalculados.saldoActual}`)
-                        console.log(`   Saldo Total (Acumulado): ${saldosCalculados.saldoTotal}`)
+                        console.log(`    Saldo Anterior: ${pasador.saldoAnterior}`)
+                        console.log(`    Jugado: ${ventasOnlineAcumuladas}`)
+                        console.log(`    Comisión: ${comisionCalculada}`)
+                        console.log(`    Premios Calculados: ${premioTotalCalculado}`)
+                        console.log(`    Pagos: ${totalPagos}`)
+                        console.log(`    Cobros: ${cobroMasGrande}`)
+                        console.log(`    Saldo Actual (Movimiento Neto): ${saldosCalculados.saldoActual}`)
+                        console.log(`    Saldo Total (Acumulado): ${saldosCalculados.saldoTotal}`)
                         console.log(`-------------------------------------------------`)
 
                         return {
@@ -517,11 +517,11 @@ export default function ListadoDiario() {
 
                     // ✅ CALCULAR ACIERTOS EN TIEMPO REAL Y GUARDAR EN 'aciertos_calculados'
                     const aciertosCalculados = procesarJugadasYEncontrarAciertos(jugadasData, resultadosExtracto)
-                    const premioTotalCalculado = calcularTotalGanado(aciertosCalculados)
+                    // FIX: Pass all required arguments to calcularTotalGanado
+                    const premioTotalCalculado = calcularTotalGanado(pasador.id, fechaSeleccionada, aciertosCalculados)
                     await guardarAciertosEnFirestore(pasador.nombre, aciertosCalculados, fechaSeleccionada)
 
                     const comisionCalculada = (pasador.comisionPorcentaje / 100) * ventasOnlineAcumuladas
-
                     const saldosCalculados = calcularSaldos(
                         pasador.saldoAnterior,
                         ventasOnlineAcumuladas,
@@ -532,14 +532,14 @@ export default function ListadoDiario() {
                     )
 
                     console.log(`--- Datos Tiempo Real para ${pasador.nombre} (${fechaString}) ---`)
-                    console.log(`   Saldo Anterior: ${pasador.saldoAnterior}`)
-                    console.log(`   Jugado: ${ventasOnlineAcumuladas}`)
-                    console.log(`   Comisión: ${comisionCalculada}`)
-                    console.log(`   Premios Calculados: ${premioTotalCalculado}`)
-                    console.log(`   Pagos (cache): ${pagosCobros.pagos}`)
-                    console.log(`   Cobros (cache): ${pagosCobros.cobros}`)
-                    console.log(`   Saldo Actual (Movimiento Neto): ${saldosCalculados.saldoActual}`)
-                    console.log(`   Saldo Total (Acumulado): ${saldosCalculados.saldoTotal}`)
+                    console.log(`    Saldo Anterior: ${pasador.saldoAnterior}`)
+                    console.log(`    Jugado: ${ventasOnlineAcumuladas}`)
+                    console.log(`    Comisión: ${comisionCalculada}`)
+                    console.log(`    Premios Calculados: ${premioTotalCalculado}`)
+                    console.log(`    Pagos (cache): ${pagosCobros.pagos}`)
+                    console.log(`    Cobros (cache): ${pagosCobros.cobros}`)
+                    console.log(`    Saldo Actual (Movimiento Neto): ${saldosCalculados.saldoActual}`)
+                    console.log(`    Saldo Total (Acumulado): ${saldosCalculados.saldoTotal}`)
                     console.log(`-------------------------------------------------`)
 
                     setPasadores((prevPasadores) =>
@@ -702,6 +702,7 @@ export default function ListadoDiario() {
                     posicionEnModulo: data.posicionEnModulo || 1,
                 })
             }
+
             listaPasadores.sort((a, b) => {
                 if (a.modulo !== b.modulo) return a.modulo - b.modulo
                 return a.posicionEnModulo - b.posicionEnModulo
@@ -809,8 +810,8 @@ export default function ListadoDiario() {
 
                     // Calculate aciertos
                     const aciertosCalculados = procesarJugadasYEncontrarAciertos(jugadasData, currentExtractosResults)
-                    const premioTotalCalculado = calcularTotalGanado(aciertosCalculados)
-
+                    // FIX: Pass all required arguments to calcularTotalGanado
+                    const premioTotalCalculado = calcularTotalGanado(pasador.id, fechaSeleccionada, aciertosCalculados)
                     // Guardar en la nueva colección 'aciertos_calculados'
                     await guardarAciertosEnFirestore(pasador.nombre, aciertosCalculados, fechaSeleccionada)
 
@@ -832,14 +833,14 @@ export default function ListadoDiario() {
                     )
 
                     console.log(`--- Datos Actualización Manual para ${pasador.nombre} (${fechaString}) ---`)
-                    console.log(`   Saldo Anterior: ${pasador.saldoAnterior}`)
-                    console.log(`   Jugado: ${pasador.jugado}`)
-                    console.log(`   Comisión: ${comisionCalculada}`)
-                    console.log(`   Premios Calculados: ${premioTotalCalculado}`)
-                    console.log(`   Pagos (cache): ${pagosCobros.pagos}`)
-                    console.log(`   Cobros (cache): ${pagosCobros.cobros}`)
-                    console.log(`   Saldo Actual (Movimiento Neto): ${saldosCalculados.saldoActual}`)
-                    console.log(`   Saldo Total (Acumulado): ${saldosCalculados.saldoTotal}`)
+                    console.log(`    Saldo Anterior: ${pasador.saldoAnterior}`)
+                    console.log(`    Jugado: ${pasador.jugado}`)
+                    console.log(`    Comisión: ${comisionCalculada}`)
+                    console.log(`    Premios Calculados: ${premioTotalCalculado}`)
+                    console.log(`    Pagos (cache): ${pagosCobros.pagos}`)
+                    console.log(`    Cobros (cache): ${pagosCobros.cobros}`)
+                    console.log(`    Saldo Actual (Movimiento Neto): ${saldosCalculados.saldoActual}`)
+                    console.log(`    Saldo Total (Acumulado): ${saldosCalculados.saldoTotal}`)
                     console.log(`-------------------------------------------------`)
 
                     return {
