@@ -15,7 +15,6 @@ import { db } from "@/lib/firebase"
 import { collection, getDocs, doc, query, where, onSnapshot, setDoc, Timestamp, getDoc } from "firebase/firestore"
 import toast from "react-hot-toast"
 import { ScrollArea } from "@/components/ui/scroll-area" // Importar ScrollArea
-
 // INICIO DE LAS FUNCIONES MOVIDAS DE aciertos-utils.tsx
 import {
     esJugadaAnulada,
@@ -25,7 +24,6 @@ import {
     guardarAciertosEnFirestore,
 } from "@/lib/aciertos-utils" // Actualiza la ruta de importación
 // FIN DE LAS FUNCIONES MOVIDAS DE aciertos-utils.tsx
-
 interface Pasador {
     id: string
     displayId: string
@@ -59,7 +57,6 @@ interface Pasador {
     modulo: number
     posicionEnModulo: number
 }
-
 interface ExtractoData {
     [fecha: string]: {
         resultados: any[]
@@ -165,7 +162,7 @@ const configurarListenerPagosCobros = (
     const cobrosQuery = query(cobrosRef, where("pasadorId", "==", pasadorId), where("fecha", "==", fechaString))
 
     let currentPagos = 0
-    let currentCobros = 0 // This will store the largest cobro
+    let currentCobros = 0
 
     const unsubscribePagos = onSnapshot(
         pagosQuery,
@@ -194,7 +191,7 @@ const configurarListenerPagosCobros = (
     const unsubscribeCobros = onSnapshot(
         cobrosQuery,
         (snapshot) => {
-            let cobroMasGrande = 0
+            let totalCobros = 0 // CAMBIO: Sumar todos los cobros
             snapshot.forEach((doc) => {
                 const monto = doc.data().monto
                 let montoNumerico = 0
@@ -204,11 +201,9 @@ const configurarListenerPagosCobros = (
                     montoNumerico = Number.parseFloat(monto)
                     if (isNaN(montoNumerico)) montoNumerico = 0
                 }
-                if (montoNumerico > cobroMasGrande) {
-                    cobroMasGrande = montoNumerico
-                }
+                totalCobros += montoNumerico // CAMBIO: Sumar todos los montos
             })
-            currentCobros = cobroMasGrande
+            currentCobros = totalCobros // CAMBIO: Asignar la suma total
             console.log(`🔄 Cobros actualizados para ${pasadorId} en ${fechaString}: ${currentCobros}`)
             onUpdate(currentPagos, currentCobros)
         },
@@ -247,7 +242,7 @@ const obtenerSaldoAnterior = async (pasadorId: string, fechaSeleccionada: Date):
     }
 }
 
-// ✅ FUNCIÓN CALCULAR SALDOS - AJUSTADA SEGÚN REQUERIMIENTO
+// ✅ FUNCIÓN CALCULAR SALDOS - REVERTIDA A LA VERSIÓN ORIGINAL
 const calcularSaldos = (
     saldoCierreDiaAnterior: number, // Este es el saldo final del día anterior
     jugado: number,
@@ -260,7 +255,6 @@ const calcularSaldos = (
     const saldoActualDelDia = jugado - comision - premios
     // ✅ Saldo Total: Es el saldo acumulado, incluyendo el saldo del día anterior y las operaciones del día actual (incluyendo pagos/cobros).
     const saldoTotalCalculado = saldoCierreDiaAnterior + saldoActualDelDia + pagosInmutables - cobrosInmutables
-
     return {
         saldoAnterior: saldoCierreDiaAnterior, // Se mantiene como el saldo de cierre del día anterior
         saldoActual: saldoActualDelDia, // Este es el nuevo "saldoActual" (movimiento neto del día)
@@ -416,7 +410,7 @@ export default function ListadoDiario() {
                             }
                         })
 
-                        let cobroMasGrande = 0
+                        let totalCobros = 0 // CAMBIO: Sumar todos los cobros
                         cobrosSnapshot.forEach((doc) => {
                             const monto = doc.data().monto
                             let montoNumerico = 0
@@ -426,9 +420,7 @@ export default function ListadoDiario() {
                                 montoNumerico = Number.parseFloat(monto)
                                 if (isNaN(montoNumerico)) montoNumerico = 0
                             }
-                            if (montoNumerico > cobroMasGrande) {
-                                cobroMasGrande = montoNumerico
-                            }
+                            totalCobros += montoNumerico // CAMBIO: Sumar todos los montos
                         })
 
                         // ✅ SIEMPRE CALCULAR Y GUARDAR PREMIO TOTAL EN 'aciertos_calculados' PARA DATOS HISTÓRICOS
@@ -439,13 +431,14 @@ export default function ListadoDiario() {
                         console.log(`⚠️ Premio total calculado y guardado para ${pasador.nombre}: ${premioTotalCalculado}`)
 
                         const comisionCalculada = (pasador.comisionPorcentaje / 100) * ventasOnlineAcumuladas
+
                         const saldosCalculados = calcularSaldos(
                             pasador.saldoAnterior, // Saldo de cierre del día anterior
                             ventasOnlineAcumuladas,
                             comisionCalculada,
                             premioTotalCalculado, // Usar el premio total calculado
                             totalPagos, // ✅ VALOR OBTENIDO DE LA DB
-                            cobroMasGrande, // ✅ VALOR OBTENIDO DE LA DB
+                            totalCobros, // ✅ VALOR OBTENIDO DE LA DB (ahora es la suma)
                         )
 
                         console.log(`--- Datos Históricos para ${pasador.nombre} (${fechaString}) ---`)
@@ -454,7 +447,7 @@ export default function ListadoDiario() {
                         console.log(`    Comisión: ${comisionCalculada}`)
                         console.log(`    Premios Calculados: ${premioTotalCalculado}`)
                         console.log(`    Pagos: ${totalPagos}`)
-                        console.log(`    Cobros: ${cobroMasGrande}`)
+                        console.log(`    Cobros: ${totalCobros}`) // Ahora muestra la suma
                         console.log(`    Saldo Actual (Movimiento Neto): ${saldosCalculados.saldoActual}`)
                         console.log(`    Saldo Total (Acumulado): ${saldosCalculados.saldoTotal}`)
                         console.log(`-------------------------------------------------`)
@@ -463,7 +456,7 @@ export default function ListadoDiario() {
                             ...pasador,
                             jugado: ventasOnlineAcumuladas,
                             pagado: totalPagos, // ✅ VALOR OBTENIDO DE LA DB
-                            cobrado: cobroMasGrande, // ✅ VALOR OBTENIDO DE LA DB
+                            cobrado: totalCobros, // ✅ VALOR OBTENIDO DE LA DB (ahora es la suma)
                             comisionPasador: comisionCalculada,
                             premioTotal: premioTotalCalculado, // Actualizar premioTotal
                             ...saldosCalculados,
@@ -522,6 +515,7 @@ export default function ListadoDiario() {
                     await guardarAciertosEnFirestore(pasador.nombre, aciertosCalculados, fechaSeleccionada)
 
                     const comisionCalculada = (pasador.comisionPorcentaje / 100) * ventasOnlineAcumuladas
+
                     const saldosCalculados = calcularSaldos(
                         pasador.saldoAnterior,
                         ventasOnlineAcumuladas,
@@ -823,6 +817,7 @@ export default function ListadoDiario() {
                     }
 
                     const comisionCalculada = (pasador.comisionPorcentaje / 100) * pasador.jugado
+
                     const saldosCalculados = calcularSaldos(
                         pasador.saldoAnterior,
                         pasador.jugado,

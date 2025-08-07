@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
@@ -8,8 +8,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import Navbar from "@/app/components/Navbar"
 import { collection, getDocs, addDoc, serverTimestamp } from "firebase/firestore"
 import { db, auth } from "@/lib/firebase"
-import { Loader2, RefreshCw, DollarSign, AlertCircle } from "lucide-react"
+import { Loader2, RefreshCw, DollarSign, AlertCircle, CalendarIcon } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { format } from "date-fns"
+import { es } from "date-fns/locale" // Importar el locale español
+import { cn } from "@/lib/utils"
 
 interface Pasador {
     id: string
@@ -29,11 +34,12 @@ interface ModuloInfo {
 export default function IngresarPagosYCobros() {
     const [modulo, setModulo] = useState<string>("")
     const [pasadores, setPasadores] = useState<Pasador[]>([])
-    const [modulosDisponibles, setModulosDisponibles] = useState<ModuloInfo[]>([]) // Cambiado a ModuloInfo[]
+    const [modulosDisponibles, setModulosDisponibles] = useState<ModuloInfo[]>([])
     const [importes, setImportes] = useState<{ [key: string]: string }>({})
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(true)
+    const [selectedDate, setSelectedDate] = useState<Date>(new Date()) // Nuevo estado para la fecha
 
     useEffect(() => {
         fetchPasadores()
@@ -49,7 +55,6 @@ export default function IngresarPagosYCobros() {
                     const data = docSnapshot.data()
                     const moduloValue = data.modulo ? String(data.modulo) : "70"
                     const posicionEnModuloValue = data.posicionEnModulo ? Number(data.posicionEnModulo) : 1
-
                     return {
                         id: docSnapshot.id,
                         displayId: data.displayId || `${moduloValue}-${String(posicionEnModuloValue).padStart(4, "0")}`,
@@ -66,27 +71,21 @@ export default function IngresarPagosYCobros() {
                     }
                     return a.posicionEnModulo - b.posicionEnModulo
                 })
-
             setPasadores(pasadoresList)
-
             // Calcular la cantidad de pasadores por módulo
             const modulosMap = new Map<string, number>()
             pasadoresList.forEach((p) => {
                 modulosMap.set(p.modulo, (modulosMap.get(p.modulo) || 0) + 1)
             })
-
             const uniqueModulosInfo: ModuloInfo[] = Array.from(modulosMap.entries())
                 .map(([mod, count]) => ({ modulo: mod, cantidad: count }))
                 .sort((a, b) => Number.parseInt(a.modulo) - Number.parseInt(b.modulo))
-
             setModulosDisponibles(uniqueModulosInfo)
-
             if (uniqueModulosInfo.length > 0 && !uniqueModulosInfo.some((m) => m.modulo === modulo)) {
                 setModulo(uniqueModulosInfo[0].modulo)
             } else if (uniqueModulosInfo.length === 0) {
                 setModulo("")
             }
-
             const nuevosImportes: { [key: string]: string } = {}
             pasadoresList.forEach((pasador) => {
                 nuevosImportes[pasador.id] = ""
@@ -119,7 +118,8 @@ export default function IngresarPagosYCobros() {
             const pagosCollection = collection(db, "pagos")
             const cobrosCollection = collection(db, "cobros")
 
-            const fecha = new Date()
+            // Usar la fecha seleccionada en lugar de la fecha actual
+            const fecha = selectedDate
             const year = fecha.getFullYear()
             const month = String(fecha.getMonth() + 1).padStart(2, "0")
             const day = String(fecha.getDate()).padStart(2, "0")
@@ -136,7 +136,7 @@ export default function IngresarPagosYCobros() {
                         const data = {
                             pasadorId: pasadorId,
                             monto: monto,
-                            fecha: fechaFormateada,
+                            fecha: fechaFormateada, // Usar la fecha seleccionada
                             observaciones: `Módulo: ${pasador?.modulo}`,
                             usuario: auth.currentUser?.email || "admin@example.com",
                             createdAt: serverTimestamp(),
@@ -148,7 +148,7 @@ export default function IngresarPagosYCobros() {
                         const data = {
                             pasadorId: pasadorId,
                             monto: Math.abs(monto), // Guardamos el valor absoluto para mantener consistencia
-                            fecha: fechaFormateada,
+                            fecha: fechaFormateada, // Usar la fecha seleccionada
                             observaciones: `Módulo: ${pasador?.modulo}`,
                             usuario: auth.currentUser?.email || "admin@example.com",
                             createdAt: serverTimestamp(),
@@ -159,7 +159,6 @@ export default function IngresarPagosYCobros() {
                     }
                 }
             }
-
             const nuevosImportes: { [key: string]: string } = {}
             pasadores.forEach((pasador) => {
                 nuevosImportes[pasador.id] = ""
@@ -190,20 +189,48 @@ export default function IngresarPagosYCobros() {
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="p-6">
-                        <div className="flex items-center gap-4 mb-6 justify-center bg-blue-50 p-4 rounded-lg border border-blue-200 shadow-sm">
-                            <span className="text-blue-800 font-medium">Seleccione el módulo:</span>
-                            <Select value={modulo} onValueChange={setModulo}>
-                                <SelectTrigger className="w-[180px] border-blue-300 focus:ring-blue-500">
-                                    <SelectValue placeholder="Módulo" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {modulosDisponibles.map((mInfo) => (
-                                        <SelectItem key={mInfo.modulo} value={mInfo.modulo}>
-                                            Módulo {mInfo.modulo} ({mInfo.cantidad} pasadores)
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                        <div className="flex flex-col md:flex-row items-center gap-4 mb-6 justify-center bg-blue-50 p-4 rounded-lg border border-blue-200 shadow-sm">
+                            <div className="flex items-center gap-2">
+                                <span className="text-blue-800 font-medium">Seleccione el módulo:</span>
+                                <Select value={modulo} onValueChange={setModulo}>
+                                    <SelectTrigger className="w-[180px] border-blue-300 focus:ring-blue-500">
+                                        <SelectValue placeholder="Módulo" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {modulosDisponibles.map((mInfo) => (
+                                            <SelectItem key={mInfo.modulo} value={mInfo.modulo}>
+                                                Módulo {mInfo.modulo} ({mInfo.cantidad} pasadores)
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-blue-800 font-medium">Fecha:</span>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                            variant={"outline"}
+                                            className={cn(
+                                                "w-[180px] justify-start text-left font-normal border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-500 bg-transparent",
+                                                !selectedDate && "text-muted-foreground"
+                                            )}
+                                        >
+                                            <CalendarIcon className="mr-2 h-4 w-4" />
+                                            {selectedDate ? format(selectedDate, "PPP", { locale: es }) : <span>Seleccionar fecha</span>}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                        <Calendar
+                                            mode="single"
+                                            selected={selectedDate}
+                                            onSelect={(date) => setSelectedDate(date || new Date())}
+                                            initialFocus
+                                            locale={es} // Establecer el idioma español
+                                        />
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
                             <Button
                                 variant="outline"
                                 onClick={handleActualizar}
@@ -270,10 +297,10 @@ export default function IngresarPagosYCobros() {
                                                             onChange={(e) => handleImporteChange(pasador.id, e.target.value)}
                                                             placeholder="0.00"
                                                             className={`w-full border-blue-200 focus:border-blue-500 focus:ring-blue-500 text-base py-2 ${importes[pasador.id] && Number.parseFloat(importes[pasador.id]) < 0
-                                                                    ? "text-red-600 font-medium"
-                                                                    : importes[pasador.id] && Number.parseFloat(importes[pasador.id]) > 0
-                                                                        ? "text-green-600 font-medium"
-                                                                        : ""
+                                                                ? "text-red-600 font-medium"
+                                                                : importes[pasador.id] && Number.parseFloat(importes[pasador.id]) > 0
+                                                                    ? "text-green-600 font-medium"
+                                                                    : ""
                                                                 }`}
                                                             step="0.01"
                                                         />
