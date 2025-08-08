@@ -272,7 +272,7 @@ export const verificarCoincidenciaLoteria = (loteriaJugada: string, loteriaResul
     return false
 }
 
-// Verificar acierto específico (quiniela normal)
+// Verificar acierto específico (quiniela normal) - AHORA DEVUELVE UNA LISTA DE ACIERTOS
 export const verificarAciertoEspecifico = (
     numeroApostado: string,
     posicion: string,
@@ -282,11 +282,15 @@ export const verificarAciertoEspecifico = (
     loteriaResultadoDisplay: string,
     sorteoKey: string,
     secuencia: string,
-): Record<string, any> | null => {
+): Array<Record<string, any>> => { // Cambiado a Array<Record<string, any>>
     console.log(`🎯 JUGADA: ${numeroApostado} - ${sorteoKey} - [${numerosGanadores.join(", ")}] - Posición: ${posicion}`)
+
+    const aciertosEncontrados: Array<Record<string, any>> = [] // Lista para almacenar todos los aciertos
+
     const trimmedPosicion = posicion.trim()
     const posicionApostada = Number.parseInt(trimmedPosicion) || 1
     let finRango: number
+
     // Lógica corregida para determinar el rango de búsqueda según la posición apostada
     if (posicionApostada === 1) {
         finRango = 1 // A la cabeza: solo buscar en la posición 0 (primer número)
@@ -309,30 +313,33 @@ export const verificarAciertoEspecifico = (
         const numeroGanador = String(numerosGanadores[i]).padStart(4, "0")
         // Usar Math.min para evitar errores si numeroApostado es más largo que numeroGanador
         const ultimasCifras = numeroGanador.substring(Math.max(0, numeroGanador.length - numeroApostado.length))
+
         console.log(`   Pos ${i + 1}: ${numeroGanador} → últimas ${numeroApostado.length} cifras: ${ultimasCifras}`)
+
         if (numeroApostado === ultimasCifras) { // Usar === para coincidencia exacta de las últimas cifras
             console.log("   🎉 ¡ACIERTO ENCONTRADO EN POSICIÓN " + (i + 1) + "!")
             console.log("   🎉 ¡ACIERTO CONFIRMADO!")
-            return {
+            aciertosEncontrados.push({ // Añadir el acierto a la lista
                 numero: numeroApostado,
-                posicion: trimmedPosicion,
+                posicion: trimmedPosicion, // Posición apostada
                 monto: monto,
                 provincia: provincia,
                 loteria: loteriaResultadoDisplay,
                 numeroGanador: ultimasCifras,
                 numeroGanadorCompleto: numeroGanador,
-                posicionAcierto: i + 1,
+                posicionAcierto: i + 1, // Posición real donde salió
                 sorteo: sorteoKey,
                 secuencia: secuencia,
                 tipo: "NUEVA JUGADA",
                 cifrasCoincidentes: numeroApostado.length,
-                // Agregar el nombre canónico del sorteoKey
                 sorteoCanonico: canonicalSorteoKey,
-            }
+            })
         }
     }
-    console.log("   ❌ No hay acierto en el rango especificado")
-    return null
+    if (aciertosEncontrados.length === 0) {
+        console.log("   ❌ No hay acierto en el rango especificado")
+    }
+    return aciertosEncontrados // Devolver la lista de aciertos
 }
 
 export const verificarAciertoRedoblona = (
@@ -346,26 +353,32 @@ export const verificarAciertoRedoblona = (
         const numeroCompleto = String(numerosGanadores[i]).padStart(4, "0")
         console.log(`Posición ${i + 1}: ${numeroCompleto}`)
     }
+
     const jugadas = jugadaData["jugadas"] as Array<Record<string, any>>
     if (!jugadas || jugadas.length === 0) {
         console.log('❌ No se encontró el array "jugadas" en la estructura o está vacío')
         return null
     }
+
     const jugadaConRedoblonas = jugadas.find(
         (j) => j.redoblonas && Array.isArray(j.redoblonas) && j.redoblonas.length > 0,
     )
+
     if (!jugadaConRedoblonas) {
         console.log("❌ No se encontró ninguna jugada con redoblonas en el array")
         return null
     }
+
     const numeroOriginalApostado =
         jugadaConRedoblonas["originalNumero"]?.toString() ?? jugadaConRedoblonas["numero"]?.toString() ?? ""
     const posicionOriginalApostadaRaw =
         jugadaConRedoblonas["originalPosicion"]?.toString() ?? jugadaConRedoblonas["posicion"]?.toString() ?? "1"
     const posicionOriginalApostada = posicionOriginalApostadaRaw.trim()
+
     console.log("=== DATOS DE LA JUGADA ORIGINAL ===")
     console.log(`Número original apostado: ${numeroOriginalApostado}`)
     console.log(`Posición original apostada: ${posicionOriginalApostada}`)
+
     // 1. VERIFICAR QUE EL NÚMERO ORIGINAL ACIERTE EN SU RANGO (Lógica de Flutter)
     const posOriginal = Number.parseInt(posicionOriginalApostada) || 1
     let finRangoOriginal: number
@@ -378,18 +391,23 @@ export const verificarAciertoRedoblona = (
     } else {
         finRangoOriginal = 20 // Posiciones 0-19 (primeros 20)
     }
+
     console.log("=== VERIFICACIÓN DEL NÚMERO ORIGINAL ===")
     console.log(`Buscando número original ${numeroOriginalApostado} en rango 0-${finRangoOriginal - 1}`)
+
     let originalNumeroGanador: string | null = null
     let originalPosicionAcierto: number | null = null
+
     for (let i = 0; i < finRangoOriginal && i < numerosGanadores.length; i++) {
         const numeroGanadorActual = String(numerosGanadores[i]).padStart(4, "0")
         const ultimasCifrasOriginal =
             numeroGanadorActual.length >= numeroOriginalApostado.length
                 ? numeroGanadorActual.substring(numeroGanadorActual.length - numeroOriginalApostado.length)
                 : numeroGanadorActual
+
         console.log(`Posición ${i + 1}: ${numeroGanadorActual}, últimas cifras: ${ultimasCifrasOriginal}`)
         console.log(`Comparando: ${numeroOriginalApostado} == ${ultimasCifrasOriginal}`)
+
         if (numeroOriginalApostado === ultimasCifrasOriginal) {
             console.log(`✅ Número original ${numeroOriginalApostado} acierta en posición ${i + 1}`)
             originalNumeroGanador = numeroGanadorActual
@@ -397,28 +415,34 @@ export const verificarAciertoRedoblona = (
             break
         }
     }
+
     if (originalNumeroGanador === null) {
         console.log(`❌ Número original ${numeroOriginalApostado} no acierta en rango 0-${finRangoOriginal - 1}`)
         return null
     }
     console.log(`✅ Número original acierta en posición ${originalPosicionAcierto! + 1}`)
+
     // 2. VERIFICAR LAS REDOBLONAS (Lógica de Flutter)
     const redoblonas = jugadaConRedoblonas.redoblonas as Array<Record<string, any>>
     console.log("=== VERIFICACIÓN DE REDOBLONAS ===")
     console.log(`Redoblonas encontradas: ${redoblonas.length}`)
     console.log("Datos de redoblonas:", JSON.stringify(redoblonas, null, 2))
+
     let redoblonaNumeroApostadoGanador: string | null = null
     let redoblonaNumeroGanador: string | null = null
     let redoblonaPosicionAcierto: number | null = null
     let redoblonaPosicionApostadaGanador: string | null = null
+
     for (let redoblonaIndex = 0; redoblonaIndex < redoblonas.length; redoblonaIndex++) {
         const redoblona = redoblonas[redoblonaIndex]
         const numeroRedoblonaApostado = redoblona.numero?.toString() ?? ""
         const posicionRedoblonaApostadaRaw = redoblona.posicion?.toString() ?? ""
         const posicionRedoblonaApostada = posicionRedoblonaApostadaRaw.trim()
+
         console.log(`=== VERIFICANDO REDOBLONA ${redoblonaIndex + 1} ===`)
         console.log(`Número redoblona apostado: ${numeroRedoblonaApostado}`)
         console.log(`Posición redoblona apostada: ${posicionRedoblonaApostada}`)
+
         const posRedoblona = Number.parseInt(posicionRedoblonaApostada) || 20
         let inicioRango, finRango
         if (posRedoblona === 5) {
@@ -434,18 +458,22 @@ export const verificarAciertoRedoblona = (
             console.log(`❌ Posición de redoblona no válida: ${posicionRedoblonaApostada}`)
             continue
         }
+
         console.log(`Buscando ${numeroRedoblonaApostado} en rango: índice ${inicioRango} a ${finRango - 1}`)
+
         for (let i = inicioRango; i < finRango && i < numerosGanadores.length; i++) {
             const numeroGanadorRango = String(numerosGanadores[i]).padStart(4, "0")
             const ultimasCifrasRango =
                 numeroGanadorRango.length >= numeroRedoblonaApostado.length
                     ? numeroGanadorRango.substring(numeroGanadorRango.length - numeroRedoblonaApostado.length)
                     : numeroGanadorRango
+
             console.log(`=== COMPARACIÓN DETALLADA POSICIÓN ${i + 1} ===`)
             console.log(`Número ganador completo: ${numeroGanadorRango}`)
             console.log(`Últimas ${numeroRedoblonaApostado.length} cifras: ${ultimasCifrasRango}`)
             console.log(`Número apostado: ${numeroRedoblonaApostado}`)
             console.log(`¿Coinciden? ${numeroRedoblonaApostado} == ${ultimasCifrasRango}`)
+
             if (numeroRedoblonaApostado === ultimasCifrasRango) {
                 console.log(`🎯 ¡REDOBLONA ACERTADA! ${numeroRedoblonaApostado} encontrado en posición ${i + 1}`)
                 redoblonaNumeroApostadoGanador = numeroRedoblonaApostado
@@ -459,6 +487,7 @@ export const verificarAciertoRedoblona = (
             break // If one redoblona won, the whole redoblona bet wins.
         }
     }
+
     if (redoblonaNumeroApostadoGanador === null) {
         console.log("❌ Ninguna redoblona acertó")
         console.log("=== RESUMEN DE VERIFICACIÓN FALLIDA ===")
@@ -469,6 +498,7 @@ export const verificarAciertoRedoblona = (
         }
         return null
     }
+
     console.log("=== RESUMEN DE VERIFICACIÓN DE REDOBLONA EXITOSA ===")
     console.log(
         `Original: ${numeroOriginalApostado} (apostado) acierta con ${originalNumeroGanador} en pos ${originalPosicionAcierto! + 1}`,
@@ -476,6 +506,7 @@ export const verificarAciertoRedoblona = (
     console.log(
         `Redoblona: ${redoblonaNumeroApostadoGanador} (apostado) acierta con ${redoblonaNumeroGanador} en pos ${redoblonaPosicionAcierto! + 1} (a los ${redoblonaPosicionApostadaGanador})`,
     )
+
     return {
         originalNumeroApostado: numeroOriginalApostado,
         originalPosicionApostada: posicionOriginalApostada,
@@ -496,6 +527,7 @@ export const obtenerMultiplicador = (cifrasCoincidentes: number, posicion: numbe
         3: { 1: 600, 5: 120, 10: 60, 20: 30 }, // Tres cifras
         4: { 1: 3500, 5: 700, 10: 350, 20: 175 }, // Cuatro cifras
     }
+
     if (!multiplicadores[cifrasCoincidentes] || !multiplicadores[cifrasCoincidentes]![posicion]) {
         return 0.0
     }
@@ -512,14 +544,17 @@ export const obtenerMultiplicadorTriplona = (tipoAcierto: string, enOrden: boole
         "3 a los 15": 3500.0,
         "3 a los 20": 3000.0,
     }
+
     console.log("Calculando multiplicador para NUEVA TRIPLONA:")
     console.log(`Tipo de acierto: ${tipoAcierto}`)
     console.log(`En orden: ${enOrden}`)
     console.log(`Posición: ${posicion}`)
+
     if (tipoAcierto && pagosTriplona[tipoAcierto]) {
         console.log(`Usando multiplicador para ${tipoAcierto}: ${pagosTriplona[tipoAcierto]}`)
         return pagosTriplona[tipoAcierto]!
     }
+
     if (enOrden && posicion <= 3) {
         console.log(`Usando multiplicador para 3 a los 3 en orden: ${pagosTriplona["3 a los 3 en orden"]}`)
         return pagosTriplona["3 a los 3 en orden"]!
@@ -598,12 +633,15 @@ export const calcularPremioRedoblona = (
             "20": 16.0,
         },
     }
+
     posicionOriginal = posicionOriginal.trim()
     posicionRedoblona = posicionRedoblona.trim()
+
     console.log("Calculando premio redoblona:")
     console.log(`Posición original: ${posicionOriginal}`)
     console.log(`Posición redoblona: ${posicionRedoblona}`)
     console.log(`Monto apostado: ${montoApostado}`)
+
     if (pagosRedoblonas[posicionOriginal] && pagosRedoblonas[posicionOriginal]![posicionRedoblona]) {
         const multiplicador = pagosRedoblonas[posicionOriginal]![posicionRedoblona]!
         const premioFinal = multiplicador * montoApostado
@@ -611,6 +649,7 @@ export const calcularPremioRedoblona = (
         console.log(`Premio final (proporcional): ${premioFinal}`)
         return premioFinal
     }
+
     console.log("No se encontró premio para esta combinación de redoblona")
     return 0.0
 }
@@ -621,6 +660,7 @@ export const extraerResultados = (extractoData: Record<string, any>, fechaFormat
     console.log("EXTRAYENDO RESULTADOS DEL EXTRACTO:")
     console.log(`Fecha formateada: ${fechaFormateada}`)
     console.log("Claves disponibles en el extracto:", Object.keys(extractoData))
+
     // Primero intentar con la fecha formateada
     if (extractoData[fechaFormateada]) {
         console.log(`Encontrada clave con fecha formateada: ${fechaFormateada}`)
@@ -630,12 +670,14 @@ export const extraerResultados = (extractoData: Record<string, any>, fechaFormat
             console.log(`Resultados encontrados en fecha formateada: ${resultados.length}`)
         }
     }
+
     // Si no hay resultados, intentar con la clave 'resultados' directamente
     if (resultados.length === 0 && extractoData.resultados) {
         console.log('Usando clave "resultados" directamente')
         resultados = (extractoData.resultados as any[]) || []
         console.log(`Resultados encontrados en clave "resultados": ${resultados.length}`)
     }
+
     // Si aún no hay resultados, buscar en todas las claves
     if (resultados.length === 0) {
         console.log("Buscando resultados en todas las claves del extracto...")
@@ -650,6 +692,7 @@ export const extraerResultados = (extractoData: Record<string, any>, fechaFormat
             }
         }
     }
+
     // Imprimir un resumen de los resultados encontrados
     if (resultados.length > 0) {
         console.log("RESUMEN DE RESULTADOS ENCONTRADOS:")
@@ -660,6 +703,7 @@ export const extraerResultados = (extractoData: Record<string, any>, fechaFormat
         if (resultados.length > 5) {
             console.log(`... y ${resultados.length - 5} más`)
         }
+
         // Verificar si hay sorteos en los resultados
         for (const resultado of resultados) {
             if (typeof resultado === "object" && resultado !== null && "sorteos" in resultado) {
@@ -691,6 +735,7 @@ export const procesarJugadasYEncontrarAciertos = (
     resultadosExtracto: any[],
 ): Record<string, Record<string, any[]>> => {
     const aciertosAgrupados: Record<string, Record<string, any[]>> = {}
+
     console.log(`DEBUG: Iniciando procesarJugadasYEncontrarAciertos. Total jugadas: ${jugadasData.length}`)
     console.log(`DEBUG: Resultados de extracto disponibles: ${JSON.stringify(resultadosExtracto, null, 2)}`)
 
@@ -706,6 +751,7 @@ export const procesarJugadasYEncontrarAciertos = (
     for (const jugadaData of jugadasData) {
         console.log(`DEBUG: --- Procesando Jugada Principal (Secuencia: ${jugadaData.secuencia ?? "N/A"}) ---`)
         console.log(`DEBUG: Jugada Data Completa: ${JSON.stringify(jugadaData, null, 2)}`)
+
         if (esJugadaAnulada(jugadaData)) {
             console.log(`DEBUG: Jugada ${jugadaData.secuencia} anulada, saltando.`)
             continue
@@ -744,29 +790,35 @@ export const procesarJugadasYEncontrarAciertos = (
         if (tipo === "NUEVA JUGADA") {
             const jugadasArray = (jugadaData.jugadas as Array<Record<string, any>>) || []
             console.log(`DEBUG: Tipo: Nueva Jugada. Total jugadas individuales: ${jugadasArray.length}`)
+
             for (const jugadaIndividual of jugadasArray) {
                 console.log(`DEBUG:   --- Procesando Jugada Individual ---`)
                 console.log(`DEBUG:   Jugada Individual Data: ${JSON.stringify(jugadaIndividual, null, 2)}`)
                 console.log(
                     `DEBUG:   BET DETAILS: Numero: "${jugadaIndividual.numero?.toString() ?? ""}", Posicion: "${jugadaIndividual.posicion?.toString() ?? "1"}", Monto: ${parsearDouble(jugadaIndividual.monto ?? "0")}`,
                 )
+
                 const numeroApostado = jugadaIndividual.numero?.toString() ?? ""
                 const posicion = jugadaIndividual.posicion?.toString() ?? "1"
                 const monto = parsearDouble(jugadaIndividual.monto ?? "0")
                 const loteriaIndividualRaw = jugadaIndividual.loteria?.toString() ?? ""
+
                 // Obtener el nombre canónico de la lotería individual
                 const canonicalLoteriaIndividual = getCanonicalName(loteriaIndividualRaw)
                 console.log(`DEBUG:   Número Apostado: ${numeroApostado}, Posición: ${posicion}, Monto: ${monto}`)
                 console.log(
                     `DEBUG:   Lotería Individual (Raw): "${loteriaIndividualRaw}" -> Canónica: "${canonicalLoteriaIndividual}"`,
                 )
+
                 const provinciasRaw = (jugadaIndividual.provincias as any[]) || []
                 const provincias = provinciasRaw.map((p) => p.toString())
                 console.log(`DEBUG:   Provincias Apostadas: ${provincias.join(", ")}`)
+
                 if (numeroApostado === "" || monto <= 0) {
                     console.log(`DEBUG:   Número apostado vacío o monto <= 0. Saltando jugada individual.`)
                     continue
                 }
+
                 // Saltar si tiene redoblonas, ya que se maneja en la sección especial de redoblonas
                 if (
                     jugadaIndividual.redoblonas &&
@@ -776,19 +828,23 @@ export const procesarJugadasYEncontrarAciertos = (
                     console.log(` ⏭️ SALTANDO JUGADA CON REDOBLONA - Se procesará en sección especial`)
                     continue
                 }
+
                 for (const provinciaApostadaRaw of provincias) {
                     const canonicalProvinciaApostada = getCanonicalName(provinciaApostadaRaw)
                     const displayProvincia = displayNamesMap[canonicalProvinciaApostada] ?? canonicalProvinciaApostada
                     console.log(
                         `DEBUG:     Procesando provincia apostada: "${provinciaApostadaRaw}" -> Canónica: "${canonicalProvinciaApostada}" -> Display: "${displayProvincia}"`,
                     )
+
                     const resultadoProvincia = resultadosExtracto.find(
                         (res) => getCanonicalName(res.provincia?.toString() ?? "") === canonicalProvinciaApostada,
                     )
+
                     if (resultadoProvincia) {
                         console.log(`DEBUG:       Resultados encontrados para provincia: "${displayProvincia}"`)
                         const sorteosDelResultado = (resultadoProvincia.sorteos as Record<string, any>) ?? {}
                         console.log(`DEBUG:       Sorteos del resultado: ${JSON.stringify(Object.keys(sorteosDelResultado))}`)
+
                         // Determinar las claves de sorteo a procesar para esta jugada individual
                         let currentSorteoKeysForIndividualJugada: string[] = []
                         if (drawNameToSorteoKeyMap[canonicalLoteriaIndividual]) {
@@ -802,12 +858,15 @@ export const procesarJugadasYEncontrarAciertos = (
                         console.log(
                             `DEBUG:       Sorteos a verificar para esta jugada individual: ${currentSorteoKeysForIndividualJugada.join(", ")}`,
                         )
+
                         for (const sorteoKey of currentSorteoKeysForIndividualJugada) {
                             const numerosGanadores = (sorteosDelResultado[sorteoKey] as string[]) || []
+
                             if (numerosGanadores.length > 0) {
                                 // Canonicalizar el sorteoKey para usar en la comparación de lotería
                                 const canonicalSorteoKey = getCanonicalName(sorteoKey)
                                 const displaySorteoKey = displayNamesMap[canonicalSorteoKey] ?? canonicalSorteoKey
+
                                 console.log(`DEBUG:         Verificando Sorteo: "${sorteoKey}" (Canónica: "${canonicalSorteoKey}")`)
                                 console.log(`DEBUG:           Números Ganadores para ${sorteoKey}: [${numerosGanadores.join(", ")}]`)
                                 console.log(
@@ -816,12 +875,15 @@ export const procesarJugadasYEncontrarAciertos = (
                                         canonicalSorteoKey,
                                     )}`,
                                 )
+
                                 // Verificar si la lotería de la jugada es compatible con la lotería del sorteo del resultado
                                 if (!verificarCoincidenciaLoteria(canonicalLoteriaIndividual, canonicalSorteoKey)) {
                                     console.log(`DEBUG:         No hay coincidencia de lotería para este sorteo. Saltando.`)
                                     continue // Saltar si no hay coincidencia de lotería para este sorteo específico
                                 }
-                                const acierto = verificarAciertoEspecifico(
+
+                                // AHORA ESPERAMOS UNA LISTA DE ACIERTOS
+                                const aciertosEncontrados = verificarAciertoEspecifico(
                                     numeroApostado,
                                     posicion,
                                     numerosGanadores,
@@ -831,10 +893,13 @@ export const procesarJugadasYEncontrarAciertos = (
                                     sorteoKey, // Ya es el nombre para mostrar
                                     secuencia,
                                 )
-                                console.log(`DEBUG:         Acierto encontrado para ${sorteoKey}: ${acierto ? "Sí" : "No"}`)
-                                if (acierto) {
+
+                                console.log(`DEBUG:         Aciertos encontrados para ${sorteoKey}: ${aciertosEncontrados.length > 0 ? "Sí" : "No"}`)
+
+                                for (const acierto of aciertosEncontrados) { // Iterar sobre cada acierto encontrado
                                     const premioCalculado = monto * obtenerMultiplicador(acierto.cifrasCoincidentes, Number.parseInt(acierto.posicion));
                                     const aciertoConPremio = { ...acierto, premio: premioCalculado };
+
                                     if (!aciertosAgrupados[displayProvincia]) {
                                         aciertosAgrupados[displayProvincia] = {}
                                     }
@@ -859,6 +924,7 @@ export const procesarJugadasYEncontrarAciertos = (
             console.log("=== PROCESANDO JUGADA CON REDOBLONA (SECCIÓN ESPECIAL) ===")
             const provinciasRaw = (jugadaData.provincias as any[]) || []
             const provincias = provinciasRaw.map((p) => p.toString())
+
             let montoIndividual = 0.0
             if (jugadaData.jugadas && Array.isArray(jugadaData.jugadas) && jugadaData.jugadas.length > 0) {
                 montoIndividual = parsearDouble(jugadaData.jugadas[0].monto ?? "0")
@@ -868,23 +934,28 @@ export const procesarJugadasYEncontrarAciertos = (
                 console.log("⚠️ ADVERTENCIA: Usando monto principal en lugar de monto individual para redoblona")
             }
             console.log(`DEBUG: Tipo: Redoblona. Provincias: ${provincias.join(", ")}, Monto: ${montoIndividual}`)
+
             for (const provinciaApostadaRaw of provincias) {
                 const canonicalProvinciaApostada = getCanonicalName(provinciaApostadaRaw)
                 const displayProvincia = displayNamesMap[canonicalProvinciaApostada] ?? canonicalProvinciaApostada
                 console.log(`DEBUG:   Procesando provincia apostada (Redoblona): "${displayProvincia}"`)
+
                 const resultadoProvincia = resultadosExtracto.find(
                     (res) => getCanonicalName(res.provincia?.toString() ?? "") === canonicalProvinciaApostada,
                 )
+
                 if (resultadoProvincia) {
                     console.log(`DEBUG:     Resultados encontrados para provincia (Redoblona): "${displayProvincia}"`)
                     const sorteosDelResultado = (resultadoProvincia.sorteos as Record<string, any>) ?? {}
                     console.log(
                         `DEBUG:     Sorteos del resultado para Redoblona: ${JSON.stringify(Object.keys(sorteosDelResultado))}`,
                     )
+
                     for (const sorteoKey of sorteoKeysToProcessForParent) {
                         const numerosGanadores = (sorteosDelResultado[sorteoKey] as string[]) || []
                         const canonicalSorteoKey = getCanonicalName(sorteoKey)
                         const displaySorteoKey = displayNamesMap[canonicalSorteoKey] ?? canonicalSorteoKey
+
                         console.log(
                             `DEBUG:       Verificando sorteo (Redoblona): "${sorteoKey}". Números ganadores: ${numerosGanadores.join(", ")}`,
                         )
@@ -894,26 +965,32 @@ export const procesarJugadasYEncontrarAciertos = (
                                 canonicalSorteoKey,
                             )}`,
                         )
+
                         // Verificar si la lotería de la jugada es compatible con la lotería del sorteo del resultado
                         if (!verificarCoincidenciaLoteria(canonicalLoteriaJugada, canonicalSorteoKey)) {
                             console.log(`DEBUG:       No hay coincidencia de lotería para este sorteo. Saltando.`)
                             continue // Saltar si no hay coincidencia de lotería para este sorteo específico
                         }
+
                         if (numerosGanadores.length > 0) {
                             const redoblonaGanadora = verificarAciertoRedoblona(jugadaData, numerosGanadores)
+
                             if (redoblonaGanadora) {
                                 console.log(`DEBUG:       Redoblona ganadora detectada en ${sorteoKey} (${displayProvincia})!`)
+
                                 const jugadaOriginalData = jugadaData.jugadas?.find((j: any) => j.redoblonas) || jugadaData
                                 const numeroOriginal =
                                     jugadaOriginalData.originalNumero?.toString() ?? jugadaOriginalData.numero?.toString() ?? ""
                                 const posicionOriginal =
                                     jugadaOriginalData.originalPosicion?.toString() ?? jugadaOriginalData.posicion?.toString() ?? "1"
                                 const redoblonasInfo = jugadaOriginalData.redoblonas || []
+
                                 let premioRedoblona = 0.0
                                 if (redoblonasInfo.length > 0) {
                                     const posicionRedoblona = redoblonasInfo[0].posicion?.toString() ?? "5"
                                     premioRedoblona = calcularPremioRedoblona(posicionOriginal, posicionRedoblona, montoIndividual)
                                 }
+
                                 const aciertoRedoblona = {
                                     numero: numeroOriginal,
                                     numeroRedoblona: redoblonaGanadora.redoblonaNumeroApostado?.toString() ?? "",
@@ -921,7 +998,7 @@ export const procesarJugadasYEncontrarAciertos = (
                                     posicionRedoblona: redoblonaGanadora.redoblonaPosicionApostada?.toString() ?? "",
                                     monto: montoIndividual,
                                     provincia: displayProvincia,
-                                    loteria: displaySorteoKey,
+                                    loteria: displaySorteoKey, // Usar el nombre para mostrar del sorteo del resultado
                                     numeroGanador: redoblonaGanadora.originalNumeroGanador, // Correctly from redoblonaGanadora
                                     numeroGanadorCompleto: redoblonaGanadora.redoblonaNumeroGanador, // Correctly from redoblonaGanadora
                                     sorteo: sorteoKey,
@@ -938,6 +1015,7 @@ export const procesarJugadasYEncontrarAciertos = (
                                     // Agregar el nombre canónico del sorteoKey
                                     sorteoCanonico: canonicalSorteoKey,
                                 }
+
                                 if (!aciertosAgrupados[displayProvincia]) {
                                     aciertosAgrupados[displayProvincia] = {}
                                 }
@@ -959,7 +1037,9 @@ export const procesarJugadasYEncontrarAciertos = (
         else if (tipo === "NUEVA TRIPLONA") {
             console.log("=== PROCESANDO NUEVA TRIPLONA ===")
             console.log("Datos de la jugada:", JSON.stringify(jugadaData, null, 2))
+
             let numerosTriplona: string[] = []
+
             const extractNumbers = (source: any) => {
                 if (Array.isArray(source)) {
                     for (const item of source) {
@@ -989,6 +1069,7 @@ export const procesarJugadasYEncontrarAciertos = (
                     }
                 }
             }
+
             // Lógica de extracción de números como en Flutter
             if (jugadaData.jugadas && Array.isArray(jugadaData.jugadas) && jugadaData.jugadas.length > 0) {
                 if (jugadaData.jugadas[0].numeros) {
@@ -1004,31 +1085,41 @@ export const procesarJugadasYEncontrarAciertos = (
                 console.log("Campo numero principal encontrado:", jugadaData.numero)
                 extractNumbers(jugadaData.numero)
             }
+
             console.log(`Números de NUEVA TRIPLONA procesados: ${numerosTriplona}`)
+
             if (numerosTriplona.length !== 3) {
                 console.log(`❌ NUEVA TRIPLONA debe tener exactamente 3 números, encontrados: ${numerosTriplona.length}`)
                 continue
             }
+
             const monto = parsearDouble(jugadaData.monto ?? jugadaData.totalMonto ?? "0")
             const provinciasRaw = (jugadaData.provincias as any[]) || []
             const provincias = provinciasRaw.map((p) => p.toString())
+
             for (const provinciaApostadaRaw of provincias) {
                 const canonicalProvinciaApostada = getCanonicalName(provinciaApostadaRaw)
                 const displayProvincia = displayNamesMap[canonicalProvinciaApostada] ?? canonicalProvinciaApostada
+
                 const resultadoProvincia = resultadosExtracto.find(
                     (res) => getCanonicalName(res.provincia?.toString() ?? "") === canonicalProvinciaApostada,
                 )
+
                 if (resultadoProvincia) {
                     const sorteosDelResultado = (resultadoProvincia.sorteos as Record<string, any>) ?? {}
+
                     for (const sorteoKey of sorteoKeysToProcessForParent) {
                         const canonicalSorteoKey = getCanonicalName(sorteoKey)
                         const displaySorteoKey = displayNamesMap[canonicalSorteoKey] ?? canonicalSorteoKey
+
                         // Verificar si la lotería de la jugada es compatible con la lotería del sorteo del resultado
                         if (!verificarCoincidenciaLoteria(canonicalLoteriaJugada, canonicalSorteoKey)) {
                             console.log("❌ Las loterías no coinciden para NUEVA TRIPLONA")
                             continue // Saltar si no hay coincidencia de lotería principal
                         }
+
                         const numerosGanadores = (sorteosDelResultado[sorteoKey] as string[]) || []
+
                         if (numerosGanadores.length >= 3) {
                             const ultimosDosDigitosGanadores: string[] = []
                             const numerosGanadoresCompletos: string[] = []
@@ -1038,14 +1129,18 @@ export const procesarJugadasYEncontrarAciertos = (
                                 ultimosDosDigitosGanadores.push(ultimosDosDigitos)
                                 numerosGanadoresCompletos.push(numGanador)
                             }
+
                             console.log(`Últimos dos dígitos de números ganadores: ${ultimosDosDigitosGanadores}`)
                             console.log(`Números de triplona a verificar: ${numerosTriplona}`)
+
                             let aciertoEncontrado = false
+
                             // Verificar primero si están en orden en los primeros 3
                             if (numerosGanadores.length >= 3) {
                                 const primerosTresUltimosDosDigitos = ultimosDosDigitosGanadores.slice(0, 3)
                                 const primerosTresNumerosCompletos = numerosGanadoresCompletos.slice(0, 3)
                                 console.log(`Primeros 3 últimos dos dígitos: ${primerosTresUltimosDosDigitos}`)
+
                                 let coincideEnOrden = true
                                 for (let i = 0; i < 3; i++) {
                                     if (numerosTriplona[i] !== primerosTresUltimosDosDigitos[i]) {
@@ -1054,6 +1149,7 @@ export const procesarJugadasYEncontrarAciertos = (
                                         break
                                     }
                                 }
+
                                 if (coincideEnOrden) {
                                     console.log("🎯 ¡DETECTADA COINCIDENCIA EN ORDEN EN LOS PRIMEROS 3!")
                                     const tipoAcierto = "3 a los 3 en orden"
@@ -1074,6 +1170,7 @@ export const procesarJugadasYEncontrarAciertos = (
                                         aciertos: 3,
                                         premio: premioCalculado, // Almacenar el premio
                                     }
+
                                     if (!aciertosAgrupados[displayProvincia]) aciertosAgrupados[displayProvincia] = {}
                                     if (!aciertosAgrupados[displayProvincia]![sorteoKey])
                                         aciertosAgrupados[displayProvincia]![sorteoKey] = []
@@ -1082,6 +1179,7 @@ export const procesarJugadasYEncontrarAciertos = (
                                     continue // Ya encontramos el mejor acierto posible, pasar a la siguiente provincia/sorteo
                                 }
                             }
+
                             if (!aciertoEncontrado) {
                                 const posicionesAVerificar = [3, 4, 7, 10, 15, 20]
                                 for (const posicion of posicionesAVerificar) {
@@ -1089,9 +1187,11 @@ export const procesarJugadasYEncontrarAciertos = (
                                         const ultimosDosDigitosHastaPosicion = ultimosDosDigitosGanadores.slice(0, posicion)
                                         const numerosGanadoresHastaPosicion = numerosGanadoresCompletos.slice(0, posicion)
                                         console.log(`Verificando posición ${posicion} con números: ${ultimosDosDigitosHastaPosicion}`)
+
                                         let todosCoincidenEnPosicion = true
                                         const numerosGanadoresCoincidentes: string[] = []
                                         const ultimosDosDigitosCoincidentes: string[] = []
+
                                         for (const numeroTriplona of numerosTriplona) {
                                             if (!ultimosDosDigitosHastaPosicion.includes(numeroTriplona)) {
                                                 todosCoincidenEnPosicion = false
@@ -1103,6 +1203,7 @@ export const procesarJugadasYEncontrarAciertos = (
                                             ultimosDosDigitosCoincidentes.push(ultimosDosDigitosHastaPosicion[index]!)
                                             console.log(`✅ Número ${numeroTriplona} encontrado en índice ${index}`)
                                         }
+
                                         if (todosCoincidenEnPosicion) {
                                             console.log(`🎯 ¡DETECTADA COINCIDENCIA EN POSICIÓN ${posicion}!`)
                                             const tipoAcierto = `3 a los ${posicion}`
@@ -1123,6 +1224,7 @@ export const procesarJugadasYEncontrarAciertos = (
                                                 aciertos: 3,
                                                 premio: premioCalculado, // Almacenar el premio
                                             }
+
                                             if (!aciertosAgrupados[displayProvincia]) aciertosAgrupados[displayProvincia] = {}
                                             if (!aciertosAgrupados[displayProvincia]![sorteoKey])
                                                 aciertosAgrupados[displayProvincia]![sorteoKey] = []
@@ -1142,6 +1244,7 @@ export const procesarJugadasYEncontrarAciertos = (
         } else if (tipo === "NUEVA QUINTINA") {
             console.log("=== PROCESANDO NUEVA QUINTINA ===")
             console.log("Datos de la jugada:", JSON.stringify(jugadaData, null, 2))
+
             const todasLasQuintinas: string[][] = []
             if (jugadaData.numeros && Array.isArray(jugadaData.numeros)) {
                 console.log(`🔍 Procesando ${jugadaData.numeros.length} quintinas en cantidad`)
@@ -1166,29 +1269,38 @@ export const procesarJugadasYEncontrarAciertos = (
                 }
             }
             console.log(`Total de quintinas válidas encontradas: ${todasLasQuintinas.length}`)
+
             if (todasLasQuintinas.length === 0) {
                 console.log("❌ No se encontraron quintinas válidas")
                 continue
             }
+
             const monto = parsearDouble(jugadaData.monto ?? jugadaData.totalMonto ?? "0")
             const provinciasRaw = (jugadaData.provincias as any[]) || []
             const provincias = provinciasRaw.map((p) => p.toString())
+
             for (const provinciaApostadaRaw of provincias) {
                 const canonicalProvinciaApostada = getCanonicalName(provinciaApostadaRaw)
                 const displayProvincia = displayNamesMap[canonicalProvinciaApostada] ?? canonicalProvinciaApostada
+
                 const resultadoProvincia = resultadosExtracto.find(
                     (res) => getCanonicalName(res.provincia?.toString() ?? "") === canonicalProvinciaApostada,
                 )
+
                 if (resultadoProvincia) {
                     const sorteosDelResultado = (resultadoProvincia.sorteos as Record<string, any>) ?? {}
+
                     for (const sorteoKey of sorteoKeysToProcessForParent) {
                         const canonicalSorteoKey = getCanonicalName(sorteoKey)
                         const displaySorteoKey = displayNamesMap[canonicalSorteoKey] ?? canonicalSorteoKey
+
                         // Verificar si la lotería de la jugada es compatible con la lotería del sorteo del resultado
                         if (!verificarCoincidenciaLoteria(canonicalLoteriaJugada, canonicalSorteoKey)) {
                             continue // Saltar si no hay coincidencia de lotería principal
                         }
+
                         const numerosGanadores = (sorteosDelResultado[sorteoKey] as string[]) || []
+
                         if (numerosGanadores.length >= 5) {
                             const ultimosDosDigitosGanadores: string[] = []
                             // CORRECCIÓN: Iterar hasta 18 (índices 0-17) para quintina
@@ -1197,9 +1309,11 @@ export const procesarJugadasYEncontrarAciertos = (
                                 const ultimosDosDigitos = numGanador.substring(numGanador.length - 2)
                                 ultimosDosDigitosGanadores.push(ultimosDosDigitos)
                             }
+
                             for (let quintinaIndex = 0; quintinaIndex < todasLasQuintinas.length; quintinaIndex++) {
                                 const numerosQuintina = todasLasQuintinas[quintinaIndex]!
                                 console.log(`🎯 Verificando quintina ${quintinaIndex + 1}: ${numerosQuintina.join(",")}`)
+
                                 let aciertos = 0
                                 const numerosCoincidentes: string[] = []
                                 for (const numeroQuintina of numerosQuintina) {
@@ -1209,6 +1323,7 @@ export const procesarJugadasYEncontrarAciertos = (
                                     }
                                 }
                                 console.log(`NUEVA QUINTINA ${quintinaIndex + 1}: ${aciertos} aciertos de 5 números`)
+
                                 if (aciertos >= 3) {
                                     const premioCalculado = obtenerPremioQuintina(aciertos);
                                     const acierto = {
@@ -1226,6 +1341,7 @@ export const procesarJugadasYEncontrarAciertos = (
                                         aciertos: aciertos,
                                         premio: premioCalculado, // Almacenar el premio
                                     }
+
                                     if (!aciertosAgrupados[displayProvincia]) aciertosAgrupados[displayProvincia] = {}
                                     if (!aciertosAgrupados[displayProvincia]![sorteoKey])
                                         aciertosAgrupados[displayProvincia]![sorteoKey] = []
@@ -1240,6 +1356,7 @@ export const procesarJugadasYEncontrarAciertos = (
         } else if (tipo === "NUEVA BORRATINA") {
             console.log("=== PROCESANDO NUEVA BORRATINA ===")
             console.log("Datos de la jugada:", JSON.stringify(jugadaData, null, 2))
+
             const todasLasBorratinas: string[][] = []
             if (jugadaData.numeros && Array.isArray(jugadaData.numeros)) {
                 for (const num of jugadaData.numeros) {
@@ -1263,29 +1380,38 @@ export const procesarJugadasYEncontrarAciertos = (
                 }
             }
             console.log(`Total de borratinas válidas encontradas: ${todasLasBorratinas.length}`)
+
             if (todasLasBorratinas.length === 0) {
                 console.log("❌ No se encontraron borratinas válidas")
                 continue
             }
+
             const monto = parsearDouble(jugadaData.monto ?? jugadaData.totalMonto ?? "0")
             const provinciasRaw = (jugadaData.provincias as any[]) || []
             const provincias = provinciasRaw.map((p) => p.toString())
+
             for (const provinciaApostadaRaw of provincias) {
                 const canonicalProvinciaApostada = getCanonicalName(provinciaApostadaRaw)
                 const displayProvincia = displayNamesMap[canonicalProvinciaApostada] ?? canonicalProvinciaApostada
+
                 const resultadoProvincia = resultadosExtracto.find(
                     (res) => getCanonicalName(res.provincia?.toString() ?? "") === canonicalProvinciaApostada,
                 )
+
                 if (resultadoProvincia) {
                     const sorteosDelResultado = (resultadoProvincia.sorteos as Record<string, any>) ?? {}
+
                     for (const sorteoKey of sorteoKeysToProcessForParent) {
                         const canonicalSorteoKey = getCanonicalName(sorteoKey)
                         const displaySorteoKey = displayNamesMap[canonicalSorteoKey] ?? canonicalSorteoKey
+
                         // Verificar si la lotería de la jugada es compatible con la lotería del sorteo del resultado
                         if (!verificarCoincidenciaLoteria(canonicalLoteriaJugada, canonicalSorteoKey)) {
                             continue // Saltar si no hay coincidencia de lotería principal
                         }
+
                         const numerosGanadores = (sorteosDelResultado[sorteoKey] as string[]) || []
+
                         if (numerosGanadores.length >= 8) {
                             const ultimosDosDigitosGanadores: string[] = []
                             // CORRECCIÓN: Iterar hasta 18 (índices 0-17) para borratina
@@ -1294,9 +1420,11 @@ export const procesarJugadasYEncontrarAciertos = (
                                 const ultimosDosDigitos = numGanador.substring(numGanador.length - 2)
                                 ultimosDosDigitosGanadores.push(ultimosDosDigitos)
                             }
+
                             for (let borratinaIndex = 0; borratinaIndex < todasLasBorratinas.length; borratinaIndex++) {
                                 const numerosBorratina = todasLasBorratinas[borratinaIndex]!
                                 console.log(`🎯 Verificando borratina ${borratinaIndex + 1}: ${numerosBorratina.join(",")}`)
+
                                 let aciertos = 0
                                 const numerosCoincidentes: string[] = []
                                 for (const numeroBorratina of numerosBorratina) {
@@ -1306,6 +1434,7 @@ export const procesarJugadasYEncontrarAciertos = (
                                     }
                                 }
                                 console.log(`NUEVA BORRATINA ${borratinaIndex + 1}: ${aciertos} aciertos de 8 números`)
+
                                 if (aciertos >= 6) {
                                     const premioCalculado = obtenerPremioBorratina(aciertos);
                                     const acierto = {
@@ -1323,6 +1452,7 @@ export const procesarJugadasYEncontrarAciertos = (
                                         aciertos: aciertos,
                                         premio: premioCalculado, // Almacenar el premio
                                     }
+
                                     if (!aciertosAgrupados[displayProvincia]) aciertosAgrupados[displayProvincia] = {}
                                     if (!aciertosAgrupados[displayProvincia]![sorteoKey])
                                         aciertosAgrupados[displayProvincia]![sorteoKey] = []
@@ -1371,8 +1501,10 @@ export const guardarAciertosEnFirestore = async (
     const fechaFormateada = format(fecha, "yyyy-MM-dd")
     const aciertosCalculadosRef = collection(db, "aciertos_calculados")
     const docId = `${nombrePasador}_${fechaFormateada}`
+
     const aciertosParaGuardar: any[] = []
     let totalGanado = 0.0
+
     for (const provinciaEntry of Object.values(aciertosAgrupados)) {
         for (const sorteoEntry of Object.values(provinciaEntry)) {
             for (const acierto of sorteoEntry) {
@@ -1382,6 +1514,7 @@ export const guardarAciertosEnFirestore = async (
                     premio = (acierto.premioTotal as number) ?? 0.0; // Para redoblonas, usar premioTotal
                 }
                 totalGanado += premio
+
                 const aciertoDatos = {
                     ...acierto,
                     id: acierto.id || Math.random().toString(36).substring(2, 11), // Generar ID si no existe
@@ -1395,6 +1528,7 @@ export const guardarAciertosEnFirestore = async (
             }
         }
     }
+
     await setDoc(
         doc(aciertosCalculadosRef, docId),
         {

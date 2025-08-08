@@ -13,7 +13,7 @@ const nextConfig = {
   // Ignorar errores de TypeScript durante el build
   typescript: {
     ignoreBuildErrors: true,
-  }
-}
+  },
+};
 
-module.exports = nextConfig
+module.exports = nextConfig;

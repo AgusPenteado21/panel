@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "module": "NodeNext",
+    "esModuleInterop": true,
+    "moduleResolution": "nodenext",
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "outDir": "lib",
+    "sourceMap": true,
+    "strict": true,
+    "target": "es2020"
+  },
+  "compileOnSave": true,
+  "include": [
+    "src/**/*.ts", // Incluye todos los archivos .ts en src y subdirectorios
+    "src/**/*.js", // Incluye todos los archivos .js en src y subdirectorios
+    ".eslintrc.js" // Incluye el archivo de configuración de ESLint
+  ]
+}
