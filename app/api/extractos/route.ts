@@ -146,7 +146,6 @@ const LOTTERY_SPECIFIC_DRAW_TIMES: {
 }
 
 const DEFAULT_DISPLAY_OFFSET_MINUTES = 15 // Por defecto, 15 minutos después del sorteo
-
 const LOTTERY_DISPLAY_CUTOFF_OVERRIDES: {
     [provincia: string]: {
         [turno: string]: { displayOffsetMinutes: number }
@@ -176,7 +175,6 @@ async function obtenerConTiempoLimite(url: string, opciones: RequestInit = {}): 
     try {
         const timestamp = Date.now()
         const urlConTimestamp = `${url}${url.includes("?") ? "&" : "?"}_t=${timestamp}`
-
         const entorno = detectarEntorno()
 
         const headersBase: Record<string, string> = {
@@ -244,7 +242,6 @@ function obtenerTiempoSorteo(turno: string, provinciaKey?: string): number {
         console.error(`Formato de horario inválido para el turno: ${turno} (${horario})`)
         return -1
     }
-
     return horas * 60 + minutos
 }
 
@@ -254,7 +251,6 @@ function esSorteoFinalizado(turno: string, fecha: Date, provinciaKey?: string): 
     const tiempoSorteo = obtenerTiempoSorteo(turno, provinciaKey)
 
     let effectiveDisplayOffsetMinutes = DEFAULT_DISPLAY_OFFSET_MINUTES
-
     if (provinciaKey && LOTTERY_DISPLAY_CUTOFF_OVERRIDES[provinciaKey]) {
         const provinceOverrides = LOTTERY_DISPLAY_CUTOFF_OVERRIDES[provinciaKey]
         if (provinceOverrides[turno]) {
@@ -263,7 +259,6 @@ function esSorteoFinalizado(turno: string, fecha: Date, provinciaKey?: string): 
     }
 
     const hoyArgentina = startOfDay(obtenerFechaArgentinaRobusta())
-
     if (isAfter(hoyArgentina, fecha)) {
         return true
     }
@@ -281,10 +276,10 @@ function extraerNumerosFormato5($: cheerio.CheerioAPI, turno: string, provincia:
         const indiceInicio = match.index
         const segmento = textoCompleto.substring(indiceInicio, indiceInicio + 1000)
 
+        // Patrón para números con espacio (ej: 1. 1234)
         const patronEspaciado = /(\d+)\.\s*(\d{4,5})/g
         const numerosEncontrados: string[] = []
         let matchPatron: RegExpExecArray | null
-
         while ((matchPatron = patronEspaciado.exec(segmento)) !== null) {
             const numero = matchPatron[2]
             if (numero.length === 4) {
@@ -294,11 +289,11 @@ function extraerNumerosFormato5($: cheerio.CheerioAPI, turno: string, provincia:
                 numerosEncontrados.push(ultimosCuatro)
             }
         }
-
         if (numerosEncontrados.length >= 18) {
             return numerosEncontrados.slice(0, 20)
         }
 
+        // Patrón para números concatenados con punto (ej: 1.12342.5678)
         const patronConcatenado = /(\d+\.\d{4,5})+/g
         const matchesConcatenados = segmento.match(patronConcatenado)
         if (matchesConcatenados) {
@@ -321,7 +316,8 @@ function extraerNumerosFormato5($: cheerio.CheerioAPI, turno: string, provincia:
             }
         }
 
-        const patronSinPuntos = /\d{80,100}/g
+        // Patrón para secuencias de 4 dígitos sin separador (ej: 123456789012...)
+        const patronSinPuntos = /\d{80,100}/g // Busca una secuencia larga de dígitos
         const matchesSinPuntos = segmento.match(patronSinPuntos)
         if (matchesSinPuntos) {
             for (const secuenciaConcatenada of matchesSinPuntos) {
@@ -353,6 +349,7 @@ function extraerNumerosNeuquen($: cheerio.CheerioAPI, turno: string): string[] {
         `[data-sorteo="${turno}"]`,
         `.resultado-${turno.toLowerCase()}`,
     ]
+
     for (const selector of selectoresNeuquen) {
         const elemento = $(selector)
         if (elemento.length > 0) {
@@ -380,6 +377,7 @@ function extraerNumerosNeuquen($: cheerio.CheerioAPI, turno: string): string[] {
             }
         }
     }
+
     return extraerNumerosUltraEspecificos($, turno, "NEUQUEN")
 }
 
@@ -395,6 +393,7 @@ function extraerNumerosMisiones($: cheerio.CheerioAPI, turno: string): string[] 
         `[data-provincia="misiones"][data-turno="${turno}"]`,
         `.resultado-misiones-${turno.toLowerCase()}`,
     ]
+
     for (const selector of selectoresMisiones) {
         const elemento = $(selector)
         if (elemento.length > 0) {
@@ -410,6 +409,7 @@ function extraerNumerosMisiones($: cheerio.CheerioAPI, turno: string): string[] 
         `#sorteo-misiones-${turno.toLowerCase()}`,
         `#resultado-${turno.toLowerCase()}-misiones`,
     ]
+
     for (const id of idsMisiones) {
         const elemento = $(id)
         if (elemento.length > 0) {
@@ -441,6 +441,7 @@ function extraerNumerosMisiones($: cheerio.CheerioAPI, turno: string): string[] 
             }
         }
     }
+
     return extraerNumerosUltraEspecificos($, turno, "MISIONES")
 }
 
@@ -448,13 +449,13 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
     const turnosConocidos = ["Previa", "Primera", "Matutina", "Vespertina", "Nocturna"]
     const otrosTurnos = turnosConocidos.filter((t) => t !== turno)
 
+    // Intento 1: Buscar elementos que contengan el turno y no otros turnos
     const elementosConTurno = $(`*:contains("${turno}")`).toArray()
     for (const elemento of elementosConTurno) {
         const $elemento = $(elemento)
         const textoElemento = $elemento.text()
-
         const regexTurnoExacto = new RegExp(`\\b${turno}\\b`, "i")
-        if (!regexTurnoExacto.test(textoElemento)) continue
+        if (!regexTurnoExacto.test(textoElemento)) continue // Asegurarse de que el turno esté presente
 
         const contieneOtroTurno = otrosTurnos.some((otroTurno) => {
             const regexOtroTurno = new RegExp(`\\b${otroTurno}\\b`, "i")
@@ -462,6 +463,7 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
         })
 
         if (contieneOtroTurno) {
+            // Si el elemento contiene otros turnos, es probable que sea una sección general, no específica de este turno
             continue
         }
 
@@ -471,13 +473,16 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
         }
     }
 
+    // Intento 2: Buscar en el texto completo, segmentando por la aparición del turno
     const textoCompleto = $("body").text()
     const regexTurno = new RegExp(`\\b${turno}\\b`, "gi")
     let match: RegExpExecArray | null
 
     while ((match = regexTurno.exec(textoCompleto)) !== null) {
         const indiceInicio = match.index
-        let indiceFin = textoCompleto.length
+        let indiceFin = textoCompleto.length // Por defecto, hasta el final del documento
+
+        // Buscar el siguiente turno para delimitar el segmento
         let siguienteTurnoEncontrado = false
         for (const otroTurno of otrosTurnos) {
             const regexOtroTurno = new RegExp(`\\b${otroTurno}\\b`, "i")
@@ -491,8 +496,9 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
             }
         }
 
+        // Si no se encontró otro turno, tomar un segmento fijo después del turno actual
         if (!siguienteTurnoEncontrado) {
-            indiceFin = Math.min(indiceInicio + 400, textoCompleto.length)
+            indiceFin = Math.min(indiceInicio + 400, textoCompleto.length) // Limitar el segmento para evitar falsos positivos
         }
 
         const segmento = textoCompleto.substring(indiceInicio, indiceFin)
@@ -502,11 +508,11 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
         }
     }
 
+    // Intento 3: Buscar en tablas que contengan el turno pero no otros turnos
     const tablas = $("table").toArray()
     for (const tabla of tablas) {
         const $tabla = $(tabla)
         const textoTabla = $tabla.text()
-
         const regexTurnoExacto = new RegExp(`\\b${turno}\\b`, "i")
         if (!regexTurnoExacto.test(textoTabla)) continue
 
@@ -528,29 +534,37 @@ function extraerNumerosUltraEspecificos($: cheerio.CheerioAPI, turno: string, pr
             }
         }
     }
+
     return []
 }
 
 function validarResultadosUltraEstricto(numeros: string[], provincia: string, turno: string): boolean {
     if (numeros.length < 18) {
+        console.log(`Validación fallida para ${provincia} ${turno}: Menos de 18 números (${numeros.length})`)
         return false
     }
 
     const numerosValidos = numeros.filter((num) => /^\d{4}$/.test(num) && num !== PLACEHOLDER_RESULT)
 
     if (numerosValidos.length < 18) {
+        console.log(
+            `Validación fallida para ${provincia} ${turno}: Menos de 18 números válidos (${numerosValidos.length})`,
+        )
         return false
     }
 
     let patronesSospechosos = 0
     for (const num of numerosValidos) {
         const numInt = Number.parseInt(num)
+        // Números muy bajos (ej: 0001, 0025)
         if (numInt <= 30) {
             patronesSospechosos++
         }
+        // Números repetidos (ej: 1111, 2222)
         if (/^(\d)\1{3}$/.test(num)) {
             patronesSospechosos++
         }
+        // Números bajos que empiezan con 0 (ej: 0050)
         if (numInt <= 50 && num.startsWith("0")) {
             patronesSospechosos++
         }
@@ -558,11 +572,20 @@ function validarResultadosUltraEstricto(numeros: string[], provincia: string, tu
 
     const porcentajeSospechosos = (patronesSospechosos / numerosValidos.length) * 100
     if (porcentajeSospechosos > 15) {
+        console.log(
+            `Validación fallida para ${provincia} ${turno}: Demasiados patrones sospechosos (${porcentajeSospechosos.toFixed(
+                2,
+            )}%)`,
+        )
         return false
     }
 
+    // Verificar unicidad (al menos el 90% deben ser únicos)
     const numerosUnicos = new Set(numerosValidos)
     if (numerosUnicos.size < numerosValidos.length * 0.9) {
+        console.log(
+            `Validación fallida para ${provincia} ${turno}: Demasiados números repetidos (${numerosUnicos.size} únicos de ${numerosValidos.length})`,
+        )
         return false
     }
 
@@ -592,44 +615,52 @@ async function obtenerResultadosConfiables(): Promise<Extracto[]> {
     for (const [provinciaKey, pizarraUrl] of Object.entries(URLS_PIZARRAS)) {
         let turnosParaProvincia: string[] = []
 
+        // Lógica para determinar qué turnos se esperan para cada provincia y día
         if (provinciaKey === "MONTEVIDEO") {
             if (diaSemana === 0) {
-                turnosParaProvincia = []
+                turnosParaProvincia = [] // Domingo: no hay sorteos
             } else if (diaSemana === 6) {
-                turnosParaProvincia = ["Nocturna"]
+                turnosParaProvincia = ["Nocturna"] // Sábado: solo Nocturna
             } else {
-                turnosParaProvincia = ["Matutina", "Nocturna"]
+                turnosParaProvincia = ["Matutina", "Nocturna"] // Lunes a Viernes: Matutina y Nocturna
             }
         } else if (provinciaKey === "SANTIAGO") {
             if (diaSemana === 0) {
-                turnosParaProvincia = ["Matutina", "Vespertina"]
+                turnosParaProvincia = ["Matutina", "Vespertina"] // Domingo: Matutina y Vespertina
             } else {
-                turnosParaProvincia = allTurnos
+                turnosParaProvincia = allTurnos // Lunes a Sábado: todos los turnos
             }
         } else if (provinciaKey === "SALTA") {
             if (diaSemana === 0) {
-                turnosParaProvincia = ["Matutina", "Vespertina"]
+                turnosParaProvincia = ["Matutina", "Vespertina"] // Domingo: Matutina y Vespertina
             } else {
-                turnosParaProvincia = ["Primera", "Matutina", "Vespertina", "Nocturna"]
+                turnosParaProvincia = ["Primera", "Matutina", "Vespertina", "Nocturna"] // Lunes a Sábado: sin Previa
             }
         } else if (provinciaKey === "JUJUY") {
-            turnosParaProvincia = allTurnos
-        } else {
+            // Jujuy tiene todos los turnos de L-S, y Primera/Matutina los domingos
             if (diaSemana === 0) {
-                turnosParaProvincia = []
+                turnosParaProvincia = ["Primera", "Matutina"]
             } else {
                 turnosParaProvincia = allTurnos
+            }
+        } else {
+            // Para todas las demás provincias (incluyendo San Luis, Formosa, etc.)
+            if (diaSemana === 0) {
+                turnosParaProvincia = [] // Domingo: no hay sorteos automáticos para estas
+            } else {
+                turnosParaProvincia = allTurnos // Lunes a Sábado: todos los turnos
             }
         }
 
         for (const turno of turnosParaProvincia) {
+            // Saltar sorteos que se ingresan manualmente los domingos
             const isManualEntryToday =
                 diaSemana === 0 && // Solo aplica a domingos
                 MANUAL_ENTRY_LOTTERIES_ON_SUNDAY[provinciaKey] &&
                 MANUAL_ENTRY_LOTTERIES_ON_SUNDAY[provinciaKey].includes(turno)
 
             if (isManualEntryToday) {
-                continue
+                continue // No intentar scrapear si es un sorteo manual de domingo
             }
 
             if (esSorteoFinalizado(turno, fechaActual, provinciaKey)) {
@@ -673,7 +704,6 @@ export async function GET(request: Request) {
 
         const fechaDisplayConsulta = format(fechaConsulta, "dd/MM/yyyy", { locale: es })
         const fechaKeyFirebase = format(fechaConsulta, "yyyy-MM-dd")
-
         const fechaHoyKey = formatearFechaArgentina(startOfDay(fechaActualArgentina), "yyyy-MM-dd")
         const esHoyEnArgentina = fechaKeyFirebase === fechaHoyKey
 
@@ -688,13 +718,16 @@ export async function GET(request: Request) {
             const data = docSnap.data()
             let resultadosData: ResultadoDia | null = null
 
+            // Intenta obtener los datos con la fecha exacta
             if (data[fechaDisplayConsulta]) {
                 resultadosData = data[fechaDisplayConsulta] as ResultadoDia
             } else {
-                const fechasEncontradas = Object.keys(data).filter((key) => key.includes("/"))
+                // Si no se encuentra la fecha exacta, busca la más cercana (por si hay variaciones de formato)
+                const fechasEncontradas = Object.keys(data).filter((key) => key.includes("/")) // Filtra solo las claves que parecen fechas
                 if (fechasEncontradas.length > 0) {
                     let fechaMasCercanaKey = fechasEncontradas[0]
                     let menorDiferencia = Number.MAX_SAFE_INTEGER
+
                     for (const fechaEncontradaKey of fechasEncontradas) {
                         try {
                             const fechaEncontradaObj = parse(fechaEncontradaKey, "dd/MM/yyyy", new Date())
@@ -733,13 +766,15 @@ export async function GET(request: Request) {
         let finalResults: Extracto[] = [...extractosFromFirebase]
         const resultsMap = new Map<string, Extracto>(finalResults.map((r) => [r.id, r]))
 
+        // Solo scrapear si se fuerza la actualización o si es el día actual
         if (forceRefresh || esHoyEnArgentina) {
             const scrapedResults = await obtenerResultadosConfiables()
             for (const scraped of scrapedResults) {
-                resultsMap.set(scraped.id, scraped)
+                resultsMap.set(scraped.id, scraped) // Sobrescribe si ya existe, o añade si es nuevo
             }
             finalResults = Array.from(resultsMap.values())
 
+            // Guardar los resultados combinados en Firebase si hay datos
             if (finalResults.length > 0) {
                 const resultadosAgrupadosPorProvincia = new Map<string, Resultado>()
                 for (const extracto of finalResults) {
@@ -756,6 +791,7 @@ export async function GET(request: Request) {
                 }
 
                 const resultadosParaGuardar: Resultado[] = Array.from(resultadosAgrupadosPorProvincia.values())
+
                 const dataToSave: ResultadoDia = {
                     fecha: fechaDisplayConsulta,
                     dia: formatearFechaArgentina(fechaConsulta, "EEEE").replace(/^\w/, (c) => c.toUpperCase()),
@@ -773,13 +809,14 @@ export async function GET(request: Request) {
         return NextResponse.json(finalResults, { headers: corsHeaders })
     } catch (error) {
         console.error("❌ Error en GET:", error)
+        // En caso de error, devolver un array vacío para que el cliente no se rompa
         return NextResponse.json([], { status: 200, headers: corsHeaders })
     }
 }
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS", // Removed DELETE
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS, DELETE", // Added DELETE
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
     Pragma: "no-cache",
@@ -796,7 +833,6 @@ export async function OPTIONS() {
 export async function POST(request: Request) {
     console.log("📝 Iniciando actualización manual (POST) - RAILWAY OPTIMIZADA")
     console.log(`🔥 Firebase Project ID (from env): ${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "NOT SET"}`)
-
     try {
         const { provincia, turno, fecha, numeros } = await request.json()
         console.log(
@@ -815,13 +851,14 @@ export async function POST(request: Request) {
 
         const docRef = doc(db, "extractos", fechaKeyFirebase)
         const docSnap = await getDoc(docRef)
-        let datosDia: ResultadoDia
 
+        let datosDia: ResultadoDia
         if (docSnap.exists()) {
             const data = docSnap.data()
             if (data[fecha]) {
                 datosDia = data[fecha] as ResultadoDia
             } else {
+                // Si el documento existe pero no tiene la fecha exacta, inicializa con la fecha actual
                 datosDia = {
                     fecha: fecha,
                     dia: nombreDia,
@@ -851,6 +888,7 @@ export async function POST(request: Request) {
         const dataParaGuardar = {
             [fecha]: datosDia,
         }
+
         await setDoc(docRef, dataParaGuardar, { merge: true })
         console.log(`✅ POST - Operación setDoc completada exitosamente para ${provincia} - ${turno}.`)
 
@@ -867,6 +905,75 @@ export async function POST(request: Request) {
     }
 }
 
+export async function DELETE(request: Request) {
+    console.log("🗑️ Iniciando eliminación de extractos (DELETE) - RAILWAY OPTIMIZADA")
+    console.log(`🔥 Firebase Project ID (from env): ${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "NOT SET"}`)
+    try {
+        const { fecha, extractoIds } = await request.json()
+        console.log(`📥 DELETE - Datos recibidos: Fecha=${fecha}, Extracto IDs=${extractoIds.join(", ")}`)
+
+        if (!fecha || !extractoIds || !Array.isArray(extractoIds) || extractoIds.length === 0) {
+            console.error("❌ DELETE - Datos incompletos o inválidos recibidos.")
+            throw new Error("Datos incompletos o inválidos para la eliminación.")
+        }
+
+        const fechaObj = parse(fecha, "dd/MM/yyyy", new Date())
+        const fechaArgentina = toZonedTime(fechaObj, "America/Argentina/Buenos_Aires")
+        const fechaKeyFirebase = formatearFechaArgentina(fechaArgentina, "yyyy-MM-dd")
+
+        const docRef = doc(db, "extractos", fechaKeyFirebase)
+        const docSnap = await getDoc(docRef)
+
+        if (!docSnap.exists()) {
+            console.warn(`⚠️ DELETE - Documento de Firebase para la fecha ${fechaKeyFirebase} no encontrado.`)
+            return NextResponse.json({ success: true, message: "No hay extractos para eliminar en esta fecha." }, { headers: corsHeaders })
+        }
+
+        const data = docSnap.data()
+        let datosDia: ResultadoDia | undefined = data[fecha] as ResultadoDia
+
+        if (!datosDia || !datosDia.resultados) {
+            console.warn(`⚠️ DELETE - No hay datos de resultados para la fecha ${fecha} en el documento.`)
+            return NextResponse.json({ success: true, message: "No hay resultados para eliminar en esta fecha." }, { headers: corsHeaders })
+        }
+
+        // Filtrar los extractos que NO deben ser eliminados
+        const extractosAEliminarSet = new Set(extractoIds);
+        const nuevosResultados = datosDia.resultados.map(provinciaRes => {
+            const nuevosSorteos: { [key: string]: string[] } = {};
+            for (const turno in provinciaRes.sorteos) {
+                const idCompleto = `${provinciaRes.provincia}-${turno}-${fecha}`;
+                if (!extractosAEliminarSet.has(idCompleto)) {
+                    nuevosSorteos[turno] = provinciaRes.sorteos[turno];
+                }
+            }
+            return { ...provinciaRes, sorteos: nuevosSorteos };
+        }).filter(provinciaRes => Object.keys(provinciaRes.sorteos).length > 0); // Eliminar provincias sin sorteos restantes
+
+        datosDia.resultados = nuevosResultados;
+
+        const dataParaGuardar = {
+            [fecha]: datosDia,
+        };
+
+        await setDoc(docRef, dataParaGuardar, { merge: true });
+        console.log(`✅ DELETE - Operación setDoc completada exitosamente. ${extractoIds.length} extractos eliminados.`);
+
+        return NextResponse.json({ success: true, message: "Extractos eliminados exitosamente." }, { headers: corsHeaders });
+
+    } catch (error) {
+        console.error("❌ DELETE - Error al eliminar extractos:", error);
+        return NextResponse.json(
+            {
+                error: "Error al eliminar",
+                detalles: error instanceof Error ? error.message : "Error desconocido",
+            },
+            { status: 500, headers: corsHeaders },
+        );
+    }
+}
+
+
 async function obtenerResultadoEspecifico(provinciaKey: string, turno: string): Promise<string[] | null> {
     try {
         const pizarraUrl = URLS_PIZARRAS[provinciaKey as keyof typeof URLS_PIZARRAS]
@@ -876,7 +983,6 @@ async function obtenerResultadoEspecifico(provinciaKey: string, turno: string): 
         }
 
         const respuesta = await obtenerConTiempoLimite(pizarraUrl)
-
         if (!respuesta.ok) {
             console.error(`❌ Error al obtener la pizarra para ${provinciaKey}: ${respuesta.status}`)
             return null
@@ -884,8 +990,8 @@ async function obtenerResultadoEspecifico(provinciaKey: string, turno: string): 
 
         const html = await respuesta.text()
         const $ = cheerio.load(html)
-        let numeros: string[] = []
 
+        let numeros: string[] = []
         switch (provinciaKey) {
             case "NEUQUEN":
                 numeros = extraerNumerosNeuquen($, turno)
@@ -901,6 +1007,7 @@ async function obtenerResultadoEspecifico(provinciaKey: string, turno: string): 
         if (validarResultadosUltraEstricto(numeros, provinciaKey, turno)) {
             return reordenarNumeros(numeros)
         } else {
+            console.log(`Validación estricta fallida para ${provinciaKey} - ${turno}. Números:`, numeros)
             return null
         }
     } catch (error) {

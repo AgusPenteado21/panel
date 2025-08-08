@@ -1,16 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Actualizado para Next.js 15
   experimental: {
-    // serverComponentsExternalPackages ha sido movido a serverExternalPackages
+    serverComponentsExternalPackages: ["cheerio"], // Esta es la clave para Next.js 14
   },
-  // Añadir la nueva ubicación del parámetro
-  serverExternalPackages: ["cheerio"],
-  // Ignorar errores de ESLint durante el build
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // Ignorar errores de TypeScript durante el build
   typescript: {
     ignoreBuildErrors: true,
   },
