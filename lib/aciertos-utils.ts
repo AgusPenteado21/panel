@@ -228,23 +228,19 @@ const loteriasEquivalentes: Record<string, string[]> = {
 export const verificarCoincidenciaLoteria = (loteriaJugada: string, loteriaResultado: string): boolean => {
     const canonicalJugada = getCanonicalName(loteriaJugada)
     const canonicalResultado = getCanonicalName(loteriaResultado)
-
     console.log(`🔍 VERIFICACIÓN DE COINCIDENCIA DE LOTERÍA:`)
     console.log(`   Lotería jugada: "${loteriaJugada}" (normalizada: "${canonicalJugada}")`)
     console.log(`   Lotería resultado: "${loteriaResultado}" (normalizada: "${canonicalResultado}")`)
-
     // Verificar si son exactamente iguales (ej. "PREVIA" === "PREVIA")
     if (canonicalJugada === canonicalResultado) {
         console.log(`   🎰 LOTERÍA: "${loteriaJugada}" vs "${loteriaResultado}" -> true (Coincidencia exacta)`)
         return true
     }
-
     // Verificar si la lotería jugada es "TODAS" o está vacía (lo que significa todas las loterías)
     if (canonicalJugada === "TODAS" || canonicalJugada === "") {
         console.log(`   🎰 LOTERÍA: "${loteriaJugada}" vs "${loteriaResultado}" -> true (TODAS o Vacía)`)
         return true
     }
-
     // Caso especial: PRIMERA y PROVINCIAL deben coincidir siempre si una es la otra
     if (
         (canonicalJugada === 'PRIMERA' && canonicalResultado === 'PROVINCIAL') ||
@@ -253,26 +249,23 @@ export const verificarCoincidenciaLoteria = (loteriaJugada: string, loteriaResul
         console.log('   ✅ Coincidencia especial: PRIMERA coincide con PROVINCIAL');
         return true;
     }
-
     // Verificar si la lotería jugada es una clave principal y la lotería resultado está en su lista de equivalentes
     // Ej: loteriaJugada="PREVIA", loteriaResultado="PROVINCIAL" -> true
     if (loteriasEquivalentes[canonicalJugada]?.includes(canonicalResultado)) {
         console.log(`   🎰 LOTERÍA: "${loteriaJugada}" vs "${loteriaResultado}" -> true (Equivalencia directa)`)
         return true
     }
-
     // Verificar si la lotería resultado es una clave principal y la lotería jugada está en su lista de equivalentes (verificación inversa)
     // Ej: loteriaResultado="PREVIA", loteriaJugada="PROVINCIAL" -> true
     if (loteriasEquivalentes[canonicalResultado]?.includes(canonicalJugada)) {
         console.log(`   🎰 LOTERÍA: "${loteriaJugada}" vs "${loteriaResultado}" -> true (Equivalencia inversa)`)
         return true
     }
-
     console.log(`   🎰 LOTERÍA: "${loteriaJugada}" vs "${loteriaResultado}" -> false`)
     return false
 }
 
-// Verificar acierto específico (quiniela normal)
+// Verificar acierto específico (quiniela normal) - MODIFICADO PARA DEVOLVER MÚLTIPLES ACIERTOS
 export const verificarAciertoEspecifico = (
     numeroApostado: string,
     posicion: string,
@@ -282,11 +275,12 @@ export const verificarAciertoEspecifico = (
     loteriaResultadoDisplay: string,
     sorteoKey: string,
     secuencia: string,
-): Record<string, any> | null => {
+): Record<string, any>[] => { // Cambiado el tipo de retorno a un array
     console.log(`🎯 JUGADA: ${numeroApostado} - ${sorteoKey} - [${numerosGanadores.join(", ")}] - Posición: ${posicion}`)
     const trimmedPosicion = posicion.trim()
     const posicionApostada = Number.parseInt(trimmedPosicion) || 1
     let finRango: number
+
     // Lógica corregida para determinar el rango de búsqueda según la posición apostada
     if (posicionApostada === 1) {
         finRango = 1 // A la cabeza: solo buscar en la posición 0 (primer número)
@@ -302,6 +296,7 @@ export const verificarAciertoEspecifico = (
         console.log("   🎯 BÚSQUEDA A LOS 20: Posiciones 0-19")
     }
 
+    const aciertosEncontrados: Record<string, any>[] = []; // Array para almacenar todos los aciertos
     // Obtener el nombre canónico del sorteoKey
     const canonicalSorteoKey = getCanonicalName(sorteoKey)
 
@@ -312,8 +307,7 @@ export const verificarAciertoEspecifico = (
         console.log(`   Pos ${i + 1}: ${numeroGanador} → últimas ${numeroApostado.length} cifras: ${ultimasCifras}`)
         if (numeroApostado === ultimasCifras) { // Usar === para coincidencia exacta de las últimas cifras
             console.log("   🎉 ¡ACIERTO ENCONTRADO EN POSICIÓN " + (i + 1) + "!")
-            console.log("   🎉 ¡ACIERTO CONFIRMADO!")
-            return {
+            aciertosEncontrados.push({ // Añadir el acierto al array
                 numero: numeroApostado,
                 posicion: trimmedPosicion,
                 monto: monto,
@@ -328,11 +322,15 @@ export const verificarAciertoEspecifico = (
                 cifrasCoincidentes: numeroApostado.length,
                 // Agregar el nombre canónico del sorteoKey
                 sorteoCanonico: canonicalSorteoKey,
-            }
+            });
         }
     }
-    console.log("   ❌ No hay acierto en el rango especificado")
-    return null
+    if (aciertosEncontrados.length > 0) {
+        console.log(`   🎉 ¡${aciertosEncontrados.length} ACIERTO(S) CONFIRMADO(S)!`)
+    } else {
+        console.log("   ❌ No hay acierto en el rango especificado")
+    }
+    return aciertosEncontrados // Devolver el array de aciertos
 }
 
 export const verificarAciertoRedoblona = (
@@ -693,7 +691,6 @@ export const procesarJugadasYEncontrarAciertos = (
     const aciertosAgrupados: Record<string, Record<string, any[]>> = {}
     console.log(`DEBUG: Iniciando procesarJugadasYEncontrarAciertos. Total jugadas: ${jugadasData.length}`)
     console.log(`DEBUG: Resultados de extracto disponibles: ${JSON.stringify(resultadosExtracto, null, 2)}`)
-
     // Mapeo de sorteos a sus claves estandarizadas (utiliza nombres canónicos como claves)
     const drawNameToSorteoKeyMap: Record<string, string> = {
         PREVIA: "Previa",
@@ -702,7 +699,6 @@ export const procesarJugadasYEncontrarAciertos = (
         VESPERTINA: "Vespertina",
         NOCTURNA: "Nocturna",
     }
-
     for (const jugadaData of jugadasData) {
         console.log(`DEBUG: --- Procesando Jugada Principal (Secuencia: ${jugadaData.secuencia ?? "N/A"}) ---`)
         console.log(`DEBUG: Jugada Data Completa: ${JSON.stringify(jugadaData, null, 2)}`)
@@ -710,10 +706,8 @@ export const procesarJugadasYEncontrarAciertos = (
             console.log(`DEBUG: Jugada ${jugadaData.secuencia} anulada, saltando.`)
             continue
         }
-
         const secuencia = jugadaData.secuencia?.toString() ?? "Sin secuencia"
         const tipo = jugadaData.tipo?.toString() ?? "NUEVA JUGADA"
-
         // Obtener el nombre canónico de la lotería jugada (del nivel superior de la jugada)
         let loteriaPrincipalJugadaRaw = jugadaData.loteria?.toString() || ""
         if (
@@ -726,7 +720,6 @@ export const procesarJugadasYEncontrarAciertos = (
         }
         const canonicalLoteriaJugada = getCanonicalName(loteriaPrincipalJugadaRaw)
         console.log(`DEBUG: Lotería Jugada Principal (Canónica): "${canonicalLoteriaJugada}"`)
-
         // Determinar las claves de sorteo a procesar para la jugada principal
         let sorteoKeysToProcessForParent: string[] = []
         if (drawNameToSorteoKeyMap[canonicalLoteriaJugada]) {
@@ -739,7 +732,6 @@ export const procesarJugadasYEncontrarAciertos = (
             sorteoKeysToProcessForParent = Object.values(drawNameToSorteoKeyMap)
         }
         console.log(`DEBUG: Sorteos a procesar para jugada principal: ${sorteoKeysToProcessForParent.join(", ")}`)
-
         // PROCESAMIENTO DE NUEVA JUGADA (NORMAL)
         if (tipo === "NUEVA JUGADA") {
             const jugadasArray = (jugadaData.jugadas as Array<Record<string, any>>) || []
@@ -821,7 +813,8 @@ export const procesarJugadasYEncontrarAciertos = (
                                     console.log(`DEBUG:         No hay coincidencia de lotería para este sorteo. Saltando.`)
                                     continue // Saltar si no hay coincidencia de lotería para este sorteo específico
                                 }
-                                const acierto = verificarAciertoEspecifico(
+                                // MODIFICADO: verificarAciertoEspecifico ahora devuelve un array de aciertos
+                                const aciertosEncontrados = verificarAciertoEspecifico(
                                     numeroApostado,
                                     posicion,
                                     numerosGanadores,
@@ -831,8 +824,9 @@ export const procesarJugadasYEncontrarAciertos = (
                                     sorteoKey, // Ya es el nombre para mostrar
                                     secuencia,
                                 )
-                                console.log(`DEBUG:         Acierto encontrado para ${sorteoKey}: ${acierto ? "Sí" : "No"}`)
-                                if (acierto) {
+                                console.log(`DEBUG:         Aciertos encontrados para ${sorteoKey}: ${aciertosEncontrados.length > 0 ? "Sí" : "No"}`)
+                                // Iterar sobre cada acierto encontrado y agregarlo
+                                for (const acierto of aciertosEncontrados) {
                                     const premioCalculado = monto * obtenerMultiplicador(acierto.cifrasCoincidentes, Number.parseInt(acierto.posicion));
                                     const aciertoConPremio = { ...acierto, premio: premioCalculado };
                                     if (!aciertosAgrupados[displayProvincia]) {
